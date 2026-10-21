@@ -2,22 +2,27 @@
   "manifest_version": 3,
   "name": "MajesticToolkit",
   "short_name": "MajesticToolkit",
-  "description": "MajesticToolkit: форумы, жалобы, экономика, законы, ведомства и локальные документы с PDF-экспортом.",
-  "version": "0.7.0",
+  "description": "MajesticToolkit: форумы, жалобы, экономика, законы, документы и Google Workspace.",
+  "version": "0.8.0",
   "permissions": [
     "storage",
     "activeTab",
     "scripting",
     "alarms",
     "notifications",
-    "unlimitedStorage"
+    "unlimitedStorage",
+    "identity"
   ],
   "optional_host_permissions": [
     "https://forum.majestic-rp.ru/*",
     "https://forum.russia.online/*",
     "https://www.youtube.com/*",
     "https://rutube.ru/*",
-    "https://www.twitch.tv/*"
+    "https://www.twitch.tv/*",
+    "https://www.googleapis.com/*",
+    "https://docs.googleapis.com/*",
+    "https://sheets.googleapis.com/*",
+    "https://oauth2.googleapis.com/*"
   ],
   "action": {
     "default_title": "MajesticToolkit",
