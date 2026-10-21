@@ -1,0 +1,53 @@
+{
+  "manifest_version": 3,
+  "name": "RP Nexus",
+  "short_name": "RP Nexus",
+  "description": "Локальное рабочее пространство для RolePlay: профили, инструменты и навигация.",
+  "version": "0.1.0",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting"
+  ],
+  "optional_host_permissions": [
+    "https://forum.majestic-rp.ru/*"
+  ],
+  "action": {
+    "default_title": "RP Nexus",
+    "default_popup": "ui/popup.html",
+    "default_icon": {
+      "16": "assets/icon-16.png",
+      "32": "assets/icon-32.png"
+    }
+  },
+  "sidebar_action": {
+    "default_panel": "ui/sidebar.html",
+    "default_title": "RP Nexus",
+    "default_icon": {
+      "16": "assets/icon-16.png",
+      "32": "assets/icon-32.png"
+    }
+  },
+  "background": {
+    "scripts": [
+      "background/background.js"
+    ]
+  },
+  "options_ui": {
+    "page": "ui/workspace.html",
+    "open_in_tab": true
+  },
+  "icons": {
+    "16": "assets/icon-16.png",
+    "32": "assets/icon-32.png",
+    "48": "assets/icon-48.png",
+    "128": "assets/icon-128.png"
+  },
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "rp-nexus@local.invalid",
+      "strict_min_version": "128.0"
+    }
+  },
+  "default_locale": "ru"
+}
