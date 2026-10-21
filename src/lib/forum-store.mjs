@@ -13,7 +13,7 @@ function fromStorage(value) {
   for (const [key, object] of Object.entries(value)) {
     if (!key.startsWith(prefix)) continue;
     try { const record = C.cleanTemplate(object); if (key === prefix + record.id) out.push(record); }
-    catch (error) { console.warn('RP Nexus: invalid template skipped', key, error); }
+    catch (error) { console.warn('MajesticToolkit: invalid template skipped', key, error); }
   }
   return out;
 }

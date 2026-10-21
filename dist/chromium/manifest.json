@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "RP Nexus",
-  "short_name": "RP Nexus",
-  "description": "Forum Toolkit, жалобы и доказательства, локальная экономика, калькуляторы и статистика игроков и семей.",
-  "version": "0.4.0",
+  "name": "MajesticToolkit",
+  "short_name": "MajesticToolkit",
+  "description": "MajesticToolkit: форумы, жалобы, экономика и локальные законы по RP-серверам.",
+  "version": "0.5.0",
   "minimum_chrome_version": "116",
   "permissions": [
     "storage",
@@ -22,7 +22,7 @@
     "https://www.twitch.tv/*"
   ],
   "action": {
-    "default_title": "RP Nexus",
+    "default_title": "MajesticToolkit",
     "default_popup": "ui/popup.html",
     "default_icon": {
       "16": "assets/icon-16.png",

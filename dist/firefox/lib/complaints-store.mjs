@@ -7,7 +7,7 @@ function enqueue(fn) { const current = serial.then(fn); serial = current.catch((
 function itemsFromStorage(raw) {
   return Object.entries(raw).filter(([key]) => key.startsWith(CASE_PREFIX)).flatMap(([key, value]) => {
     try { const item = C.cleanCase(value); return key === CASE_PREFIX + item.id ? [item] : []; }
-    catch (error) { console.warn('RP Nexus: повреждённая запись жалобы пропущена', key, error); return []; }
+    catch (error) { console.warn('MajesticToolkit: повреждённая запись жалобы пропущена', key, error); return []; }
   });
 }
 export async function listCases() { return itemsFromStorage(await api.storage.local.get(null)).sort((a,b) => b.updatedAt.localeCompare(a.updatedAt)); }

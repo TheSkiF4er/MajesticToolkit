@@ -1,4 +1,4 @@
-/* RP Nexus 0.3 — standalone validation and deterministic case/evidence transformations. */
+/* MajesticToolkit 0.3 — standalone validation and deterministic case/evidence transformations. */
 (function (root) {
   'use strict';
   const PREFIX = 'rpnComplaintV3:';

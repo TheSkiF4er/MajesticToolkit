@@ -10,7 +10,7 @@ export async function openSidePanel() {
       return;
     }
   } catch (err) {
-    console.warn('RP Nexus: side panel unavailable, opening workspace', err);
+    console.warn('MajesticToolkit: side panel unavailable, opening workspace', err);
   }
   return openWorkspace();
 }

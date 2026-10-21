@@ -1,9 +1,9 @@
 {
-  "name": "rp-nexus",
+  "name": "majestictoolkit",
   "private": true,
-  "version": "0.4.0",
+  "version": "0.5.0",
   "type": "module",
-  "description": "Локальное кроссбраузерное расширение RP Nexus: форум, жалобы, экономика и аналитика",
+  "description": "Автономное браузерное расширение: форум, жалобы, экономика и Law Codex",
   "scripts": {
     "test": "node --test tests/*.test.mjs",
     "build": "node scripts/build.mjs",

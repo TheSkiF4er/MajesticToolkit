@@ -1,4 +1,4 @@
-/* RP Nexus Forum Toolkit shared runtime (extension pages + isolated content scripts). */
+/* MajesticToolkit Forum Toolkit shared runtime (extension pages + isolated content scripts). */
 (() => {
   'use strict';
   const MAX_TEMPLATES = 500;

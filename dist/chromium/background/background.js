@@ -1,4 +1,4 @@
-/* RP Nexus 0.3 — permission-gated forum / evidence integration, local notifications. */
+/* MajesticToolkit 0.3 — permission-gated forum / evidence integration, local notifications. */
 const api = globalThis.browser ?? globalThis.chrome;
 const FORUMS = [
   { id:'rp-nexus-majestic-forum-v3', origin:'https://forum.majestic-rp.ru/*' },
@@ -25,19 +25,19 @@ async function syncScripts() {
         await api.scripting.registerContentScripts([{id:site.id,matches:[site.origin],js:isForum ? ['lib/forum-core.js','lib/complaints-core.js','content/forum.js'] : ['lib/complaints-core.js','content/evidence.js'],runAt:'document_idle',allFrames:false,persistAcrossSessions:true}]);
       } else if (!granted && ids.has(site.id)) await api.scripting.unregisterContentScripts({ids:[site.id]});
     }
-  } catch (error) { console.error('RP Nexus: не удалось зарегистрировать скрипты',error); }
+  } catch (error) { console.error('MajesticToolkit: не удалось зарегистрировать скрипты',error); }
 }
 async function openCaseFromNotification(notificationId) {
   const match = /^(?:rpn_reply_|rpn_deadline_)([\w-]{8,120})$/.exec(notificationId);
   if (!match) return;
   try { const {getCase} = await storePromise; const record = await getCase(match[1]); await api.tabs.create({url:record.url}); }
-  catch (error) { console.warn('RP Nexus: переход из уведомления',error); }
+  catch (error) { console.warn('MajesticToolkit: переход из уведомления',error); }
   await api.notifications.clear(notificationId).catch(() => {});
 }
 api.notifications.onClicked.addListener(id => {void openCaseFromNotification(id);});
 async function notifyChange(c) {
-  try { await api.notifications.create(`rpn_reply_${c.id}`,{type:'basic',iconUrl:'assets/icon-128.png',title:'RP Nexus · Новые сообщения',message:`${c.title.slice(0,100)}: найдены новые ответы. Откройте тему для проверки.`}); }
-  catch (error) {console.warn('RP Nexus: уведомление не показано',error);}
+  try { await api.notifications.create(`rpn_reply_${c.id}`,{type:'basic',iconUrl:'assets/icon-128.png',title:'MajesticToolkit · Новые сообщения',message:`${c.title.slice(0,100)}: найдены новые ответы. Откройте тему для проверки.`}); }
+  catch (error) {console.warn('MajesticToolkit: уведомление не показано',error);}
 }
 async function scanTabs() {
   let count = 0;
@@ -61,15 +61,15 @@ async function checkDeadlines() {
     const saved = (await api.storage.local.get(key))[key];
     if (saved === item.deadline) continue;
     try {
-      await api.notifications.create(`rpn_deadline_${item.id}`, {type:'basic', iconUrl:'assets/icon-128.png',title:'RP Nexus · Срок жалобы',message:`${item.title.slice(0,110)}: ${Date.parse(item.deadline) <= now ? 'срок прошёл' : 'менее 15 минут до срока'}.`});
+      await api.notifications.create(`rpn_deadline_${item.id}`, {type:'basic', iconUrl:'assets/icon-128.png',title:'MajesticToolkit · Срок жалобы',message:`${item.title.slice(0,110)}: ${Date.parse(item.deadline) <= now ? 'срок прошёл' : 'менее 15 минут до срока'}.`});
       await api.storage.local.set({[key]:item.deadline});
-    } catch(error) { console.warn('RP Nexus: уведомление о сроке',error); }
+    } catch(error) { console.warn('MajesticToolkit: уведомление о сроке',error); }
   }
 }
-async function tick() { try { await scanTabs(); await checkDeadlines(); } catch(error) { console.warn('RP Nexus: периодическая проверка',error); } }
+async function tick() { try { await scanTabs(); await checkDeadlines(); } catch(error) { console.warn('MajesticToolkit: периодическая проверка',error); } }
 function start() {
   void syncScripts();
-  void api.alarms.create('rp-nexus-open-tabs-v3',{periodInMinutes:5}).catch(err => console.warn('RP Nexus: alarms',err));
+  void api.alarms.create('rp-nexus-open-tabs-v3',{periodInMinutes:5}).catch(err => console.warn('MajesticToolkit: alarms',err));
 }
 api.runtime.onInstalled.addListener(start);
 api.runtime.onStartup?.addListener(start);
