@@ -158,7 +158,7 @@
       <div class="bar"><input class="field" id="rpn-nickname" placeholder="{{nickname}} (необязательно)" maxlength="200" style="width:50%;margin:3px 0"><input class="field" id="rpn-reason" placeholder="{{reason}}" maxlength="200" style="width:50%;margin:3px 0"></div>
       <div id="rpn-template-list"></div>
       <div class="section"><div class="bar"><b>Управление темой</b><span class="sub">Только штатные функции форума</span></div><div class="actions"><button class="btn secondary" data-act="close">Закрыть / открыть</button><button class="btn secondary" data-act="move">Переместить</button></div></div>
-      <div class="actions"><button class="btn secondary" data-act="workspace">Все шаблоны ↗</button><button class="btn secondary" data-act="hide">Скрыть</button></div><div class="msg" role="status" aria-live="polite"></div>`;
+      <div class="section"><div class="bar"><b>Жалобы и доказательства</b></div><div class="actions"><button class="btn" data-act="track">Отслеживать текущую тему</button><button class="btn secondary" data-act="complaints">Все жалобы ↗</button></div></div><div class="actions"><button class="btn secondary" data-act="workspace">Все шаблоны ↗</button><button class="btn secondary" data-act="hide">Скрыть</button></div><div class="msg" role="status" aria-live="polite"></div>`;
     renderList('');
   }
   function renderList(query) {
@@ -188,6 +188,15 @@
       void navigator.clipboard.writeText(body).then(() => notify('Текст скопирован')).catch(() => notify('Копирование запрещено браузером')); return;
     }
     if (b.dataset.act === 'workspace') { try { api.runtime.sendMessage({ type: 'RP_NEXUS_OPEN_WORKSPACE', view: 'forum' }); } catch { notify('Не удалось открыть настройки'); } return; }
+    if (b.dataset.act === 'track') {
+      if (!threadPage()) { notify('Для добавления откройте страницу темы форума'); return; }
+      void api.runtime.sendMessage({type:'RP_NEXUS_TRACK_CURRENT_THREAD',url:location.href,title:(document.querySelector('h1.p-title-value,h1')?.textContent || document.title).trim().slice(0,240)}).then(response => {
+        notify(response?.ok ? 'Жалоба добавлена. Откройте раздел «Жалобы».' : (response?.error || 'Не удалось добавить жалобу'));
+        if (response?.ok) void scanThread();
+      }).catch(err => notify(err.message));
+      return;
+    }
+    if (b.dataset.act === 'complaints') { void api.runtime.sendMessage({type:'RP_NEXUS_OPEN_WORKSPACE',view:'complaints'}); return; }
     if (b.dataset.act === 'hide') { expanded = false; draw(); return; }
     if (['close', 'move'].includes(b.dataset.act)) void openNative(b.dataset.act);
   });
@@ -211,5 +220,40 @@
   api.storage.onChanged.addListener((changes, area) => {
     if (area === 'local' && Object.keys(changes).some(k => k === STORAGE || k.startsWith(C.KEY_PREFIX))) void readStorage();
   });
+  function findLastPostId() {
+    if (!threadPage()) return null;
+    let result = null;
+    // XenForo exposes stable numeric post IDs. A higher ID is evidence of a new reply.
+    const posts = document.querySelectorAll('article.message, .message[data-content], [id^="js-post-"], article[id^="post-"]');
+    for (const post of posts) {
+      const candidates = [post.id, post.getAttribute('data-content'), post.querySelector('a[href*="/post-"]')?.getAttribute('href')];
+      for (const value of candidates) {
+        const match = String(value ?? '').match(/(?:^|\/|\b)(?:js-)?post-(\d+)/i);
+        if (match) { const n=Number(match[1]); if (Number.isSafeInteger(n)) result=Math.max(n,result ?? 0); }
+      }
+    }
+    return result;
+  }
+  async function scanThread() {
+    if (!threadPage()) return false;
+    const response = await api.runtime.sendMessage({type:'RP_NEXUS_THREAD_OBSERVED',url:location.href,postId:findLastPostId()});
+    return Boolean(response?.ok);
+  }
+  let lastScan = 0, delayedScan;
+  api.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    if (message?.type !== 'RP_NEXUS_SCAN_THREAD') return;
+    void scanThread().then(ok => sendResponse({ok})).catch(err => sendResponse({ok:false,error:err.message}));
+    return true;
+  });
+  if (threadPage()) {
+    delayedScan = setTimeout(() => {lastScan=Date.now(); void scanThread().catch(()=>{});}, 1200);
+    const observer = new MutationObserver(() => {
+      if (Date.now()-lastScan < 60_000) return;
+      lastScan=Date.now(); clearTimeout(delayedScan);
+      delayedScan=setTimeout(()=>void scanThread().catch(()=>{}),1500);
+    });
+    observer.observe(document.querySelector('main') || document.body, {subtree:true,childList:true});
+    window.addEventListener('pagehide',()=>{ observer.disconnect();clearTimeout(delayedScan); },{once:true});
+  }
   void readStorage();
 })();

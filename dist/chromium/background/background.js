@@ -1,32 +1,136 @@
-/* RP Nexus v0.2.0: permission-gated local Forum Toolkit registration. */
+/* RP Nexus 0.3 — permission-gated forum / evidence integration, local notifications. */
 const api = globalThis.browser ?? globalThis.chrome;
 const FORUMS = [
-  { id: 'rp-nexus-majestic-forum-v2', origin: 'https://forum.majestic-rp.ru/*' },
-  { id: 'rp-nexus-russia-forum-v2', origin: 'https://forum.russia.online/*' }
+  { id:'rp-nexus-majestic-forum-v3', origin:'https://forum.majestic-rp.ru/*' },
+  { id:'rp-nexus-russia-forum-v3', origin:'https://forum.russia.online/*' }
 ];
-const LEGACY = 'rp-nexus-majestic-launcher-v1';
-async function syncForumScripts() {
+const VIDEOS = [
+  { id:'rp-nexus-youtube-v3', origin:'https://www.youtube.com/*' },
+  { id:'rp-nexus-rutube-v3', origin:'https://rutube.ru/*' },
+  { id:'rp-nexus-twitch-v3', origin:'https://www.twitch.tv/*' }
+];
+const LEGACY = ['rp-nexus-majestic-launcher-v1','rp-nexus-majestic-forum-v2','rp-nexus-russia-forum-v2'];
+const storePromise = import(api.runtime.getURL('lib/complaints-store.mjs'));
+const corePromise = import(api.runtime.getURL('lib/complaints-core.js')).then(() => globalThis.RPNComplaints);
+async function syncScripts() {
   try {
     const registrations = await api.scripting.getRegisteredContentScripts();
-    if (registrations.some(r => r.id === LEGACY)) await api.scripting.unregisterContentScripts({ ids: [LEGACY] });
-    const present = new Set(registrations.map(r => r.id));
-    for (const site of FORUMS) {
-      const granted = await api.permissions.contains({ origins: [site.origin] });
-      if (granted && !present.has(site.id)) await api.scripting.registerContentScripts([{ id: site.id, matches: [site.origin], js: ['lib/forum-core.js', 'content/forum.js'], runAt: 'document_idle', allFrames: false, persistAcrossSessions: true }]);
-      if (!granted && present.has(site.id)) await api.scripting.unregisterContentScripts({ ids: [site.id] });
+    const old = registrations.filter(r => LEGACY.includes(r.id)).map(r => r.id);
+    if (old.length) await api.scripting.unregisterContentScripts({ids:old});
+    const ids = new Set(registrations.map(r => r.id));
+    for (const site of [...FORUMS, ...VIDEOS]) {
+      const granted = await api.permissions.contains({origins:[site.origin]});
+      if (granted && !ids.has(site.id)) {
+        const isForum = FORUMS.includes(site);
+        await api.scripting.registerContentScripts([{id:site.id,matches:[site.origin],js:isForum ? ['lib/forum-core.js','lib/complaints-core.js','content/forum.js'] : ['lib/complaints-core.js','content/evidence.js'],runAt:'document_idle',allFrames:false,persistAcrossSessions:true}]);
+      } else if (!granted && ids.has(site.id)) await api.scripting.unregisterContentScripts({ids:[site.id]});
     }
-  } catch (error) { console.error('RP Nexus: forum registration failed', error); }
+  } catch (error) { console.error('RP Nexus: не удалось зарегистрировать скрипты',error); }
 }
-api.runtime.onInstalled.addListener(() => { void syncForumScripts(); });
-api.runtime.onStartup?.addListener(() => { void syncForumScripts(); });
-api.permissions.onAdded.addListener(() => { void syncForumScripts(); });
-api.permissions.onRemoved.addListener(() => { void syncForumScripts(); });
-api.runtime.onMessage.addListener((message, sender) => {
-  if (message?.type !== 'RP_NEXUS_OPEN_WORKSPACE') return;
-  let origin;
-  try { origin = new URL(sender.url ?? '').origin; } catch { return; }
-  if (!FORUMS.some(s => s.origin.startsWith(origin + '/'))) return;
-  const suffix = message.view === 'forum' ? '#forum' : '';
-  void api.tabs.create({ url: api.runtime.getURL('ui/workspace.html' + suffix) });
+async function openCaseFromNotification(notificationId) {
+  const match = /^(?:rpn_reply_|rpn_deadline_)([\w-]{8,120})$/.exec(notificationId);
+  if (!match) return;
+  try { const {getCase} = await storePromise; const record = await getCase(match[1]); await api.tabs.create({url:record.url}); }
+  catch (error) { console.warn('RP Nexus: переход из уведомления',error); }
+  await api.notifications.clear(notificationId).catch(() => {});
+}
+api.notifications.onClicked.addListener(id => {void openCaseFromNotification(id);});
+async function notifyChange(c) {
+  try { await api.notifications.create(`rpn_reply_${c.id}`,{type:'basic',iconUrl:'assets/icon-128.png',title:'RP Nexus · Новые сообщения',message:`${c.title.slice(0,100)}: найдены новые ответы. Откройте тему для проверки.`}); }
+  catch (error) {console.warn('RP Nexus: уведомление не показано',error);}
+}
+async function scanTabs() {
+  let count = 0;
+  for (const forum of FORUMS) {
+    if (!await api.permissions.contains({origins:[forum.origin]})) continue;
+    const tabs = await api.tabs.query({url:[forum.origin]});
+    for (const tab of tabs) {
+      if (!tab.id || !tab.url || !/\/threads\//i.test(new URL(tab.url).pathname)) continue;
+      try { await api.tabs.sendMessage(tab.id,{type:'RP_NEXUS_SCAN_THREAD'}); count++; }
+      catch { /* Navigating or unloaded tabs are expected. */ }
+    }
+  }
+  return count;
+}
+async function checkDeadlines() {
+  const store = await storePromise;
+  const now = Date.now();
+  const current = (await store.listCases()).filter(c => c.deadline && c.status !== 'done' && Date.parse(c.deadline) <= now + 15 * 60000);
+  for (const item of current) {
+    const key = `rpnDeadlineSentV3:${item.id}`;
+    const saved = (await api.storage.local.get(key))[key];
+    if (saved === item.deadline) continue;
+    try {
+      await api.notifications.create(`rpn_deadline_${item.id}`, {type:'basic', iconUrl:'assets/icon-128.png',title:'RP Nexus · Срок жалобы',message:`${item.title.slice(0,110)}: ${Date.parse(item.deadline) <= now ? 'срок прошёл' : 'менее 15 минут до срока'}.`});
+      await api.storage.local.set({[key]:item.deadline});
+    } catch(error) { console.warn('RP Nexus: уведомление о сроке',error); }
+  }
+}
+async function tick() { try { await scanTabs(); await checkDeadlines(); } catch(error) { console.warn('RP Nexus: периодическая проверка',error); } }
+function start() {
+  void syncScripts();
+  void api.alarms.create('rp-nexus-open-tabs-v3',{periodInMinutes:5}).catch(err => console.warn('RP Nexus: alarms',err));
+}
+api.runtime.onInstalled.addListener(start);
+api.runtime.onStartup?.addListener(start);
+api.permissions.onAdded.addListener(() => {void syncScripts();});
+api.permissions.onRemoved.addListener(() => {void syncScripts();});
+api.alarms.onAlarm.addListener(alarm => {if (alarm.name === 'rp-nexus-open-tabs-v3') void tick();});
+api.runtime.onMessage.addListener((message,sender,sendResponse) => {
+  if (!message || typeof message !== 'object') return;
+  const isTrustedExtension = sender.id === api.runtime.id && sender.url?.startsWith(api.runtime.getURL(''));
+  const isForum = FORUMS.some(x => sender.url?.startsWith(x.origin.replace('*','')));
+  const isVideo = VIDEOS.some(x => sender.url?.startsWith(x.origin.replace('*','')));
+  async function task() {
+    if (message.type === 'RP_NEXUS_OPEN_WORKSPACE') {
+      if (!isForum && !isVideo && !isTrustedExtension) throw Error('Недоверенный источник');
+      await api.tabs.create({url:api.runtime.getURL('ui/workspace.html' + (['forum','complaints'].includes(message.view) ? '#'+message.view : ''))});
+      return true;
+    }
+    if (message.type === 'RP_NEXUS_SCAN_OPEN_TABS') {
+      if (!isTrustedExtension) throw Error('Недоверенный источник');
+      return scanTabs();
+    }
+    const store = await storePromise;
+    if (message.type === 'RP_NEXUS_TRACK_CURRENT_THREAD') {
+      if (!isForum || !sender.url) throw Error('Сайт не поддерживается');
+      const core = await corePromise;
+      if (core.threadKey(message.url) !== core.threadKey(sender.url)) throw Error('Тема не совпадает со страницей');
+      const saved = (await api.storage.local.get('rpNexusStateV1')).rpNexusStateV1;
+      const profileId = saved?.activeProfileId;
+      if (!profileId) throw Error('Нет активного профиля');
+      return store.createComplaint({profileId, url:message.url,title:message.title});
+    }
+    if (message.type === 'RP_NEXUS_THREAD_OBSERVED') {
+      if (!isForum || !sender.url) throw Error('Сайт не поддерживается');
+      const core = await corePromise;
+      if (core.threadKey(message.url) !== core.threadKey(sender.url)) throw Error('Тема не совпадает со страницей');
+      const changes = await store.observeThread(message.url,message.postId);
+      for (const item of changes) await notifyChange(item);
+      return changes.length;
+    }
+    if (message.type === 'RP_NEXUS_VIDEO_ADD') {
+      if (!isVideo || !sender.url) throw Error('Сайт не поддерживается');
+      const url = new URL(message.input?.url);
+      if (url.origin !== new URL(sender.url).origin || url.pathname !== new URL(sender.url).pathname) throw Error('Недопустимая ссылка на видео');
+      return store.addComplaintEvidence(message.id,message.input);
+    }
+    if (message.type === 'RP_NEXUS_CASE_MUTATE') {
+      if (!isTrustedExtension) throw Error('Недоверенный источник');
+      switch(message.action) {
+        case 'create': return store.createComplaint(message.input);
+        case 'update': return store.editComplaint(message.id,message.patch);
+        case 'delete': return store.removeComplaint(message.id);
+        case 'addEvidence': return store.addComplaintEvidence(message.id,message.input);
+        case 'removeEvidence': return store.removeComplaintEvidence(message.id,message.evidenceId);
+        case 'replace': return store.replaceCases(message.cases);
+        default: throw Error('Неизвестное действие');
+      }
+    }
+    throw Error('Неизвестный запрос');
+  }
+  if (!['RP_NEXUS_OPEN_WORKSPACE','RP_NEXUS_SCAN_OPEN_TABS','RP_NEXUS_TRACK_CURRENT_THREAD','RP_NEXUS_THREAD_OBSERVED','RP_NEXUS_VIDEO_ADD','RP_NEXUS_CASE_MUTATE'].includes(message.type)) return;
+  void task().then(value => sendResponse({ok:true,value})).catch(error => sendResponse({ok:false,error:error?.message || 'Ошибка'}));
+  return true;
 });
-void syncForumScripts();
+start();

@@ -8,7 +8,7 @@ for (const browser of ['chromium', 'firefox']) {
   await mkdir(dest, { recursive: true });
   for (const part of ['lib', 'ui', 'content', 'background', 'assets', '_locales']) await cp(resolve(root, 'src', part), resolve(dest, part), { recursive: true });
   const manifest = JSON.parse(await readFile(resolve(root, 'manifests', `${browser}.json`), 'utf8'));
-  if (manifest.version !== '0.2.0') throw new Error('Unexpected manifest version');
+  if (manifest.version !== '0.3.0') throw new Error('Unexpected manifest version');
   await writeFile(resolve(dest, 'manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
   console.log(`Created ${dest}`);
 }

@@ -13,3 +13,21 @@ textarea{width:100%;resize:vertical;background:var(--panel);color:var(--ink);bor
 #forum-template-dialog #forum-preview blockquote{border-left:3px solid var(--accent);padding-left:12px;margin:8px 0}
 #forum-template-dialog #forum-preview pre{white-space:pre-wrap}
 #forum-search{max-width:100%}
+/* Complaints & Evidence 0.3.0 */
+.case-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:18px 0}
+.case-stats>div{background:var(--sub);border:1px solid var(--stroke);border-radius:10px;padding:12px;display:grid;gap:5px}
+.case-stats strong{font-size:24px;font-variant-numeric:tabular-nums}
+.case-stats small{font-size:11px;color:var(--muted)}
+.case-card h3{overflow-wrap:anywhere;max-width:700px}
+.case-card .subtle{overflow-wrap:anywhere}
+.case-card .case-note{white-space:pre-wrap;overflow-wrap:anywhere;color:var(--muted)}
+.case-soon{color:var(--danger);border-color:var(--danger)}
+.case-overdue{color:var(--danger);border-color:var(--danger);font-weight:800}
+.case-expanded{margin-top:14px;padding-top:14px;border-top:1px solid var(--stroke);display:grid;gap:13px}
+.case-evidence{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--stroke)}
+.case-evidence>*{min-width:0}
+.case-evidence strong{overflow-wrap:anywhere}
+#complaint-dialog,#evidence-dialog{width:min(650px,calc(100vw - 24px));max-height:calc(100vh - 36px);overflow:auto}
+#complaint-dialog input[readonly]{opacity:.7;cursor:not-allowed}
+[data-case-card][hidden]{display:none!important}
+@media(max-width:770px){.case-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.case-evidence{display:block}}
