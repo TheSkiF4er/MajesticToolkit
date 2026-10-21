@@ -2,8 +2,8 @@
   "manifest_version": 3,
   "name": "RP Nexus",
   "short_name": "RP Nexus",
-  "description": "Локальное рабочее пространство для RolePlay: профили, инструменты и навигация.",
-  "version": "0.1.0",
+  "description": "Forum Toolkit: биндер, BBCode, быстрые ответы, горячие клавиши и инструменты модерации.",
+  "version": "0.2.0",
   "minimum_chrome_version": "116",
   "permissions": [
     "storage",
@@ -12,7 +12,8 @@
     "sidePanel"
   ],
   "optional_host_permissions": [
-    "https://forum.majestic-rp.ru/*"
+    "https://forum.majestic-rp.ru/*",
+    "https://forum.russia.online/*"
   ],
   "action": {
     "default_title": "RP Nexus",

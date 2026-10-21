@@ -1,25 +1,32 @@
-/* Background event handler. There is no network communication. */
+/* RP Nexus v0.2.0: permission-gated local Forum Toolkit registration. */
 const api = globalThis.browser ?? globalThis.chrome;
-const SCRIPT_ID = 'rp-nexus-majestic-launcher-v1';
-const ORIGIN = 'https://forum.majestic-rp.ru/*';
-async function synchronizeLauncher() {
+const FORUMS = [
+  { id: 'rp-nexus-majestic-forum-v2', origin: 'https://forum.majestic-rp.ru/*' },
+  { id: 'rp-nexus-russia-forum-v2', origin: 'https://forum.russia.online/*' }
+];
+const LEGACY = 'rp-nexus-majestic-launcher-v1';
+async function syncForumScripts() {
   try {
-    const granted = await api.permissions.contains({ origins: [ORIGIN] });
-    const registrations = await api.scripting.getRegisteredContentScripts({ ids: [SCRIPT_ID] });
-    const present = registrations.some(s => s.id === SCRIPT_ID);
-    if (granted && !present) {
-      await api.scripting.registerContentScripts([{ id: SCRIPT_ID, js: ['content/launcher.js'], matches: [ORIGIN], runAt: 'document_idle', allFrames: false, persistAcrossSessions: true }]);
-    } else if (!granted && present) {
-      await api.scripting.unregisterContentScripts({ ids: [SCRIPT_ID] });
+    const registrations = await api.scripting.getRegisteredContentScripts();
+    if (registrations.some(r => r.id === LEGACY)) await api.scripting.unregisterContentScripts({ ids: [LEGACY] });
+    const present = new Set(registrations.map(r => r.id));
+    for (const site of FORUMS) {
+      const granted = await api.permissions.contains({ origins: [site.origin] });
+      if (granted && !present.has(site.id)) await api.scripting.registerContentScripts([{ id: site.id, matches: [site.origin], js: ['lib/forum-core.js', 'content/forum.js'], runAt: 'document_idle', allFrames: false, persistAcrossSessions: true }]);
+      if (!granted && present.has(site.id)) await api.scripting.unregisterContentScripts({ ids: [site.id] });
     }
-  } catch (error) { console.error('RP Nexus: registration error', error); }
+  } catch (error) { console.error('RP Nexus: forum registration failed', error); }
 }
-api.runtime.onInstalled.addListener(() => { void synchronizeLauncher(); });
-api.runtime.onStartup?.addListener(() => { void synchronizeLauncher(); });
-api.permissions.onAdded.addListener(() => { void synchronizeLauncher(); });
-api.permissions.onRemoved.addListener(() => { void synchronizeLauncher(); });
+api.runtime.onInstalled.addListener(() => { void syncForumScripts(); });
+api.runtime.onStartup?.addListener(() => { void syncForumScripts(); });
+api.permissions.onAdded.addListener(() => { void syncForumScripts(); });
+api.permissions.onRemoved.addListener(() => { void syncForumScripts(); });
 api.runtime.onMessage.addListener((message, sender) => {
-  if (message?.type !== 'RP_NEXUS_OPEN_WORKSPACE' || !sender?.url?.startsWith('https://forum.majestic-rp.ru/')) return;
-  void api.tabs.create({ url: api.runtime.getURL('ui/workspace.html') });
+  if (message?.type !== 'RP_NEXUS_OPEN_WORKSPACE') return;
+  let origin;
+  try { origin = new URL(sender.url ?? '').origin; } catch { return; }
+  if (!FORUMS.some(s => s.origin.startsWith(origin + '/'))) return;
+  const suffix = message.view === 'forum' ? '#forum' : '';
+  void api.tabs.create({ url: api.runtime.getURL('ui/workspace.html' + suffix) });
 });
-void synchronizeLauncher();
+void syncForumScripts();

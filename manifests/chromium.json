@@ -2,15 +2,39 @@
   "manifest_version": 3,
   "name": "RP Nexus",
   "short_name": "RP Nexus",
-  "description": "Локальное рабочее пространство для RolePlay: профили, инструменты и навигация.",
-  "version": "0.1.0",
+  "description": "Forum Toolkit: биндер, BBCode, быстрые ответы, горячие клавиши и инструменты модерации.",
+  "version": "0.2.0",
   "minimum_chrome_version": "116",
-  "permissions": ["storage", "activeTab", "scripting", "sidePanel"],
-  "optional_host_permissions": ["https://forum.majestic-rp.ru/*"],
-  "action": { "default_title": "RP Nexus", "default_popup": "ui/popup.html", "default_icon": { "16": "assets/icon-16.png", "32": "assets/icon-32.png" } },
-  "side_panel": { "default_path": "ui/sidebar.html" },
-  "background": { "service_worker": "background/background.js" },
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting",
+    "sidePanel"
+  ],
+  "optional_host_permissions": [
+    "https://forum.majestic-rp.ru/*",
+    "https://forum.russia.online/*"
+  ],
+  "action": {
+    "default_title": "RP Nexus",
+    "default_popup": "ui/popup.html",
+    "default_icon": {
+      "16": "assets/icon-16.png",
+      "32": "assets/icon-32.png"
+    }
+  },
+  "side_panel": {
+    "default_path": "ui/sidebar.html"
+  },
+  "background": {
+    "service_worker": "background/background.js"
+  },
   "options_page": "ui/workspace.html",
-  "icons": { "16": "assets/icon-16.png", "32": "assets/icon-32.png", "48": "assets/icon-48.png", "128": "assets/icon-128.png" },
+  "icons": {
+    "16": "assets/icon-16.png",
+    "32": "assets/icon-32.png",
+    "48": "assets/icon-48.png",
+    "128": "assets/icon-128.png"
+  },
   "default_locale": "ru"
 }

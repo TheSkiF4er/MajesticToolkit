@@ -3,7 +3,7 @@ export const BACKUP_FORMAT = 'rp-nexus-backup';
 export const MAX_PROFILES = 100;
 export const PROJECTS = Object.freeze({ majestic: 'Majestic RP', 'russia-online': 'Russia Online', other: 'Другой проект' });
 export const THEMES = Object.freeze(['system', 'dark', 'light']);
-export const VIEWS = Object.freeze(['home', 'profiles', 'sites', 'settings', 'backup']);
+export const VIEWS = Object.freeze(['home', 'forum', 'profiles', 'sites', 'settings', 'backup']);
 
 function string(value, field, max = 90, allowEmpty = false) {
   if (typeof value !== 'string') throw new Error(`Неверное поле «${field}»`);
