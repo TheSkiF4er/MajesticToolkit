@@ -2,8 +2,8 @@
   "manifest_version": 3,
   "name": "MajesticToolkit",
   "short_name": "MajesticToolkit",
-  "description": "MajesticToolkit: форумы, жалобы, экономика, законы и инструменты ведомств по RP-серверам.",
-  "version": "0.6.0",
+  "description": "MajesticToolkit: форумы, жалобы, экономика, законы, ведомства и локальные документы с PDF-экспортом.",
+  "version": "0.7.0",
   "minimum_chrome_version": "116",
   "permissions": [
     "storage",

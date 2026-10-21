@@ -83,3 +83,18 @@ textarea{width:100%;resize:vertical;background:var(--panel);color:var(--ink);bor
 .gov-ref>span{overflow-wrap:anywhere;min-width:0}.gov-references{min-height:20px}
 .gov-law-picker .row>*{flex:1;min-width:160px}.gov-law-picker select{max-width:100%}
 @media(max-width:650px){.gov-dialog{padding:14px}.gov-item .row{flex-direction:column;align-items:stretch}}
+/* Document Studio 0.7.0 */
+.studio-dialog{width:min(850px,calc(100vw - 24px))}
+.studio-dialog form{display:grid;gap:14px}
+.studio-dialog textarea{min-height:72px}
+.studio-dialog label{display:grid;gap:7px;color:var(--ink);font-size:13px}
+.studio-dialog label.check{display:flex;align-items:center;gap:6px}
+.studio-field-row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px;padding:14px;margin:10px 0;border-radius:9px;background:var(--sub);border:1px solid var(--stroke)}
+.studio-field-row .button{justify-self:start;align-self:end}
+.studio-note{padding:11px 14px;background:var(--sub);border-radius:8px;color:var(--muted);font-size:12px}
+.studio-item{display:grid;gap:10px;border-top:1px solid var(--stroke);padding:15px 0;overflow-wrap:anywhere}
+.studio-item .row{flex-wrap:wrap}.studio-item p{margin:5px 0}
+.studio-preview{white-space:pre-wrap;max-height:44vh;overflow:auto}
+.studio-version{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:13px 0;border-top:1px solid var(--stroke)}
+.studio-version .row{flex-wrap:wrap}.studio-version p{margin:5px 0}
+@media(max-width:650px){.studio-field-row{grid-template-columns:1fr}.studio-version{align-items:stretch;flex-direction:column}}
