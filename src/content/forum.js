@@ -170,13 +170,12 @@
   }
   async function readStorage() {
     try {
-      const items = await api.storage.local.get(null);
-      state = items[STORAGE] ?? null;
-      templates = Object.entries(items).filter(([k]) => k.startsWith(C.KEY_PREFIX)).flatMap(([key, value]) => {
-        try { const t = C.cleanTemplate(value); return key === C.KEY_PREFIX + t.id ? [t] : []; } catch { return []; }
-      });
-      if (expanded) draw();
-    } catch (err) { console.warn('MajesticToolkit: binder storage unavailable', err); }
+      const response=await api.runtime.sendMessage({type:'MAJESTIC_CONTENT_READ',kind:'forum'});
+      if(!response?.ok)throw Error(response?.error||'Данные недоступны');
+      state=response.value.profile ? {activeProfileId:response.value.profile.id,profiles:[response.value.profile]} : null;
+      templates=response.value.items.map(item=>C.cleanTemplate(item));
+      if(expanded)draw();
+    } catch(err) {console.warn('MajesticToolkit: binder unavailable',err);}
   }
   launcher.addEventListener('click', () => { expanded = !expanded; draw(); });
   panel.addEventListener('input', ev => { if (ev.target.id === 'rpn-search') renderList(ev.target.value); });
@@ -217,9 +216,7 @@
     void applyTemplate(t).then(ok => sendResponse({ ok, error: ok ? undefined : 'Поле ответа не найдено или редактор отклонил вставку' })).catch(err => sendResponse({ ok: false, error: err.message }));
     return true;
   });
-  api.storage.onChanged.addListener((changes, area) => {
-    if (area === 'local' && Object.keys(changes).some(k => k === STORAGE || k.startsWith(C.KEY_PREFIX))) void readStorage();
-  });
+  api.runtime.onMessage.addListener(message => {if(message?.type==='MAJESTIC_DATA_CHANGED')void readStorage();});
   function findLastPostId() {
     if (!threadPage()) return null;
     let result = null;

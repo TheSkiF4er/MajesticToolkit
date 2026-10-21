@@ -12,6 +12,43 @@ const VIDEOS = [
 const LEGACY = ['rp-nexus-majestic-launcher-v1','rp-nexus-majestic-forum-v2','rp-nexus-russia-forum-v2'];
 const storePromise = import(api.runtime.getURL('lib/complaints-store.mjs'));
 const corePromise = import(api.runtime.getURL('lib/complaints-core.js')).then(() => globalThis.RPNComplaints);
+// Content scripts receive only the minimum data required by their visible UI.
+// On browsers supporting setAccessLevel, web pages cannot read the full local database.
+async function restrictStorageAccess() {
+  if (typeof api.storage.local.setAccessLevel === 'function') {
+    try { await api.storage.local.setAccessLevel({accessLevel:'TRUSTED_CONTEXTS'}); }
+    catch (error) { console.warn('MajesticToolkit: storage isolation unavailable',error); }
+  }
+}
+async function contentSnapshot(kind) {
+  const state=(await api.storage.local.get('rpNexusStateV1')).rpNexusStateV1;
+  const profileId=state?.activeProfileId;
+  if (typeof profileId !== 'string') return {profile:null,items:[]};
+  const profile=state.profiles?.find(p=>p.id===profileId);
+  if (!profile) return {profile:null,items:[]};
+  if (kind==='forum') {
+    const {listTemplates}=await import(api.runtime.getURL('lib/forum-store.mjs'));
+    const records=await listTemplates();
+    return {profile,items:records.filter(r=>r.profileId===profileId)};
+  }
+  const {listCases}=await storePromise;
+  const records=await listCases();
+  return {profile,items:records.filter(r=>r.profileId===profileId).map(r=>({id:r.id,title:r.title}))};
+}
+const dataPrefix=/^(rpNexusStateV1|rpnForumTemplateV2:|rpnComplaintV3:)/;
+let notified=false;
+api.storage.onChanged.addListener((changes,area)=>{
+  if(area!=='local'||notified||!Object.keys(changes).some(k=>dataPrefix.test(k)))return;
+  notified=true;
+  // Notification only; no user data are broadcast. Readers request a scoped snapshot.
+  Promise.resolve().then(async()=>{
+    for(const site of [...FORUMS,...VIDEOS]) {
+      if(!await api.permissions.contains({origins:[site.origin]}))continue;
+      const tabs=await api.tabs.query({url:[site.origin]});
+      await Promise.all(tabs.filter(t=>Number.isInteger(t.id)).map(t=>api.tabs.sendMessage(t.id,{type:'MAJESTIC_DATA_CHANGED'}).catch(()=>{})));
+    }
+  }).catch(error=>console.warn('MajesticToolkit: content invalidation',error)).finally(()=>{notified=false;});
+});
 async function syncScripts() {
   try {
     const registrations = await api.scripting.getRegisteredContentScripts();
@@ -68,6 +105,7 @@ async function checkDeadlines() {
 }
 async function tick() { try { await scanTabs(); await checkDeadlines(); } catch(error) { console.warn('MajesticToolkit: периодическая проверка',error); } }
 function start() {
+  void restrictStorageAccess();
   void syncScripts();
   void api.alarms.create('rp-nexus-open-tabs-v3',{periodInMinutes:5}).catch(err => console.warn('MajesticToolkit: alarms',err));
 }
@@ -86,6 +124,12 @@ api.runtime.onMessage.addListener((message,sender,sendResponse) => {
       if (!isForum && !isVideo && !isTrustedExtension) throw Error('Недоверенный источник');
       await api.tabs.create({url:api.runtime.getURL('ui/workspace.html' + (['forum','complaints'].includes(message.view) ? '#'+message.view : ''))});
       return true;
+    }
+    if (message.type === 'MAJESTIC_CONTENT_READ') {
+      if (sender.id !== api.runtime.id) throw Error('Недоверенный источник');
+      if (message.kind === 'forum' && isForum) return contentSnapshot('forum');
+      if (message.kind === 'evidence' && isVideo) return contentSnapshot('evidence');
+      throw Error('Источник не вправе читать эти данные');
     }
     if (message.type === 'RP_NEXUS_SCAN_OPEN_TABS') {
       if (!isTrustedExtension) throw Error('Недоверенный источник');
@@ -129,7 +173,7 @@ api.runtime.onMessage.addListener((message,sender,sendResponse) => {
     }
     throw Error('Неизвестный запрос');
   }
-  if (!['RP_NEXUS_OPEN_WORKSPACE','RP_NEXUS_SCAN_OPEN_TABS','RP_NEXUS_TRACK_CURRENT_THREAD','RP_NEXUS_THREAD_OBSERVED','RP_NEXUS_VIDEO_ADD','RP_NEXUS_CASE_MUTATE'].includes(message.type)) return;
+  if (!['MAJESTIC_CONTENT_READ','RP_NEXUS_OPEN_WORKSPACE','RP_NEXUS_SCAN_OPEN_TABS','RP_NEXUS_TRACK_CURRENT_THREAD','RP_NEXUS_THREAD_OBSERVED','RP_NEXUS_VIDEO_ADD','RP_NEXUS_CASE_MUTATE'].includes(message.type)) return;
   void task().then(value => sendResponse({ok:true,value})).catch(error => sendResponse({ok:false,error:error?.message || 'Ошибка'}));
   return true;
 });

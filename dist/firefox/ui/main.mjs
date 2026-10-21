@@ -1,3 +1,4 @@
+import {captureRecovery,commitRecovery,restoreRecovery,getRecoveryStatus,discardRecovery} from '../lib/recovery.mjs';
 import { api, openSidePanel, openTab, openWorkspace } from '../lib/browser.mjs';
 import { addProfile, deleteProfile, editProfile, getActiveProfile, projectLabel, savePreferences, selectProfile } from '../lib/model.mjs';
 import { loadState, modifyState, restoreState, STORAGE_KEY } from '../lib/state.mjs';
@@ -32,6 +33,7 @@ const popup = mode === 'popup';
 let state;
 let productivity = defaultProductivity();
 let view = 'home';
+let recoveryInfo = null;
 let permissionGranted = false;
 let russiaPermissionGranted = false;
 let videoPermissionGranted = false;
@@ -65,12 +67,12 @@ function sectionSettings() {
   return `<div class="stack"><section class="card stack"><div class="control"><div><h3>Тема интерфейса</h3><p class="subtle">Влияет на popup, боковую панель и рабочее пространство</p></div><select aria-label="Тема" data-setting="theme"><option value="system" ${p.theme === 'system' ? 'selected' : ''}>Системная</option><option value="light" ${p.theme === 'light' ? 'selected' : ''}>Светлая</option><option value="dark" ${p.theme === 'dark' ? 'selected' : ''}>Тёмная</option><option value="sepia" ${p.theme === 'sepia' ? 'selected' : ''}>Сепия</option><option value="contrast" ${p.theme === 'contrast' ? 'selected' : ''}>Высокая контрастность</option></select></div><div class="divider"></div><div class="control"><div><h3>Начальный раздел</h3><p class="subtle">Выбирается при новом открытии расширения</p></div><select aria-label="Стартовый экран" data-setting="startPage">${NAV.map(([id,label]) => `<option value="${id}" ${p.startPage === id ? 'selected' : ''}>${e(label)}</option>`).join('')}</select></div><div class="divider"></div><div class="control"><div><h3>Компактный интерфейс</h3><p class="subtle">Уменьшает отступы в карточках</p></div><label class="check"><input type="checkbox" data-setting="compact" ${p.compact ? 'checked' : ''}><span>Включить</span></label></div></section><section class="card stack"><h3>Productivity 0.9.0</h3><div class="control"><div><strong>Цветовой акцент</strong><p class="subtle">Для всех окон расширения</p></div><select aria-label="Цветовой акцент" data-productivity-setting="accent">${[['blue','Синий'],['teal','Бирюзовый'],['violet','Фиолетовый'],['amber','Янтарный']].map(([id,label])=>`<option value="${id}" ${productivity.accent===id?'selected':''}>${label}</option>`).join('')}</select></div><div class="control"><div><strong>Горячие клавиши</strong><p class="subtle">Alt+1–8 в окнах MajesticToolkit. Ctrl/⌘+K — поиск.</p></div><label class="check"><input type="checkbox" data-productivity-setting="shortcutsEnabled" ${productivity.shortcutsEnabled?'checked':''}>Включить</label></div><div class="productivity-shortcuts">${productivity.shortcuts.map((target,index)=>`<label class="field">Alt+${index+1}<select data-productivity-shortcut="${index}">${NAV.map(([id,label])=>`<option value="${id}" ${target===id?'selected':''}>${e(label)}</option>`).join('')}</select></label>`).join('')}</div><div class="row"><button class="button secondary" data-productivity-action="reset-shortcuts">Сбросить сочетания</button></div></section></div>`;
 }
 function sectionBackup() {
-  return `<div class="stack"><section class="card"><h3>Скачать резервную копию</h3><p class="lead">JSON-файл с профилями, шаблонами, жалобами, экономическими операциями, сделками, результатами игроков локальной базой законов и Government Tools и документами Document Studio. Авторизационные данные сайтов и содержимое страниц не сохраняются.</p><div class="row" style="margin-top:14px"><button class="button primary" data-action="export">Скачать JSON</button></div></section><section class="card"><h3>Восстановить из файла</h3><p class="lead">Данные проверяются до применения. Импорт заменит текущие профили и настройки. Максимальный размер — 48 МиБ. Копии 0.1.0–0.8.0 поддерживаются. При импорте старой копии новые записи сохраняются, если профили совместимы.</p><div style="margin-top:14px"><label class="field">Выберите .json<input id="backup-file" type="file" accept=".json,application/json"></label></div></section><section class="card"><h3>Где хранятся данные</h3><p class="lead">В локальном хранилище браузерного расширения. MajesticToolkit не имеет аккаунта, собственного сервера и телеметрии. Перед удалением расширения скачайте копию.</p></section></div>`;
+  return `<div class="stack"><section class="card"><h3>Скачать резервную копию</h3><p class="lead">JSON-файл с профилями, шаблонами, жалобами, экономическими операциями, сделками, результатами игроков локальной базой законов и Government Tools и документами Document Studio. Авторизационные данные сайтов и содержимое страниц не сохраняются.</p><div class="row" style="margin-top:14px"><button class="button primary" data-action="export">Скачать JSON</button></div></section><section class="card"><h3>Восстановить из файла</h3><p class="lead">Данные проверяются до применения. Импорт заменит текущие профили и настройки. Максимальный размер — 48 МиБ. Копии 0.1.0–0.9.0 поддерживаются. При импорте старой копии новые записи сохраняются, если профили совместимы.</p><div style="margin-top:14px"><label class="field">Выберите .json<input id="backup-file" type="file" accept=".json,application/json"></label></div></section><section class="card stack"><h3>Точка восстановления 0.10.0</h3><p class="lead">Перед импортом автоматически сохраняется проверяемый SHA-256 снимок локальных данных. Он позволяет отменить импорт или восстановиться после прерывания работы браузера. Google OAuth и чужие данные не копируются.</p>${recoveryInfo?`<p class="subtle">${recoveryInfo.phase==='pending'?'Импорт был прерван или не завершён':'Можно отменить последний импорт'} · ${e(recoveryInfo.createdAt)} · записей: ${recoveryInfo.count}</p><div class="row"><button class="button primary" data-action="recover-local">Восстановить предыдущее состояние</button>${recoveryInfo.phase==='ready'?'<button class="button secondary" data-action="discard-recovery">Удалить точку</button>':''}</div>`:'<p class="subtle">Нет сохранённых точек восстановления.</p>'}</section><section class="card"><h3>Где хранятся данные</h3><p class="lead">В локальном хранилище браузерного расширения. MajesticToolkit не имеет аккаунта, собственного сервера и телеметрии. Перед удалением расширения скачайте копию.</p></section></div>`;
 }
 const titles = {search:['Поиск и локальный помощник','Быстрый индекс всех локальных разделов, ответы с указанием источников'],integrations:['Интеграции','Google Docs, Sheets, Drive, Fletcher Wiki и Docossum'],documents:['Document Studio','Редактор, формы, шаблоны, история локальных версий и PDF'],government:['Government Tools','Конструктор решений, правовые основания, процессуальные шаблоны и ведомства'],law:['Law Codex','Законы, неизменяемые редакции, статьи, избранное и памятки'],economy:['Экономика и аналитика','Сделки, денежные операции, калькуляторы, игроки и семьи'],complaints:['Жалобы и доказательства','Отслеживание тем, сроки, черновики и таймкоды'],forum:['Forum Toolkit','Шаблоны ответов, BBCode и инструменты на форуме'],home:['Обзор','Рабочая среда под ваши RP-проекты'],profiles:['Профили','Переключение между игровыми серверами'],sites:['Сайты и разрешения','Вы контролируете, где работает расширение'],settings:['Настройки','Настройте интерфейс под себя'],backup:['Резервные копии','Перенос данных между браузерами']};
 function renderPopup() {
   const p = getActiveProfile(state);
-  return `<div class="popup-shell stack"><div class="brand"><span class="logo">MT</span><div><h1>MajesticToolkit</h1><p>Версия 0.9.0</p></div></div><div class="card stack"><div class="row spread"><strong>Активный профиль</strong>${tag(projectLabel(p.project))}</div><select aria-label="Выбрать профиль" id="popup-profile">${state.profiles.map(x => `<option value="${e(x.id)}" ${x.id === state.activeProfileId ? 'selected' : ''}>${e(x.name)} · ${e(x.server)}</option>`).join('')}</select><p class="subtle">${e(p.server)}</p>${p.forumUrl ? `<button class="button secondary" data-url="${e(p.forumUrl)}">Открыть форум ↗</button>` : ''}</div><div class="row"><button class="button primary" data-action="panel">Боковая панель</button><button class="button secondary" data-action="workspace">Рабочее пространство ↗</button></div><div class="row"><button class="button link" data-action="popup-search">Поиск</button><button class="button link" data-action="popup-forum">Шаблоны форума</button><button class="button link" data-action="popup-complaints">Жалобы</button><button class="button link" data-action="popup-economy">Экономика</button><button class="button link" data-action="popup-law">Законы</button><button class="button link" data-action="popup-government">Ведомства</button><button class="button link" data-action="popup-documents">Документы</button><button class="button link" data-action="popup-integrations">Интеграции</button><button class="button link" data-action="popup-settings">Настройки и профили</button><button class="button link" data-url="https://docossum.com/">Docossum ↗</button><button class="button link" data-url="https://fletcher-wiki.com/">Fletcher ↗</button></div></div>`;
+  return `<div class="popup-shell stack"><div class="brand"><span class="logo">MT</span><div><h1>MajesticToolkit</h1><p>Версия 0.10.0</p></div></div><div class="card stack"><div class="row spread"><strong>Активный профиль</strong>${tag(projectLabel(p.project))}</div><select aria-label="Выбрать профиль" id="popup-profile">${state.profiles.map(x => `<option value="${e(x.id)}" ${x.id === state.activeProfileId ? 'selected' : ''}>${e(x.name)} · ${e(x.server)}</option>`).join('')}</select><p class="subtle">${e(p.server)}</p>${p.forumUrl ? `<button class="button secondary" data-url="${e(p.forumUrl)}">Открыть форум ↗</button>` : ''}</div><div class="row"><button class="button primary" data-action="panel">Боковая панель</button><button class="button secondary" data-action="workspace">Рабочее пространство ↗</button></div><div class="row"><button class="button link" data-action="popup-search">Поиск</button><button class="button link" data-action="popup-forum">Шаблоны форума</button><button class="button link" data-action="popup-complaints">Жалобы</button><button class="button link" data-action="popup-economy">Экономика</button><button class="button link" data-action="popup-law">Законы</button><button class="button link" data-action="popup-government">Ведомства</button><button class="button link" data-action="popup-documents">Документы</button><button class="button link" data-action="popup-integrations">Интеграции</button><button class="button link" data-action="popup-settings">Настройки и профили</button><button class="button link" data-url="https://docossum.com/">Docossum ↗</button><button class="button link" data-url="https://fletcher-wiki.com/">Fletcher ↗</button></div></div>`;
 }
 function render() {
   if (!state) return;
@@ -80,7 +82,7 @@ function render() {
   if (popup) { app.innerHTML = renderPopup(); return; }
   const title = titles[view];
   const contents = { home: sectionHome, search: () => productivitySection(state), forum: () => forumSection(state), complaints: () => complaintsSection(state), economy: () => economySection(state), law: () => lawSection(state), government: () => governmentSection(state), documents: () => documentSection(state), integrations: () => integrationsSection(state), profiles: sectionProfiles, sites: sectionSites, settings: sectionSettings, backup: sectionBackup };
-  app.innerHTML = `<div class="layout"><aside class="side"><div class="brand"><div class="logo">MT</div><div><h1>MajesticToolkit</h1><p>Версия 0.9.0</p></div></div><nav class="nav" aria-label="Разделы">${NAV.map(([id, label, icon]) => `<button type="button" data-action="nav" data-view="${id}" class="${view === id ? 'active' : ''}" ${view === id ? 'aria-current="page"' : ''}><span aria-hidden="true">${icon}</span>${e(label)}</button>`).join('')}</nav><div class="side-footer">Локальные данные · Без облачной регистрации</div></aside><main class="main"><header class="topline"><div><p class="eyebrow">MajesticToolkit / ${e(title[0])}</p><h2>${e(title[0])}</h2><p class="lead">${e(title[1])}</p></div>${mode === 'sidebar' ? '' : '<span class="tag">v0.9.0</span>'}</header>${contents[view]()}</main></div>`;
+  app.innerHTML = `<div class="layout"><aside class="side"><div class="brand"><div class="logo">MT</div><div><h1>MajesticToolkit</h1><p>Версия 0.10.0</p></div></div><nav class="nav" aria-label="Разделы">${NAV.map(([id, label, icon]) => `<button type="button" data-action="nav" data-view="${id}" class="${view === id ? 'active' : ''}" ${view === id ? 'aria-current="page"' : ''}><span aria-hidden="true">${icon}</span>${e(label)}</button>`).join('')}</nav><div class="side-footer">Локальные данные · Без облачной регистрации</div></aside><main class="main"><header class="topline"><div><p class="eyebrow">MajesticToolkit / ${e(title[0])}</p><h2>${e(title[0])}</h2><p class="lead">${e(title[1])}</p></div>${mode === 'sidebar' ? '' : '<span class="tag">v0.10.0</span>'}</header>${contents[view]()}</main></div>`;
 }
 async function refreshPermission() {
   try { permissionGranted = await api.permissions.contains({ origins: [FORUM_SITE.origin] }); }
@@ -115,7 +117,7 @@ async function exportBackup() {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
-  anchor.download = `majestictoolkit-backup-v0.9.0-${new Date().toISOString().slice(0,10)}.json`;
+  anchor.download = `majestictoolkit-backup-v0.10.0-${new Date().toISOString().slice(0,10)}.json`;
   document.body.appendChild(anchor); anchor.click(); anchor.remove();
   setTimeout(() => URL.revokeObjectURL(url), 30000);
   feedback(`Копия: ${templates.length} шаблонов, ${cases.length} жалоб, ${economy.length} операций/матчей, ${laws.length} записей законодательства, ${government.length} ведомственных записей, ${documents.length} документов/шаблонов, ${externalLinks().length} внешних закладок`);
@@ -194,6 +196,14 @@ async function executeAction(button) {
     await refreshPermission();render();return;
   }
   if (action === 'permission') { await changePermission(button.dataset.site || FORUM_SITE.origin); return; }
+  if (action === 'recover-local') {
+    if(!recoveryInfo)return;
+    if(!confirm('Восстановить данные до последнего импорта? Текущие изменения после импорта будут потеряны.'))return;
+    const result=await restoreRecovery();
+    recoveryInfo=null;feedback(`Восстановлено записей: ${result.restored}`);
+    location.reload();return;
+  }
+  if (action === 'discard-recovery') {await discardRecovery();recoveryInfo=null;render();feedback('Точка восстановления удалена');return;}
   if (action === 'export') { await exportBackup(); return; }
   if (action === 'panel') { await openSidePanel(); return; }
   if (action === 'popup-integrations') {await api.tabs.create({url:api.runtime.getURL('ui/workspace.html#integrations')});return;}
@@ -276,6 +286,8 @@ document.addEventListener('change', event => {
         const beforeDocuments = documentRecords().slice();
         const beforeLinks = externalLinks().slice();
         const beforeProductivity = productivity;
+        await captureRecovery();
+        recoveryInfo=await getRecoveryStatus();
         try {
           if (backup.schemaVersion < 3 && beforeCases.some(c => !backup.state.profiles.some(p => p.id === c.profileId))) {
             throw Error('Старая копия содержит другой набор профилей. Сначала экспортируйте данные 0.3.0, чтобы не потерять доступ к существующим жалобам.');
@@ -293,16 +305,13 @@ document.addEventListener('change', event => {
           if (backup.schemaVersion >= 8) await replaceLinks(backup.siteLinks);
           if (backup.schemaVersion >= 9) productivity = await replaceProductivity(backup.productivity);
           state = await restoreState(backup.state);
+          await commitRecovery();
+          recoveryInfo=await getRecoveryStatus();
         } catch (error) {
-          if (backup.schemaVersion >= 2) await replaceTemplates(beforeTemplates);
-          if (backup.schemaVersion >= 3) await requestCaseReplacement(beforeCases);
-          if (backup.schemaVersion >= 4) await replaceEconomy(beforeEconomy);
-          if (backup.schemaVersion >= 5) await replaceLawRecords(beforeLaws,beforeState.profiles.map(p=>p.id));
-          if (backup.schemaVersion >= 6) await replaceGovernment(beforeGovernment,beforeState.profiles.map(p=>p.id));
-          if (backup.schemaVersion >= 7) await replaceDocumentRecords(beforeDocuments,beforeState.profiles.map(p=>p.id),beforeGovernment);
-          if (backup.schemaVersion >= 8) await replaceLinks(beforeLinks);
-          if (backup.schemaVersion >= 9) productivity = await replaceProductivity(beforeProductivity);
-          await restoreState(beforeState);
+          // A persisted point also survives closing the tab or a browser crash.
+          // If immediate rollback fails the point is kept for later recovery.
+          try {await restoreRecovery();recoveryInfo=null;state=beforeState;productivity=beforeProductivity;}
+          catch (rollback) {throw new AggregateError([error,rollback],'Импорт прерван: автоматический откат не завершён. Откройте «Резервные копии» для восстановления.');}
           throw error;
         }
         await Promise.all([refreshForum(),refreshComplaints(),refreshEconomy(),refreshLaw(),refreshGovernment(),refreshDocuments(),refreshIntegrations()]);
@@ -377,5 +386,15 @@ api.storage.onChanged.addListener((changes, area) => {
 });
 api.permissions.onAdded.addListener(() => { void refreshPermission().then(render); });
 api.permissions.onRemoved.addListener(() => { void refreshPermission().then(render); });
-try { [state,productivity] = await Promise.all([loadState(),loadProductivity()]); await Promise.all([refreshForum(),refreshComplaints(),refreshEconomy(),refreshLaw(),refreshGovernment(),refreshDocuments(),refreshIntegrations()]); await refreshPermission(); view = ['#search','#forum','#complaints','#economy','#law','#government','#documents','#integrations'].includes(location.hash) ? location.hash.slice(1) : state.preferences.startPage; if(view==='search')await refreshProductivitySearch();render(); }
-catch (err) { app.textContent = `Не удалось открыть данные MajesticToolkit: ${err.message}. Данные не удалены. Для восстановления проверьте настройки расширения.`; feedback(err.message, true); }
+try { recoveryInfo=await getRecoveryStatus(); [state,productivity] = await Promise.all([loadState(),loadProductivity()]); await Promise.all([refreshForum(),refreshComplaints(),refreshEconomy(),refreshLaw(),refreshGovernment(),refreshDocuments(),refreshIntegrations()]); await refreshPermission(); view = ['#search','#forum','#complaints','#economy','#law','#government','#documents','#integrations'].includes(location.hash) ? location.hash.slice(1) : state.preferences.startPage; if(recoveryInfo?.phase==='pending'){view='backup';feedback('Предыдущий импорт был прерван. Восстановите данные из точки восстановления.',true);}  if(view==='search')await refreshProductivitySearch();render(); }
+catch (err) {
+  app.textContent=`Не удалось открыть MajesticToolkit: ${err.message}. Данные не удалены.`;
+  if(recoveryInfo){
+    const button=document.createElement('button');button.className='button primary';
+    button.textContent='Восстановить из точки восстановления';
+    button.addEventListener('click',()=>{if(!confirm('Вернуть данные к состоянию до импорта?'))return;
+      void restoreRecovery().then(()=>location.reload()).catch(error=>feedback(error.message,true));});
+    app.append(document.createElement('p'),button);
+  }
+  feedback(err.message,true);
+}

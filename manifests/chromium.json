@@ -3,7 +3,7 @@
   "name": "MajesticToolkit",
   "short_name": "MajesticToolkit",
   "description": "MajesticToolkit: форумы, жалобы, экономика, законы, документы и Google Workspace.",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "minimum_chrome_version": "116",
   "permissions": [
     "storage",
@@ -38,7 +38,8 @@
     "default_path": "ui/sidebar.html"
   },
   "background": {
-    "service_worker": "background/background.js"
+    "service_worker": "background/worker.mjs",
+    "type": "module"
   },
   "options_page": "ui/workspace.html",
   "icons": {
