@@ -64,7 +64,7 @@ export async function handleIntegrationAction(button,state,render,feedback,creat
     await api.tabs.create({url:result.url});feedback(`Экспортировано ${rows.length-1} записей`);return;
   }
   if(a==='upload-backup'){
-    const name=`majestictoolkit-backup-0.8.0-${new Date().toISOString().slice(0,10)}.json`;
+    const name=`majestictoolkit-backup-0.9.0-${new Date().toISOString().slice(0,10)}.json`;
     const result=await uploadBackupToDrive(name,await createBackup());feedback(`Резервная копия сохранена в Drive: ${result.name||result.id}`);return;
   }
   if(a==='drive-list'){files=await listGoogleFiles();render();feedback(`Доступно файлов: ${files.length}`);return;}
