@@ -11,9 +11,11 @@ import '../lib/complaints-core.js';
 import '../lib/forum-core.js';
 import { economySection, refreshEconomy, handleEconomyAction, handleEconomySubmit, setEconomyFilter, setEconomySearch } from './economy-page.mjs';
 import { replaceEconomy, listEconomy as listEconomyRecords } from '../lib/economy-store.mjs';
-import { makeBackupV5, parseBackupV5 } from '../lib/law-backup.mjs';
+import { makeBackupV6, parseBackupV6 } from '../lib/government-backup.mjs';
 import { lawSection, refreshLaw, lawRecords, handleLawAction, handleLawSubmit, importLawFile, setLawQuery, setLawFavOnly, setLawEdition } from './law-page.mjs';
 import { replaceLawRecords } from '../lib/law-store.mjs';
+import { governmentSection, refreshGovernment, governmentRecords, handleGovernmentAction, handleGovernmentLawChange, handleGovernmentSubmit } from './government-page.mjs';
+import { replaceGovernment } from '../lib/government-store.mjs';
 const app = document.getElementById('app');
 const notice = document.getElementById('notice');
 const dialog = document.getElementById('profile-dialog');
@@ -26,7 +28,7 @@ let russiaPermissionGranted = false;
 let videoPermissionGranted = false;
 const VIDEO_ORIGINS = ['https://www.youtube.com/*','https://rutube.ru/*','https://www.twitch.tv/*'];
 let timeout;
-const NAV = [ ['home','Обзор','⌂'], ['forum','Форум','▤'], ['complaints','Жалобы','◷'], ['economy','Экономика','▥'], ['law','Законы','⚖'], ['profiles','Профили','◉'], ['sites','Сайты и доступ','↗'], ['settings','Настройки','⚙'], ['backup','Резервные копии','⇩'] ];
+const NAV = [ ['home','Обзор','⌂'], ['forum','Форум','▤'], ['complaints','Жалобы','◷'], ['economy','Экономика','▥'], ['law','Законы','⚖'], ['government','Ведомства','§'], ['profiles','Профили','◉'], ['sites','Сайты и доступ','↗'], ['settings','Настройки','⚙'], ['backup','Резервные копии','⇩'] ];
 
 function feedback(message, isError = false) {
   notice.textContent = message;
@@ -41,7 +43,7 @@ function profileRow(p) {
 }
 function sectionHome() {
   const active = getActiveProfile(state);
-  return `<div class="stack"><section class="card hero"><div class="eyebrow">Активный профиль</div><h3>${e(active.name)}</h3><p>${e(projectLabel(active.project))} · ${e(active.server)}</p><div class="row" style="margin-top:17px"><button class="button" data-action="edit" data-id="${e(active.id)}">Настроить профиль</button>${active.forumUrl ? `<button class="button" data-url="${e(active.forumUrl)}">Открыть форум ↗</button>` : ''}</div></section><div class="grid"><section class="card"><p class="eyebrow">Профили</p><div class="stat">${state.profiles.length}</div><p class="subtle">Отдельные RP-проекты и серверы</p><button class="button secondary" data-action="nav" data-view="profiles">Управлять профилями</button></section><section class="card"><p class="eyebrow">Интеграция с форумом</p><div class="stat">${permissionGranted ? 'Включена' : 'Выключена'}</div><p class="subtle">Кнопка MajesticToolkit на официальном форуме Majestic RP</p><button class="button secondary" data-action="nav" data-view="sites">Настроить доступ</button></section></div><section class="card"><h3>Forum Toolkit · Economy · Law Codex 0.5.0</h3><p class="lead">Биндер, жалобы, доказательства, сделки, калькуляторы, аналитика и законы по игровым серверам.</p><div class="row"><button class="button primary" data-action="nav" data-view="forum">Открыть биндер</button><button class="button secondary" data-action="nav" data-view="complaints">Менеджер жалоб</button><button class="button secondary" data-action="nav" data-view="economy">Экономика и аналитика</button><button class="button secondary" data-action="nav" data-view="law">Law Codex</button></div></section><section class="card"><h3>Быстрый доступ</h3><p class="subtle">Переход на сайты без автоматического сбора данных</p><div class="row">${BOOKMARKS.map(link => `<button class="button secondary" data-url="${e(link.url)}">${e(link.name)} ↗</button>`).join('')}</div></section></div>`;
+  return `<div class="stack"><section class="card hero"><div class="eyebrow">Активный профиль</div><h3>${e(active.name)}</h3><p>${e(projectLabel(active.project))} · ${e(active.server)}</p><div class="row" style="margin-top:17px"><button class="button" data-action="edit" data-id="${e(active.id)}">Настроить профиль</button>${active.forumUrl ? `<button class="button" data-url="${e(active.forumUrl)}">Открыть форум ↗</button>` : ''}</div></section><div class="grid"><section class="card"><p class="eyebrow">Профили</p><div class="stat">${state.profiles.length}</div><p class="subtle">Отдельные RP-проекты и серверы</p><button class="button secondary" data-action="nav" data-view="profiles">Управлять профилями</button></section><section class="card"><p class="eyebrow">Интеграция с форумом</p><div class="stat">${permissionGranted ? 'Включена' : 'Выключена'}</div><p class="subtle">Кнопка MajesticToolkit на официальном форуме Majestic RP</p><button class="button secondary" data-action="nav" data-view="sites">Настроить доступ</button></section></div><section class="card"><h3>Forum Toolkit · Economy · Law Codex · Government Tools 0.6.0</h3><p class="lead">Биндер, жалобы, доказательства, экономика, законодательство, процессуальные решения и ведомства.</p><div class="row"><button class="button primary" data-action="nav" data-view="forum">Открыть биндер</button><button class="button secondary" data-action="nav" data-view="complaints">Менеджер жалоб</button><button class="button secondary" data-action="nav" data-view="economy">Экономика и аналитика</button><button class="button secondary" data-action="nav" data-view="law">Law Codex</button><button class="button secondary" data-action="nav" data-view="government">Government Tools</button></div></section><section class="card"><h3>Быстрый доступ</h3><p class="subtle">Переход на сайты без автоматического сбора данных</p><div class="row">${BOOKMARKS.map(link => `<button class="button secondary" data-url="${e(link.url)}">${e(link.name)} ↗</button>`).join('')}</div></section></div>`;
 }
 function sectionProfiles() {
   return `<div class="stack"><div class="row spread"><p class="lead">Храните разные игровые профили локально. Сервер и ссылка на форум задаются отдельно.</p><button class="button primary" data-action="create">+ Новый профиль</button></div>${state.profiles.map(profileRow).join('')}</div>`;
@@ -54,12 +56,12 @@ function sectionSettings() {
   return `<section class="card stack"><div class="control"><div><h3>Тема интерфейса</h3><p class="subtle">Влияет на popup, боковую панель и рабочее пространство</p></div><select aria-label="Тема" data-setting="theme"><option value="system" ${p.theme === 'system' ? 'selected' : ''}>Системная</option><option value="light" ${p.theme === 'light' ? 'selected' : ''}>Светлая</option><option value="dark" ${p.theme === 'dark' ? 'selected' : ''}>Тёмная</option></select></div><div class="divider"></div><div class="control"><div><h3>Начальный раздел</h3><p class="subtle">Выбирается при новом открытии расширения</p></div><select aria-label="Стартовый экран" data-setting="startPage">${NAV.map(([id,label]) => `<option value="${id}" ${p.startPage === id ? 'selected' : ''}>${e(label)}</option>`).join('')}</select></div><div class="divider"></div><div class="control"><div><h3>Компактный интерфейс</h3><p class="subtle">Уменьшает отступы в карточках</p></div><label class="check"><input type="checkbox" data-setting="compact" ${p.compact ? 'checked' : ''}><span>Включить</span></label></div></section>`;
 }
 function sectionBackup() {
-  return `<div class="stack"><section class="card"><h3>Скачать резервную копию</h3><p class="lead">JSON-файл с профилями, шаблонами, жалобами, экономическими операциями, сделками, результатами игроков и локальной базой законов. Авторизационные данные сайтов и содержимое страниц не сохраняются.</p><div class="row" style="margin-top:14px"><button class="button primary" data-action="export">Скачать JSON</button></div></section><section class="card"><h3>Восстановить из файла</h3><p class="lead">Данные проверяются до применения. Импорт заменит текущие профили и настройки. Максимальный размер — 32 МиБ. Копии 0.1.0–0.4.0 поддерживаются. При загрузке старых копий новые данные Law Codex сохраняются, если профили совместимы.</p><div style="margin-top:14px"><label class="field">Выберите .json<input id="backup-file" type="file" accept=".json,application/json"></label></div></section><section class="card"><h3>Где хранятся данные</h3><p class="lead">В локальном хранилище браузерного расширения. MajesticToolkit не имеет аккаунта, собственного сервера и телеметрии. Перед удалением расширения скачайте копию.</p></section></div>`;
+  return `<div class="stack"><section class="card"><h3>Скачать резервную копию</h3><p class="lead">JSON-файл с профилями, шаблонами, жалобами, экономическими операциями, сделками, результатами игроков локальной базой законов и Government Tools. Авторизационные данные сайтов и содержимое страниц не сохраняются.</p><div class="row" style="margin-top:14px"><button class="button primary" data-action="export">Скачать JSON</button></div></section><section class="card"><h3>Восстановить из файла</h3><p class="lead">Данные проверяются до применения. Импорт заменит текущие профили и настройки. Максимальный размер — 40 МиБ. Копии 0.1.0–0.5.0 поддерживаются. При импорте старой копии новые записи сохраняются, если профили совместимы.</p><div style="margin-top:14px"><label class="field">Выберите .json<input id="backup-file" type="file" accept=".json,application/json"></label></div></section><section class="card"><h3>Где хранятся данные</h3><p class="lead">В локальном хранилище браузерного расширения. MajesticToolkit не имеет аккаунта, собственного сервера и телеметрии. Перед удалением расширения скачайте копию.</p></section></div>`;
 }
-const titles = {law:['Law Codex','Законы, неизменяемые редакции, статьи, избранное и памятки'],economy:['Экономика и аналитика','Сделки, денежные операции, калькуляторы, игроки и семьи'],complaints:['Жалобы и доказательства','Отслеживание тем, сроки, черновики и таймкоды'],forum:['Forum Toolkit','Шаблоны ответов, BBCode и инструменты на форуме'],home:['Обзор','Рабочая среда под ваши RP-проекты'],profiles:['Профили','Переключение между игровыми серверами'],sites:['Сайты и разрешения','Вы контролируете, где работает расширение'],settings:['Настройки','Настройте интерфейс под себя'],backup:['Резервные копии','Перенос данных между браузерами']};
+const titles = {government:['Government Tools','Конструктор решений, правовые основания, процессуальные шаблоны и ведомства'],law:['Law Codex','Законы, неизменяемые редакции, статьи, избранное и памятки'],economy:['Экономика и аналитика','Сделки, денежные операции, калькуляторы, игроки и семьи'],complaints:['Жалобы и доказательства','Отслеживание тем, сроки, черновики и таймкоды'],forum:['Forum Toolkit','Шаблоны ответов, BBCode и инструменты на форуме'],home:['Обзор','Рабочая среда под ваши RP-проекты'],profiles:['Профили','Переключение между игровыми серверами'],sites:['Сайты и разрешения','Вы контролируете, где работает расширение'],settings:['Настройки','Настройте интерфейс под себя'],backup:['Резервные копии','Перенос данных между браузерами']};
 function renderPopup() {
   const p = getActiveProfile(state);
-  return `<div class="popup-shell stack"><div class="brand"><span class="logo">MT</span><div><h1>MajesticToolkit</h1><p>Версия 0.5.0</p></div></div><div class="card stack"><div class="row spread"><strong>Активный профиль</strong>${tag(projectLabel(p.project))}</div><select aria-label="Выбрать профиль" id="popup-profile">${state.profiles.map(x => `<option value="${e(x.id)}" ${x.id === state.activeProfileId ? 'selected' : ''}>${e(x.name)} · ${e(x.server)}</option>`).join('')}</select><p class="subtle">${e(p.server)}</p>${p.forumUrl ? `<button class="button secondary" data-url="${e(p.forumUrl)}">Открыть форум ↗</button>` : ''}</div><div class="row"><button class="button primary" data-action="panel">Боковая панель</button><button class="button secondary" data-action="workspace">Рабочее пространство ↗</button></div><div class="row"><button class="button link" data-action="popup-forum">Шаблоны форума</button><button class="button link" data-action="popup-complaints">Жалобы</button><button class="button link" data-action="popup-economy">Экономика</button><button class="button link" data-action="popup-law">Законы</button><button class="button link" data-action="popup-settings">Настройки и профили</button><button class="button link" data-url="https://docossum.com/">Docossum ↗</button><button class="button link" data-url="https://fletcher-wiki.com/">Fletcher ↗</button></div></div>`;
+  return `<div class="popup-shell stack"><div class="brand"><span class="logo">MT</span><div><h1>MajesticToolkit</h1><p>Версия 0.6.0</p></div></div><div class="card stack"><div class="row spread"><strong>Активный профиль</strong>${tag(projectLabel(p.project))}</div><select aria-label="Выбрать профиль" id="popup-profile">${state.profiles.map(x => `<option value="${e(x.id)}" ${x.id === state.activeProfileId ? 'selected' : ''}>${e(x.name)} · ${e(x.server)}</option>`).join('')}</select><p class="subtle">${e(p.server)}</p>${p.forumUrl ? `<button class="button secondary" data-url="${e(p.forumUrl)}">Открыть форум ↗</button>` : ''}</div><div class="row"><button class="button primary" data-action="panel">Боковая панель</button><button class="button secondary" data-action="workspace">Рабочее пространство ↗</button></div><div class="row"><button class="button link" data-action="popup-forum">Шаблоны форума</button><button class="button link" data-action="popup-complaints">Жалобы</button><button class="button link" data-action="popup-economy">Экономика</button><button class="button link" data-action="popup-law">Законы</button><button class="button link" data-action="popup-government">Ведомства</button><button class="button link" data-action="popup-settings">Настройки и профили</button><button class="button link" data-url="https://docossum.com/">Docossum ↗</button><button class="button link" data-url="https://fletcher-wiki.com/">Fletcher ↗</button></div></div>`;
 }
 function render() {
   if (!state) return;
@@ -67,8 +69,8 @@ function render() {
   document.body.dataset.compact = String(state.preferences.compact);
   if (popup) { app.innerHTML = renderPopup(); return; }
   const title = titles[view];
-  const contents = { home: sectionHome, forum: () => forumSection(state), complaints: () => complaintsSection(state), economy: () => economySection(state), law: () => lawSection(state), profiles: sectionProfiles, sites: sectionSites, settings: sectionSettings, backup: sectionBackup };
-  app.innerHTML = `<div class="layout"><aside class="side"><div class="brand"><div class="logo">MT</div><div><h1>MajesticToolkit</h1><p>Версия 0.5.0</p></div></div><nav class="nav" aria-label="Разделы">${NAV.map(([id, label, icon]) => `<button type="button" data-action="nav" data-view="${id}" class="${view === id ? 'active' : ''}" ${view === id ? 'aria-current="page"' : ''}><span aria-hidden="true">${icon}</span>${e(label)}</button>`).join('')}</nav><div class="side-footer">Локальные данные · Без облачной регистрации</div></aside><main class="main"><header class="topline"><div><p class="eyebrow">MajesticToolkit / ${e(title[0])}</p><h2>${e(title[0])}</h2><p class="lead">${e(title[1])}</p></div>${mode === 'sidebar' ? '' : '<span class="tag">v0.5.0</span>'}</header>${contents[view]()}</main></div>`;
+  const contents = { home: sectionHome, forum: () => forumSection(state), complaints: () => complaintsSection(state), economy: () => economySection(state), law: () => lawSection(state), government: () => governmentSection(state), profiles: sectionProfiles, sites: sectionSites, settings: sectionSettings, backup: sectionBackup };
+  app.innerHTML = `<div class="layout"><aside class="side"><div class="brand"><div class="logo">MT</div><div><h1>MajesticToolkit</h1><p>Версия 0.6.0</p></div></div><nav class="nav" aria-label="Разделы">${NAV.map(([id, label, icon]) => `<button type="button" data-action="nav" data-view="${id}" class="${view === id ? 'active' : ''}" ${view === id ? 'aria-current="page"' : ''}><span aria-hidden="true">${icon}</span>${e(label)}</button>`).join('')}</nav><div class="side-footer">Локальные данные · Без облачной регистрации</div></aside><main class="main"><header class="topline"><div><p class="eyebrow">MajesticToolkit / ${e(title[0])}</p><h2>${e(title[0])}</h2><p class="lead">${e(title[1])}</p></div>${mode === 'sidebar' ? '' : '<span class="tag">v0.6.0</span>'}</header>${contents[view]()}</main></div>`;
 }
 async function refreshPermission() {
   try { permissionGranted = await api.permissions.contains({ origins: [FORUM_SITE.origin] }); }
@@ -96,15 +98,16 @@ async function exportBackup() {
   const cases = await listCases();
   const economy = await listEconomyRecords();
   const laws = lawRecords();
-  const text = makeBackupV5(validateState(state), templates, cases, economy, laws, globalThis.RPNForumCore.cleanTemplate);
+  const government = governmentRecords();
+  const text = makeBackupV6(validateState(state), templates, cases, economy, laws, government, globalThis.RPNForumCore.cleanTemplate);
   const blob = new Blob([text], { type: 'application/json;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
-  anchor.download = `majestictoolkit-backup-v0.5.0-${new Date().toISOString().slice(0,10)}.json`;
+  anchor.download = `majestictoolkit-backup-v0.6.0-${new Date().toISOString().slice(0,10)}.json`;
   document.body.appendChild(anchor); anchor.click(); anchor.remove();
   setTimeout(() => URL.revokeObjectURL(url), 30000);
-  feedback(`Копия: ${templates.length} шаблонов, ${cases.length} жалоб, ${economy.length} операций/матчей, ${laws.length} записей законодательства`);
+  feedback(`Копия: ${templates.length} шаблонов, ${cases.length} жалоб, ${economy.length} операций/матчей, ${laws.length} записей законодательства, ${government.length} ведомственных записей`);
 }
 async function requestCaseReplacement(cases) {
   const result=await api.runtime.sendMessage({type:'RP_NEXUS_CASE_MUTATE',action:'replace',cases});
@@ -127,7 +130,7 @@ async function changePermission(site = FORUM_SITE.origin) {
 async function executeAction(button) {
   if (button.dataset.url) { await openTab(button.dataset.url); return; }
   const { action, id } = button.dataset;
-  if (action === 'nav') { view = button.dataset.view; if (view === 'forum') await refreshForum(); if(view==='complaints') await refreshComplaints(); if(view==='economy') await refreshEconomy(); if(view==='law') await refreshLaw(); render(); return; }
+  if (action === 'nav') { view = button.dataset.view; if (view === 'forum') await refreshForum(); if(view==='complaints') await refreshComplaints(); if(view==='economy') await refreshEconomy(); if(view==='law') await refreshLaw(); if(view==='government') await refreshGovernment(); render(); return; }
   if (action === 'create') { openEditor(null); return; }
   if (action === 'edit') { openEditor(id); return; }
   if (action === 'close-dialog') { dialog.close(); return; }
@@ -143,21 +146,25 @@ async function executeAction(button) {
     const relatedEconomy = previousEconomy.filter(r => r.profileId === id);
     const previousLaws = lawRecords().slice();
     const relatedLaws = previousLaws.filter(r=>r.profileId===id);
-    if (!confirm(`Удалить профиль «${p.name}» и связанных с ним шаблонов: ${dependent.length}, жалоб: ${related.length}, записей экономики: ${relatedEconomy.length}, записей законодательства: ${relatedLaws.length}? Это действие нельзя отменить без резервной копии.`)) return;
+    const previousGovernment = governmentRecords().slice();
+    const relatedGovernment = previousGovernment.filter(r=>r.profileId===id);
+    if (!confirm(`Удалить профиль «${p.name}» и связанных с ним шаблонов: ${dependent.length}, жалоб: ${related.length}, записей экономики: ${relatedEconomy.length}, записей законодательства: ${relatedLaws.length}, ведомственных записей: ${relatedGovernment.length}? Это действие нельзя отменить без резервной копии.`)) return;
     try {
       if (dependent.length) await replaceTemplates(previousTemplates.filter(t => t.profileId !== id));
       if (related.length) await requestCaseReplacement(previousCases.filter(c => c.profileId !== id));
       if (relatedEconomy.length) await replaceEconomy(previousEconomy.filter(r => r.profileId !== id));
       if (relatedLaws.length) await replaceLawRecords(previousLaws.filter(r=>r.profileId!==id),state.profiles.filter(p=>p.id!==id).map(p=>p.id));
+      if (relatedGovernment.length) await replaceGovernment(previousGovernment.filter(r=>r.profileId!==id),state.profiles.filter(p=>p.id!==id).map(p=>p.id));
       state = await modifyState(s => deleteProfile(s, id));
     } catch (error) {
       if (dependent.length) await replaceTemplates(previousTemplates);
       if (related.length) await requestCaseReplacement(previousCases);
       if (relatedEconomy.length) await replaceEconomy(previousEconomy);
       if (relatedLaws.length) await replaceLawRecords(previousLaws,state.profiles.map(p=>p.id));
+      if (relatedGovernment.length) await replaceGovernment(previousGovernment,state.profiles.map(p=>p.id));
       throw error;
     }
-    await Promise.all([refreshForum(),refreshComplaints(),refreshEconomy(),refreshLaw()]); feedback('Профиль и связанные записи удалены'); render(); return;
+    await Promise.all([refreshForum(),refreshComplaints(),refreshEconomy(),refreshLaw(),refreshGovernment()]); feedback('Профиль и связанные записи удалены'); render(); return;
   }
   if (action === 'video-permission') {
     // Permission request originates directly from the user click.
@@ -170,6 +177,7 @@ async function executeAction(button) {
   if (action === 'permission') { await changePermission(button.dataset.site || FORUM_SITE.origin); return; }
   if (action === 'export') { await exportBackup(); return; }
   if (action === 'panel') { await openSidePanel(); return; }
+  if (action === 'popup-government') {await api.tabs.create({url:api.runtime.getURL('ui/workspace.html#government')});return;}
   if (action === 'popup-law') {await api.tabs.create({url:api.runtime.getURL('ui/workspace.html#law')});return;}
   if (action === 'popup-economy') {await api.tabs.create({url:api.runtime.getURL('ui/workspace.html#economy')});return;}
   if (action === 'popup-complaints') {await api.tabs.create({url:api.runtime.getURL('ui/workspace.html#complaints')});return;}
@@ -177,13 +185,13 @@ async function executeAction(button) {
   if (action === 'workspace' || action === 'popup-settings') { await openWorkspace(); return; }
 }
 document.addEventListener('click', event => {
-  const button = event.target.closest('button[data-action],button[data-url],button[data-forum-action],button[data-case-action],button[data-economy-action],button[data-law-action]');
+  const button = event.target.closest('button[data-action],button[data-url],button[data-forum-action],button[data-case-action],button[data-economy-action],button[data-law-action],button[data-government-action]');
   if (!button || button.disabled) return;
   const task = button.dataset.forumAction
     ? handleForumAction(button, state, render, feedback)
     : button.dataset.caseAction ? handleComplaintAction(button,state,render,feedback)
     : button.dataset.economyAction ? handleEconomyAction(button,state,render,feedback)
-    : button.dataset.lawAction ? handleLawAction(button,state,render,feedback) : executeAction(button);
+    : button.dataset.lawAction ? handleLawAction(button,state,render,feedback) : button.dataset.governmentAction ? handleGovernmentAction(button,state,render,feedback,lawRecords()) : executeAction(button);
   void task.catch(err => feedback(err?.message || 'Ошибка выполнения операции', true));
 });
 document.addEventListener('input', event => {
@@ -196,6 +204,7 @@ document.addEventListener('input', event => {
 document.addEventListener('change', event => {
   const el = event.target;
   if (el.id === 'law-only-fav') {setLawFavOnly(el.checked);render();return;}
+  if (el.id === 'gov-law-edition') {handleGovernmentLawChange(event,lawRecords(),state.activeProfileId);return;}
   if (el.id === 'law-edition') {setLawEdition(el.value);render();return;}
   if (el.id === 'law-import-file' && el.files?.[0]) {void importLawFile(el.files[0],state,render,feedback).catch(error=>feedback(error.message,true));return;}
   if (el.id === 'complaint-filter') {setComplaintFilter(el.value);return;}
@@ -209,37 +218,42 @@ document.addEventListener('change', event => {
     const file = el.files[0];
     if (file.size > 32 * 1024 * 1024) { feedback('Файл больше 32 МиБ', true); el.value = ''; return; }
     void file.text().then(text => {
-      const backup = parseBackupV5(text, validateState, globalThis.RPNForumCore.cleanTemplate);
+      const backup = parseBackupV6(text, validateState, globalThis.RPNForumCore.cleanTemplate);
       const replacing = backup.schemaVersion >= 3 ? `, ${backup.cases.length} жалоб` : '';
       const economyCount = backup.schemaVersion >= 4 ? `, ${backup.economy.length} записей экономики` : '';
       const lawCount = backup.schemaVersion >= 5 ? `, ${backup.lawRecords.length} записей Law Codex` : '';
-      if (!confirm(`Восстановить ${backup.state.profiles.length} профилей, ${backup.templates.length} шаблонов${replacing}${economyCount}${lawCount}? Данные, отсутствующие в старом формате копии, сохранятся.`)) return;
+      const govCount = backup.schemaVersion >= 6 ? `, ${backup.government.length} ведомственных записей` : '';
+      if (!confirm(`Восстановить ${backup.state.profiles.length} профилей, ${backup.templates.length} шаблонов${replacing}${economyCount}${lawCount}${govCount}? Данные, отсутствующие в старом формате копии, сохранятся.`)) return;
       return (async () => {
         const beforeState = state;
         const beforeTemplates = await listTemplates();
         const beforeCases = await listCases();
         const beforeEconomy = await listEconomyRecords();
         const beforeLaws = lawRecords().slice();
+        const beforeGovernment = governmentRecords().slice();
         try {
           if (backup.schemaVersion < 3 && beforeCases.some(c => !backup.state.profiles.some(p => p.id === c.profileId))) {
             throw Error('Старая копия содержит другой набор профилей. Сначала экспортируйте данные 0.3.0, чтобы не потерять доступ к существующим жалобам.');
           }
           if (backup.schemaVersion < 4 && beforeEconomy.some(r => !backup.state.profiles.some(p => p.id === r.profileId))) throw Error('Старая копия содержит другой набор профилей. Экспортируйте копию 0.5.0 перед импортом.');
-          if (backup.schemaVersion < 5 && beforeLaws.some(r=>!backup.state.profiles.some(p=>p.id===r.profileId))) throw Error('Старая копия содержит другие профили. Экспортируйте полную копию 0.5.0 для сохранения Law Codex.');
+          if (backup.schemaVersion < 5 && beforeLaws.some(r=>!backup.state.profiles.some(p=>p.id===r.profileId))) throw Error('Старая копия содержит другие профили. Экспортируйте полную копию перед импортом.');
+          if (backup.schemaVersion < 6 && beforeGovernment.some(r=>!backup.state.profiles.some(p=>p.id===r.profileId))) throw Error('Старая копия содержит другие профили. Сначала экспортируйте данные Government Tools.');
           if (backup.schemaVersion >= 2) await replaceTemplates(backup.templates);
           if (backup.schemaVersion >= 3) await requestCaseReplacement(backup.cases);
           if (backup.schemaVersion >= 4) await replaceEconomy(backup.economy);
           if (backup.schemaVersion >= 5) await replaceLawRecords(backup.lawRecords,backup.state.profiles.map(p=>p.id));
+          if (backup.schemaVersion >= 6) await replaceGovernment(backup.government,backup.state.profiles.map(p=>p.id));
           state = await restoreState(backup.state);
         } catch (error) {
           if (backup.schemaVersion >= 2) await replaceTemplates(beforeTemplates);
           if (backup.schemaVersion >= 3) await requestCaseReplacement(beforeCases);
           if (backup.schemaVersion >= 4) await replaceEconomy(beforeEconomy);
           if (backup.schemaVersion >= 5) await replaceLawRecords(beforeLaws,beforeState.profiles.map(p=>p.id));
+          if (backup.schemaVersion >= 6) await replaceGovernment(beforeGovernment,beforeState.profiles.map(p=>p.id));
           await restoreState(beforeState);
           throw error;
         }
-        await Promise.all([refreshForum(),refreshComplaints(),refreshEconomy(),refreshLaw()]);
+        await Promise.all([refreshForum(),refreshComplaints(),refreshEconomy(),refreshLaw(),refreshGovernment()]);
         view = state.preferences.startPage;
         render(); feedback('Резервная копия восстановлена');
       })();
@@ -248,6 +262,7 @@ document.addEventListener('change', event => {
   }
 });
 document.addEventListener('submit', event => {
+  if (event.target.id === 'government-form') {event.preventDefault();void handleGovernmentSubmit(event,state,render,feedback,lawRecords()).catch(err=>feedback(err.message,true));return;}
   if (event.target.id === 'law-form') {event.preventDefault();void handleLawSubmit(event,state,render,feedback).catch(err=>feedback(err.message,true));return;}
   if (event.target.id === 'economy-form' || event.target.matches('form[data-economy-calc]')) {event.preventDefault();void handleEconomySubmit(event,state,render,feedback).catch(err=>feedback(err.message,true));return;}
   if (['complaint-form','complaint-evidence-form'].includes(event.target.id)) {event.preventDefault();void handleComplaintSubmit(event,state,render,feedback).catch(err=>feedback(err.message,true));return;}
@@ -264,6 +279,7 @@ document.addEventListener('submit', event => {
   void modifyState(s => id ? editProfile(s, id, data) : addProfile(s, data)).then(next => { state = next; dialog.close(); render(); feedback(id ? 'Профиль обновлён' : 'Профиль создан'); }).catch(err => feedback(err.message, true));
 });
 api.storage.onChanged.addListener((changes, area) => {
+  if(area==='local' && Object.keys(changes).some(k=>k.startsWith('majesticGovernmentV6:'))) {void refreshGovernment().then(()=>{if(view==='government'&&!document.getElementById('government-dialog')?.open&&!document.getElementById('government-document-dialog')?.open)render();}).catch(err=>feedback(err.message,true));}
   if (area==='local' && Object.keys(changes).some(k=>k.startsWith('majesticLawV5:'))) {void refreshLaw().then(()=>{if(view==='law'&&!document.getElementById('law-dialog')?.open)render();}).catch(err=>feedback(err.message,true));}
   if (area === 'local' && Object.keys(changes).some(k => k.startsWith('rpnEconomyV4:'))) {
     void refreshEconomy().then(() => { if (view === 'economy' && !document.getElementById('economy-dialog')?.open) render(); }).catch(err=>feedback(err.message,true));
@@ -279,5 +295,5 @@ api.storage.onChanged.addListener((changes, area) => {
 });
 api.permissions.onAdded.addListener(() => { void refreshPermission().then(render); });
 api.permissions.onRemoved.addListener(() => { void refreshPermission().then(render); });
-try { state = await loadState(); await Promise.all([refreshForum(),refreshComplaints(),refreshEconomy(),refreshLaw()]); await refreshPermission(); view = ['#forum','#complaints','#economy','#law'].includes(location.hash) ? location.hash.slice(1) : state.preferences.startPage; render(); }
+try { state = await loadState(); await Promise.all([refreshForum(),refreshComplaints(),refreshEconomy(),refreshLaw(),refreshGovernment()]); await refreshPermission(); view = ['#forum','#complaints','#economy','#law','#government'].includes(location.hash) ? location.hash.slice(1) : state.preferences.startPage; render(); }
 catch (err) { app.textContent = `Не удалось открыть данные MajesticToolkit: ${err.message}. Данные не удалены. Для восстановления проверьте настройки расширения.`; feedback(err.message, true); }

@@ -70,3 +70,16 @@ textarea{width:100%;resize:vertical;background:var(--panel);color:var(--ink);bor
 
 /* MajesticToolkit — Law Codex 0.5.0 */
 .law-stats{display:flex;flex-wrap:wrap;gap:10px;margin:12px 0}.law-stats span{background:var(--sub);border-radius:8px;padding:9px 12px;font-size:12px}.law-book-row{display:flex;justify-content:space-between;align-items:center;gap:12px;border-top:1px solid var(--stroke);padding:12px 0}.law-book-row>div{min-width:0;overflow-wrap:anywhere}.law-book-row .subtle{margin:5px 0}.law-article{border-top:1px solid var(--stroke);padding:16px 0;min-width:0}.law-article h4{margin:6px 0 12px;font-size:15px;overflow-wrap:anywhere}.law-text{white-space:pre-wrap;overflow-wrap:anywhere;line-height:1.7;max-height:420px;overflow:auto;padding:13px;border:1px solid var(--stroke);border-radius:9px;background:var(--sub);font-size:13px}.law-book h3{margin:5px 0}.law-book .row{margin-bottom:11px}.law-old{color:var(--danger);font-weight:650}.law-diff{background:var(--sub);padding:12px;border-radius:9px;font-size:13px}.law-import{cursor:pointer}#law-dialog{width:min(760px,calc(100vw - 24px));max-height:calc(100vh - 30px);overflow-y:auto}#law-dialog form{display:grid;gap:12px}#law-dialog textarea{min-height:130px}#law-dialog textarea[name=articlesText]{min-height:260px;white-space:pre-wrap;font:13px/1.6 ui-monospace,Consolas,monospace}@media(max-width:650px){.law-book-row,.law-article>.row{align-items:flex-start;flex-wrap:wrap}}
+
+/* Government Tools 0.6.0 */
+.gov-dialog{width:min(760px,calc(100vw - 24px));max-height:calc(100vh - 32px);overflow:auto;padding:22px;border:1px solid var(--stroke);border-radius:14px;background:var(--panel);color:var(--ink)}
+.gov-dialog::backdrop{background:rgba(0,0,0,.58)}
+.gov-item{display:grid;gap:12px;border-top:1px solid var(--stroke);padding:17px 0;min-width:0}
+.gov-item strong,.gov-item p{overflow-wrap:anywhere}
+.gov-item .row{flex-wrap:wrap}
+.gov-body,.gov-preview{white-space:pre-wrap;overflow-wrap:anywhere;overflow:auto;max-height:50vh;padding:13px;background:var(--sub);border:1px solid var(--stroke);border-radius:10px;font:12px/1.6 ui-monospace,monospace}
+.gov-preview{max-height:55vh;min-height:190px}
+.gov-ref{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;margin:6px 0;border:1px solid var(--stroke);border-radius:8px;background:var(--sub)}
+.gov-ref>span{overflow-wrap:anywhere;min-width:0}.gov-references{min-height:20px}
+.gov-law-picker .row>*{flex:1;min-width:160px}.gov-law-picker select{max-width:100%}
+@media(max-width:650px){.gov-dialog{padding:14px}.gov-item .row{flex-direction:column;align-items:stretch}}

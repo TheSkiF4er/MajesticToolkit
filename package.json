@@ -1,9 +1,9 @@
 {
   "name": "majestictoolkit",
   "private": true,
-  "version": "0.5.0",
+  "version": "0.6.0",
   "type": "module",
-  "description": "Автономное браузерное расширение: форум, жалобы, экономика и Law Codex",
+  "description": "Автономное браузерное расширение: форум, жалобы, экономика, Law Codex и Government Tools",
   "scripts": {
     "test": "node --test tests/*.test.mjs",
     "build": "node scripts/build.mjs",
