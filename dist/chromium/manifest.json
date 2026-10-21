@@ -2,8 +2,8 @@
   "manifest_version": 3,
   "name": "RP Nexus",
   "short_name": "RP Nexus",
-  "description": "Forum Toolkit, отслеживание жалоб в открытых вкладках, сроки, черновики и доказательства с таймкодами.",
-  "version": "0.3.0",
+  "description": "Forum Toolkit, жалобы и доказательства, локальная экономика, калькуляторы и статистика игроков и семей.",
+  "version": "0.4.0",
   "minimum_chrome_version": "116",
   "permissions": [
     "storage",
