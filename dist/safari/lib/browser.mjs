@@ -6,7 +6,8 @@ export async function openSidePanel() {
   try {
     if (api.sidebarAction?.open) { await api.sidebarAction.open(); return; }
     if (api.sidePanel?.open) {
-      await api.sidePanel.open({ windowId: api.windows.WINDOW_ID_CURRENT ?? -2 });
+      const windows = await api.windows.getCurrent();
+      await api.sidePanel.open({ windowId: windows.id });
       return;
     }
   } catch (err) {

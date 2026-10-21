@@ -1,64 +1,56 @@
-/** MajesticToolkit 0.10: persisted, integrity-checked recovery point for multi-store imports. */
-import { api } from './browser.mjs';
-export const RECOVERY_KEY = 'majesticToolkit:recovery:v10';
-export const RECOVERY_MAX_BYTES = 20 * 1024 * 1024;
-const managed = /^(?:rpNexusStateV1|majesticToolkitProductivityV9|majesticToolkit:externalLinks:v8|rpnForumTemplateV2:[\w-]+|rpnComplaintV3:[\w-]+|rpnEconomyV4:[\w-]+|majesticLawV5:[\w-]+|majesticGovernmentV6:[\w-]+|majesticDocumentV7:[\w-]+)$/;
-const encoder = new TextEncoder();
-const hex = bytes => Array.from(bytes, n => n.toString(16).padStart(2, '0')).join('');
-function canonicalEntries(source) {
-  if (!source || typeof source !== 'object' || Array.isArray(source)) throw Error('Неверный снимок данных');
-  return Object.fromEntries(Object.entries(source).filter(([key]) => managed.test(key)).sort(([a],[b]) => a.localeCompare(b)));
+/** Crash-survivable rollback of extension-owned local records. Never includes OAuth/session tokens. */
+export const RECOVERY_KEY = 'majesticToolkitRecoveryV1';
+export const RECOVERY_LIMIT = 20 * 1024 * 1024;
+const OWNED_KEYS = new Set(['rpNexusStateV1', 'majesticToolkitProductivityV9', 'majesticToolkit:externalLinks:v8']);
+const OWNED_PREFIXES = ['rpnForumTemplateV2:', 'rpnComplaintV3:', 'rpnEconomyV4:', 'majesticLawV5:', 'majesticGovernmentV6:', 'majesticDocumentV7:'];
+export const isOwnedKey = key => OWNED_KEYS.has(key) || OWNED_PREFIXES.some(prefix => key.startsWith(prefix));
+const serialize = value => JSON.stringify(value);
+const utf8 = value => new TextEncoder().encode(value);
+const hex = bytes => [...new Uint8Array(bytes)].map(x => x.toString(16).padStart(2, '0')).join('');
+export async function checksum(records) {
+  const bytes = utf8(serialize(records));
+  return hex(await crypto.subtle.digest('SHA-256', bytes));
 }
-export function managedKeys(raw) { return Object.keys(raw).filter(key => managed.test(key)); }
-async function digest(data) {
-  if (!globalThis.crypto?.subtle) throw Error('Для проверки целостности требуется Web Crypto');
-  return hex(new Uint8Array(await crypto.subtle.digest('SHA-256',encoder.encode(data))));
+export function ownedRecords(raw) {
+  return Object.fromEntries(Object.entries(raw).filter(([key]) => isOwnedKey(key)));
 }
-async function verify(point) {
-  if (!point || point.version !== 1 || !['pending', 'ready'].includes(point.phase) || !Number.isFinite(Date.parse(point.createdAt))) throw Error('Недопустимый формат точки восстановления');
-  const entries = canonicalEntries(point.entries);
-  if (Object.keys(entries).length !== Object.keys(point.entries).length) throw Error('Недопустимые ключи точки восстановления');
-  const json = JSON.stringify(entries);
-  if (encoder.encode(json).length > RECOVERY_MAX_BYTES) throw Error('Снимок восстановления превышает допустимый размер');
-  if (await digest(json) !== point.sha256) throw Error('Нарушена целостность точки восстановления');
-  return entries;
+export async function examineRestorePoint(storage) {
+  const candidate = (await storage.get(RECOVERY_KEY))[RECOVERY_KEY];
+  if (candidate === undefined) return null;
+  if (!candidate || candidate.version !== 1 || !['pending', 'ready'].includes(candidate.status) || !candidate.records ||
+      Array.isArray(candidate.records) || typeof candidate.records !== 'object' || typeof candidate.hash !== 'string' ||
+      !Number.isFinite(Date.parse(candidate.createdAt))) throw Error('Повреждена точка восстановления');
+  if (Object.keys(candidate.records).some(key => !isOwnedKey(key))) throw Error('Точка содержит посторонние ключи');
+  const bytes = utf8(serialize(candidate.records));
+  if (bytes.length > RECOVERY_LIMIT || await checksum(candidate.records) !== candidate.hash) throw Error('Контрольная сумма точки восстановления не совпадает');
+  return candidate;
 }
-export async function getRecoveryStatus(storage = api.storage.local) {
-  const point = (await storage.get(RECOVERY_KEY))[RECOVERY_KEY];
-  if (!point) return null;
-  await verify(point);
-  return {phase:point.phase,createdAt:point.createdAt,count:Object.keys(point.entries).length};
+export async function createRestorePoint(storage) {
+  const existing = await examineRestorePoint(storage);
+  if (existing?.status === 'pending') throw Error('Есть незавершённое восстановление. Сначала восстановите или удалите предыдущую точку.');
+  const data = ownedRecords(await storage.get(null));
+  if (utf8(serialize(data)).length > RECOVERY_LIMIT) throw Error('Локальные данные больше 20 МиБ. Экспортируйте JSON вручную перед импортом.');
+  const point = { version: 1, createdAt: new Date().toISOString(), status: 'pending', hash: await checksum(data), records: data };
+  await storage.set({ [RECOVERY_KEY]: point });
+  await examineRestorePoint(storage);
+  return point;
 }
-export async function captureRecovery(storage = api.storage.local) {
-  const prior = (await storage.get(RECOVERY_KEY))[RECOVERY_KEY];
-  if (prior?.phase === 'pending') throw Error('Предыдущий импорт был прерван. Сначала восстановите данные.');
-  const entries = canonicalEntries(await storage.get(null));
-  const json = JSON.stringify(entries);
-  const bytes = encoder.encode(json).length;
-  if (bytes > RECOVERY_MAX_BYTES) throw Error('Локальные данные слишком велики для безопасной точки восстановления (20 МиБ). Сначала скачайте резервную копию.');
-  const point = {version:1,phase:'pending',createdAt:new Date().toISOString(),sha256:await digest(json),entries};
-  await storage.set({[RECOVERY_KEY]:point});
-  await verify((await storage.get(RECOVERY_KEY))[RECOVERY_KEY]);
-  return {bytes,count:Object.keys(entries).length};
+export async function completeRestorePoint(storage) {
+  const point = await examineRestorePoint(storage);
+  if (!point) throw Error('Точка восстановления отсутствует');
+  await storage.set({ [RECOVERY_KEY]: { ...point, status: 'ready' } });
 }
-export async function commitRecovery(storage = api.storage.local) {
-  const point=(await storage.get(RECOVERY_KEY))[RECOVERY_KEY];
-  await verify(point);
-  await storage.set({[RECOVERY_KEY]:{...point,phase:'ready'}});
+export async function applyRestorePoint(storage) {
+  const point = await examineRestorePoint(storage); // checksum is verified before any mutation
+  if (!point) throw Error('Точка восстановления отсутствует');
+  const previous = ownedRecords(await storage.get(null));
+  const extra = Object.keys(previous).filter(key => !Object.hasOwn(point.records, key));
+  // Write first. If interrupted, the pending recovery marker and hash remain intact for retry.
+  if (Object.keys(point.records).length) await storage.set(point.records);
+  if (extra.length) await storage.remove(extra);
+  await storage.set({ [RECOVERY_KEY]: { ...point, status: 'ready' } });
+  return Object.keys(point.records).length;
 }
-export async function restoreRecovery(storage = api.storage.local) {
-  const point=(await storage.get(RECOVERY_KEY))[RECOVERY_KEY];
-  const entries=await verify(point); // Always validate before changing anything.
-  const current=await storage.get(null);
-  // Write restored values before deleting new records. If an API call fails, the point remains.
-  if(Object.keys(entries).length)await storage.set(entries);
-  const stale=managedKeys(current).filter(k=>!Object.hasOwn(entries,k));
-  if(stale.length)await storage.remove(stale);
-  await storage.remove(RECOVERY_KEY);
-  return {restored:Object.keys(entries).length,removed:stale.length};
-}
-export async function discardRecovery(storage = api.storage.local) {
-  const point=(await storage.get(RECOVERY_KEY))[RECOVERY_KEY];
-  if(point?.phase==='pending')throw Error('Сначала восстановите прерванный импорт');
+export async function discardRestorePoint(storage) {
   await storage.remove(RECOVERY_KEY);
 }

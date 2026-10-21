@@ -2,8 +2,8 @@
   "manifest_version": 3,
   "name": "MajesticToolkit",
   "short_name": "MajesticToolkit",
-  "description": "MajesticToolkit для Firefox Android: рабочее пространство, локальные данные и инструменты RP.",
-  "version": "0.10.0",
+  "description": "MajesticToolkit: форумы, жалобы, экономика, законы, документы и Google Workspace.",
+  "version": "1.0.0",
   "permissions": [
     "storage",
     "activeTab",

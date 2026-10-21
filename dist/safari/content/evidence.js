@@ -14,9 +14,9 @@
   const panel=shadow.querySelector('.panel'),launch=shadow.querySelector('.launch'), select=shadow.querySelector('#target'),info=shadow.querySelector('.info');
   const escape = text => String(text).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   async function refresh() {
-    const response=await api.runtime.sendMessage({type:'MAJESTIC_CONTENT_READ',kind:'evidence'});
-    if(!response?.ok)throw Error(response?.error||'Список жалоб недоступен');
-    all=response.value.items;
+    const response = await api.runtime.sendMessage({type:'RP_NEXUS_VIDEO_CASES'});
+    if (!response?.ok) throw Error(response?.error || 'Не удалось получить список жалоб');
+    all = response.value;
     const current=select.value;
     select.innerHTML=all.length ? all.map(x=>`<option value="${escape(x.id)}">${escape(x.title)}</option>`).join('') : '<option value="">Нет жалоб в активном профиле</option>';
     if(all.some(x=>x.id===current)) select.value=current;
@@ -37,5 +37,5 @@
       await refresh();
     }catch(err){info.textContent=err.message;}
   });
-  api.runtime.onMessage.addListener(message=>{if(open&&message?.type==='MAJESTIC_DATA_CHANGED')void refresh().catch(()=>{});});
+  api.storage.onChanged.addListener((changes,area)=>{if(open && area==='local' && Object.keys(changes).some(k=>k=== 'rpNexusStateV1' || k.startsWith(C.PREFIX)))void refresh().catch(()=>{});});
 })();

@@ -11,44 +11,8 @@ const VIDEOS = [
 ];
 const LEGACY = ['rp-nexus-majestic-launcher-v1','rp-nexus-majestic-forum-v2','rp-nexus-russia-forum-v2'];
 const storePromise = import(api.runtime.getURL('lib/complaints-store.mjs'));
+const forumStorePromise = import(api.runtime.getURL('lib/forum-store.mjs'));
 const corePromise = import(api.runtime.getURL('lib/complaints-core.js')).then(() => globalThis.RPNComplaints);
-// Content scripts receive only the minimum data required by their visible UI.
-// On browsers supporting setAccessLevel, web pages cannot read the full local database.
-async function restrictStorageAccess() {
-  if (typeof api.storage.local.setAccessLevel === 'function') {
-    try { await api.storage.local.setAccessLevel({accessLevel:'TRUSTED_CONTEXTS'}); }
-    catch (error) { console.warn('MajesticToolkit: storage isolation unavailable',error); }
-  }
-}
-async function contentSnapshot(kind) {
-  const state=(await api.storage.local.get('rpNexusStateV1')).rpNexusStateV1;
-  const profileId=state?.activeProfileId;
-  if (typeof profileId !== 'string') return {profile:null,items:[]};
-  const profile=state.profiles?.find(p=>p.id===profileId);
-  if (!profile) return {profile:null,items:[]};
-  if (kind==='forum') {
-    const {listTemplates}=await import(api.runtime.getURL('lib/forum-store.mjs'));
-    const records=await listTemplates();
-    return {profile,items:records.filter(r=>r.profileId===profileId)};
-  }
-  const {listCases}=await storePromise;
-  const records=await listCases();
-  return {profile,items:records.filter(r=>r.profileId===profileId).map(r=>({id:r.id,title:r.title}))};
-}
-const dataPrefix=/^(rpNexusStateV1|rpnForumTemplateV2:|rpnComplaintV3:)/;
-let notified=false;
-api.storage.onChanged.addListener((changes,area)=>{
-  if(area!=='local'||notified||!Object.keys(changes).some(k=>dataPrefix.test(k)))return;
-  notified=true;
-  // Notification only; no user data are broadcast. Readers request a scoped snapshot.
-  Promise.resolve().then(async()=>{
-    for(const site of [...FORUMS,...VIDEOS]) {
-      if(!await api.permissions.contains({origins:[site.origin]}))continue;
-      const tabs=await api.tabs.query({url:[site.origin]});
-      await Promise.all(tabs.filter(t=>Number.isInteger(t.id)).map(t=>api.tabs.sendMessage(t.id,{type:'MAJESTIC_DATA_CHANGED'}).catch(()=>{})));
-    }
-  }).catch(error=>console.warn('MajesticToolkit: content invalidation',error)).finally(()=>{notified=false;});
-});
 async function syncScripts() {
   try {
     const registrations = await api.scripting.getRegisteredContentScripts();
@@ -105,12 +69,20 @@ async function checkDeadlines() {
 }
 async function tick() { try { await scanTabs(); await checkDeadlines(); } catch(error) { console.warn('MajesticToolkit: периодическая проверка',error); } }
 function start() {
-  void restrictStorageAccess();
-  void syncScripts();
+  // Content scripts are not permitted to read extension-owned storage where supported.
+  void (async()=>{
+    try { await api.storage.local.setAccessLevel?.({accessLevel:'TRUSTED_CONTEXTS'}); }
+    catch(error){console.warn('MajesticToolkit: storage access level unsupported',error);}
+    await syncScripts();
+  })();
   void api.alarms.create('rp-nexus-open-tabs-v3',{periodInMinutes:5}).catch(err => console.warn('MajesticToolkit: alarms',err));
 }
 api.runtime.onInstalled.addListener(start);
 api.runtime.onStartup?.addListener(start);
+api.storage.onChanged.addListener((changes,area) => {
+  if (area !== 'local' || !Object.keys(changes).some(k=> k==='rpNexusStateV1'||k.startsWith('rpnForumTemplateV2:'))) return;
+  void api.tabs.query({}).then(tabs=>Promise.allSettled(tabs.filter(t=>t.id&&FORUMS.some(f=>t.url?.startsWith(f.origin.slice(0,-1)))).map(t=>api.tabs.sendMessage(t.id,{type:'RP_NEXUS_REFRESH_FORUM_DATA'})))).catch(()=>{});
+});
 api.permissions.onAdded.addListener(() => {void syncScripts();});
 api.permissions.onRemoved.addListener(() => {void syncScripts();});
 api.alarms.onAlarm.addListener(alarm => {if (alarm.name === 'rp-nexus-open-tabs-v3') void tick();});
@@ -125,15 +97,25 @@ api.runtime.onMessage.addListener((message,sender,sendResponse) => {
       await api.tabs.create({url:api.runtime.getURL('ui/workspace.html' + (['forum','complaints'].includes(message.view) ? '#'+message.view : ''))});
       return true;
     }
-    if (message.type === 'MAJESTIC_CONTENT_READ') {
-      if (sender.id !== api.runtime.id) throw Error('Недоверенный источник');
-      if (message.kind === 'forum' && isForum) return contentSnapshot('forum');
-      if (message.kind === 'evidence' && isVideo) return contentSnapshot('evidence');
-      throw Error('Источник не вправе читать эти данные');
-    }
     if (message.type === 'RP_NEXUS_SCAN_OPEN_TABS') {
       if (!isTrustedExtension) throw Error('Недоверенный источник');
       return scanTabs();
+    }
+    if (message.type === 'RP_NEXUS_FORUM_DATA') {
+      if (!isForum) throw Error('Недоверенный источник');
+      const state = (await api.storage.local.get('rpNexusStateV1')).rpNexusStateV1;
+      if (!state?.activeProfileId) return {profile:null, templates:[]};
+      const {listTemplates} = await forumStorePromise;
+      const profile = state.profiles.find(p=>p.id===state.activeProfileId);
+      const templates = (await listTemplates()).filter(t=>t.profileId==='*'||t.profileId===state.activeProfileId);
+      return {profile:profile ? {id:profile.id, project:profile.project,server:profile.server} : null, templates};
+    }
+    if (message.type === 'RP_NEXUS_VIDEO_CASES') {
+      if (!isVideo) throw Error('Недоверенный источник');
+      const state = (await api.storage.local.get('rpNexusStateV1')).rpNexusStateV1;
+      if (!state?.activeProfileId) return [];
+      const {listCases} = await storePromise;
+      return (await listCases()).filter(c=>c.profileId===state.activeProfileId).map(c=>({id:c.id,title:c.title}));
     }
     const store = await storePromise;
     if (message.type === 'RP_NEXUS_TRACK_CURRENT_THREAD') {
@@ -173,7 +155,7 @@ api.runtime.onMessage.addListener((message,sender,sendResponse) => {
     }
     throw Error('Неизвестный запрос');
   }
-  if (!['MAJESTIC_CONTENT_READ','RP_NEXUS_OPEN_WORKSPACE','RP_NEXUS_SCAN_OPEN_TABS','RP_NEXUS_TRACK_CURRENT_THREAD','RP_NEXUS_THREAD_OBSERVED','RP_NEXUS_VIDEO_ADD','RP_NEXUS_CASE_MUTATE'].includes(message.type)) return;
+  if (!['RP_NEXUS_OPEN_WORKSPACE','RP_NEXUS_SCAN_OPEN_TABS','RP_NEXUS_TRACK_CURRENT_THREAD','RP_NEXUS_THREAD_OBSERVED','RP_NEXUS_VIDEO_ADD','RP_NEXUS_CASE_MUTATE','RP_NEXUS_FORUM_DATA','RP_NEXUS_VIDEO_CASES'].includes(message.type)) return;
   void task().then(value => sendResponse({ok:true,value})).catch(error => sendResponse({ok:false,error:error?.message || 'Ошибка'}));
   return true;
 });

@@ -1,60 +1,51 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {webcrypto} from 'node:crypto';
-import {captureRecovery,commitRecovery,restoreRecovery,getRecoveryStatus,discardRecovery,RECOVERY_KEY,managedKeys} from '../src/lib/recovery.mjs';
-globalThis.crypto ??= webcrypto;
-function storage(seed={}){
-  const data=structuredClone(seed);
-  return {data,
-    async get(keys){if(keys===null)return structuredClone(data);const selected=Array.isArray(keys)?keys:[keys];return Object.fromEntries(selected.filter(k=>Object.hasOwn(data,k)).map(k=>[k,structuredClone(data[k])]));},
-    async set(entries){Object.assign(data,structuredClone(entries));},
-    async remove(keys){for(const k of Array.isArray(keys)?keys:[keys])delete data[k];}
-  };
-}
-const original={rpNexusStateV1:{profiles:[],preferences:{theme:'dark'}},'rpnComplaintV3:abc12345':{id:'abc12345'},'majesticToolkit:googleClientId:v8':'unchanged','otherExtension:unrelated':'keep'};
-test('creates persisted point, restores local records and leaves external keys untouched',async()=>{
-  const s=storage(original);
-  const saved=await captureRecovery(s);assert.equal(saved.count,2);
-  assert.equal((await getRecoveryStatus(s)).phase,'pending');
-  await s.set({rpNexusStateV1:{profiles:['changed']},'majesticLawV5:xyzabc99':{hello:1},'otherExtension:unrelated':'modified'});
-  const result=await restoreRecovery(s);
-  assert.equal(result.removed,1);
-  assert.deepEqual(s.data.rpNexusStateV1,original.rpNexusStateV1);
-  assert.ok(!Object.hasOwn(s.data,'majesticLawV5:xyzabc99'));
-  assert.equal(s.data['otherExtension:unrelated'],'modified');
-  assert.equal(s.data['majesticToolkit:googleClientId:v8'],'unchanged');
-  assert.ok(!Object.hasOwn(s.data,RECOVERY_KEY));
+import {RECOVERY_KEY,RECOVERY_LIMIT,isOwnedKey,ownedRecords,createRestorePoint,completeRestorePoint,examineRestorePoint,applyRestorePoint,discardRestorePoint} from '../src/lib/recovery.mjs';
+function memory(initial={}){const d=structuredClone(initial);let fail='';return {data:d,failOn(value){fail=value;},async get(keys){if(keys===null)return structuredClone(d);const keysArray=Array.isArray(keys)?keys:[keys];return Object.fromEntries(keysArray.filter(k=>Object.hasOwn(d,k)).map(k=>[k,structuredClone(d[k])]));},async set(x){if(fail==='set'){fail='';throw Error('simulated quota failure');}Object.assign(d,structuredClone(x));},async remove(keys){if(fail==='remove'){fail='';throw Error('simulated delete failure');}for(const k of Array.isArray(keys)?keys:[keys])delete d[k];}};}
+const sample=()=>memory({'rpNexusStateV1':{profiles:['old']},'rpnForumTemplateV2:aaa':{name:'my answer'},'majesticToolkit:externalLinks:v8':[],'third-party-key':'leave-me','google-oauth-token':'private'});
+test('recovery selects all extension modules and excludes arbitrary storage including OAuth tokens',()=>{
+ assert.ok(isOwnedKey('majesticLawV5:abc'));assert.ok(isOwnedKey('majesticDocumentV7:x'));assert.ok(isOwnedKey('majesticToolkitProductivityV9'));
+ assert.ok(!isOwnedKey('google-oauth-token'));assert.ok(!isOwnedKey('rpnForumTemplateV20:test'));
+ const picked=ownedRecords(sample().data);assert.equal(picked['third-party-key'],undefined);assert.equal(picked['google-oauth-token'],undefined);
 });
-test('committed point can undo successful import',async()=>{
- const s=storage(original);await captureRecovery(s);await s.set({rpNexusStateV1:{profiles:['new']}});await commitRecovery(s);
- assert.equal((await getRecoveryStatus(s)).phase,'ready');await restoreRecovery(s);
- assert.deepEqual(s.data.rpNexusStateV1,original.rpNexusStateV1);
+test('rollback is verified, preserves unrelated keys, and removes new owned records',async()=>{
+ const st=sample();const original=structuredClone(st.data);await createRestorePoint(st);
+ await st.set({'rpNexusStateV1':{profiles:['new']},'rpnEconomyV4:new':{amount:5},'third-party-key':'not-ours'});
+ await completeRestorePoint(st);const count=await applyRestorePoint(st);
+ assert.equal(count,3);assert.deepEqual(st.data.rpNexusStateV1,original.rpNexusStateV1);assert.equal(st.data['rpnEconomyV4:new'],undefined);
+ assert.equal(st.data['third-party-key'],'not-ours');assert.equal(st.data['google-oauth-token'],'private');
 });
-test('interrupted pending import blocks replacement and removal',async()=>{
- const s=storage(original);await captureRecovery(s);
- await assert.rejects(captureRecovery(s),/прерван/);
- await assert.rejects(discardRecovery(s),/прерван/);
+test('snapshot survives interruption, can be retried after I/O failure',async()=>{
+ const st=sample();await createRestorePoint(st);st.data.rpNexusStateV1={profiles:['corrupted']};st.failOn('set');
+ await assert.rejects(applyRestorePoint(st),/quota/);assert.equal((await examineRestorePoint(st)).status,'pending');
+ await applyRestorePoint(st);assert.deepEqual(st.data.rpNexusStateV1,{profiles:['old']});
 });
-test('detects tampered checkpoint before changing any data',async()=>{
- const s=storage(original);await captureRecovery(s);
- s.data[RECOVERY_KEY].entries.rpNexusStateV1.profiles=['spoof'];
- await assert.rejects(restoreRecovery(s),/целостность/);
- assert.deepEqual(s.data.rpNexusStateV1,original.rpNexusStateV1);
+test('pending snapshot blocks another import until recovery is resolved',async()=>{
+ const st=sample();await createRestorePoint(st);await assert.rejects(createRestorePoint(st),/незавершённое/);
+ await completeRestorePoint(st);await createRestorePoint(st);assert.equal((await examineRestorePoint(st)).status,'pending');
 });
-test('missing journal is rejected, matching keys exact',async()=>{
- const s=storage(original);await assert.rejects(restoreRecovery(s),/формат/);
- assert.deepEqual(managedKeys({...original,'rpnComplaintV3:../../foo':2}),['rpNexusStateV1','rpnComplaintV3:abc12345']);
+test('corrupted hash fails before modifying current state',async()=>{
+ const st=sample();await createRestorePoint(st);st.data[RECOVERY_KEY].records.rpNexusStateV1={profiles:['forged']};
+ const before=structuredClone(st.data.rpNexusStateV1);
+ await assert.rejects(applyRestorePoint(st),/Контрольная сумма/);assert.deepEqual(st.data.rpNexusStateV1,before);
 });
-test('storage write error keeps checkpoint for retry',async()=>{
- const s=storage(original);await captureRecovery(s);
- const set=s.set.bind(s);let fail=true;
- s.set=async entries=>{if(fail){fail=false;throw Error('disk full');}await set(entries);};
- await assert.rejects(restoreRecovery(s),/disk full/);
- assert.equal((await getRecoveryStatus(s)).phase,'pending');
- await restoreRecovery(s);
- assert.ok(!Object.hasOwn(s.data,RECOVERY_KEY));
+test('snapshot with foreign key is rejected before writing',async()=>{
+ const st=sample();await createRestorePoint(st);st.data[RECOVERY_KEY].records['other-app-data']='x';
+ await assert.rejects(applyRestorePoint(st),/посторонние ключи/);
 });
-test('ready point can be discarded, sensitive keys are not captured',async()=>{
- const s=storage(original);await captureRecovery(s);assert.ok(!Object.hasOwn(s.data[RECOVERY_KEY].entries,'majesticToolkit:googleClientId:v8'));
- await commitRecovery(s);await discardRecovery(s);assert.equal(await getRecoveryStatus(s),null);
+test('snapshot size is bounded and does not corrupt existing recovery marker',async()=>{
+ const st=memory({rpNexusStateV1:{data:'x'.repeat(RECOVERY_LIMIT+10)}});
+ await assert.rejects(createRestorePoint(st),/20 МиБ/);assert.equal(st.data[RECOVERY_KEY],undefined);
+});
+test('explicit deletion removes only recovery marker',async()=>{
+ const st=sample();await createRestorePoint(st);await discardRestorePoint(st);
+ assert.equal(await examineRestorePoint(st),null);assert.ok(st.data.rpNexusStateV1);
+});
+test('invalid restore-point timestamp and unsupported version are rejected',async()=>{
+ const st=sample();await createRestorePoint(st);st.data[RECOVERY_KEY].version=999;
+ await assert.rejects(examineRestorePoint(st),/Повреждена/);
+});
+test('snapshot checksum is deterministic across validation and state transitions',async()=>{
+ const st=sample();const p=await createRestorePoint(st);assert.equal((await examineRestorePoint(st)).hash,p.hash);
+ await completeRestorePoint(st);assert.equal((await examineRestorePoint(st)).hash,p.hash);
 });

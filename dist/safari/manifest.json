@@ -2,15 +2,17 @@
   "manifest_version": 3,
   "name": "MajesticToolkit",
   "short_name": "MajesticToolkit",
-  "description": "MajesticToolkit для Safari: локальные инструменты RP, справочники, документы и экономика.",
-  "version": "0.10.0",
+  "description": "MajesticToolkit: форумы, жалобы, экономика, законы, документы и Google Workspace.",
+  "version": "1.0.0",
   "permissions": [
     "storage",
     "activeTab",
     "scripting",
+    "sidePanel",
     "alarms",
     "notifications",
-    "unlimitedStorage"
+    "unlimitedStorage",
+    "identity"
   ],
   "optional_host_permissions": [
     "https://forum.majestic-rp.ru/*",
@@ -32,7 +34,7 @@
     }
   },
   "background": {
-    "service_worker": "background/worker.mjs",
+    "service_worker": "background/background.js",
     "type": "module"
   },
   "options_page": "ui/workspace.html",

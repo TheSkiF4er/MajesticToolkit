@@ -1,13 +1,14 @@
 {
   "name": "majestictoolkit",
   "private": true,
-  "version": "0.10.0",
+  "version": "1.0.0",
   "type": "module",
-  "description": "MajesticToolkit: автономное WebExtension для RP, модулей форума, экономики, права, документов и аналитики",
+  "description": "Автономное браузерное расширение: форум, жалобы, экономика, Law Codex и Government Tools и Document Studio Google Workspace и Productivity & UX",
   "scripts": {
     "test": "node --test tests/*.test.mjs",
     "build": "node scripts/build.mjs",
-    "verify": "npm test && npm run build && node scripts/verify.mjs"
+    "package:release": "node scripts/package.mjs",
+    "verify": "npm test && npm run build && node scripts/verify.mjs && npm run package:release && node scripts/check-release.mjs"
   },
   "engines": {
     "node": ">=20"

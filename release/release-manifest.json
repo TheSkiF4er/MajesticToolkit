@@ -1,0 +1,31 @@
+{
+  "product": "MajesticToolkit",
+  "version": "1.0.0",
+  "generatedBy": "scripts/package.mjs",
+  "artifacts": [
+    {
+      "file": "MajesticToolkit-1.0.0-chromium.zip",
+      "sha256": "ec919c314568a4d9aeeff86f40d5abdd72f321a3a8d8f6e05d72b2829bceb534",
+      "size": 134399,
+      "files": 52
+    },
+    {
+      "file": "MajesticToolkit-1.0.0-firefox.zip",
+      "sha256": "b39400e60454c5452100852b2238e1f977571ded42daf59e47d0139a064b2665",
+      "size": 134409,
+      "files": 52
+    },
+    {
+      "file": "MajesticToolkit-1.0.0-firefox-android.zip",
+      "sha256": "3816829d0b5ec4c438c4842026b5f0fd68096adf734b9c87907c38e50a20fe87",
+      "size": 134383,
+      "files": 52
+    },
+    {
+      "file": "MajesticToolkit-1.0.0-safari.zip",
+      "sha256": "dfca8b7e064dcdcb885865dab88bd49494bf9a72ba717d7f1726218636012438",
+      "size": 134364,
+      "files": 52
+    }
+  ]
+}

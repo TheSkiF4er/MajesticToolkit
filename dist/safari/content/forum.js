@@ -170,12 +170,13 @@
   }
   async function readStorage() {
     try {
-      const response=await api.runtime.sendMessage({type:'MAJESTIC_CONTENT_READ',kind:'forum'});
-      if(!response?.ok)throw Error(response?.error||'Данные недоступны');
-      state=response.value.profile ? {activeProfileId:response.value.profile.id,profiles:[response.value.profile]} : null;
-      templates=response.value.items.map(item=>C.cleanTemplate(item));
-      if(expanded)draw();
-    } catch(err) {console.warn('MajesticToolkit: binder unavailable',err);}
+      const response = await api.runtime.sendMessage({type:'RP_NEXUS_FORUM_DATA'});
+      if (!response?.ok) throw Error(response?.error || 'Не удалось прочитать шаблоны');
+      const payload = response.value;
+      state = payload.profile ? {activeProfileId:payload.profile.id,profiles:[payload.profile]} : null;
+      templates = payload.templates.map(C.cleanTemplate);
+      if (expanded) draw();
+    } catch (err) { console.warn('MajesticToolkit: binder storage unavailable', err); }
   }
   launcher.addEventListener('click', () => { expanded = !expanded; draw(); });
   panel.addEventListener('input', ev => { if (ev.target.id === 'rpn-search') renderList(ev.target.value); });
@@ -209,6 +210,7 @@
     void applyTemplate(item);
   }, true);
   api.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message?.type === 'RP_NEXUS_REFRESH_FORUM_DATA') { void readStorage(); return; }
     if (message?.type !== 'RP_NEXUS_APPLY_TEMPLATE') return;
     const p = activeProfile();
     const t = C.selectTemplates(templates, p?.id ?? '').find(item => item.id === message.id);
@@ -216,7 +218,9 @@
     void applyTemplate(t).then(ok => sendResponse({ ok, error: ok ? undefined : 'Поле ответа не найдено или редактор отклонил вставку' })).catch(err => sendResponse({ ok: false, error: err.message }));
     return true;
   });
-  api.runtime.onMessage.addListener(message => {if(message?.type==='MAJESTIC_DATA_CHANGED')void readStorage();});
+  api.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && Object.keys(changes).some(k => k === STORAGE || k.startsWith(C.KEY_PREFIX))) void readStorage();
+  });
   function findLastPostId() {
     if (!threadPage()) return null;
     let result = null;
