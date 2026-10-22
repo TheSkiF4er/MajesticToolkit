@@ -5,9 +5,11 @@ const { replaceHtml, htmlFragment } = globalThis.MTSafeDOM;
   if (document.getElementById('rp-nexus-forum-020')) return;
   const api = globalThis.browser ?? globalThis.chrome;
   const C = globalThis.RPNForumCore;
+  const XF = globalThis.MTXenForo;
+  if (!XF?.identify(location.href,document)) return;
   if (!api?.runtime?.id || !C) return;
   const STORAGE = 'rpNexusStateV1';
-  let state = null, templates = [], activeEditor = null, savedRange = null, expanded = false;
+  let state = null, templates = [], customLinks = [], activeEditor = null, savedRange = null, expanded = false;
   let notificationTimer;
   const root = document.createElement('div');
   root.id = 'rp-nexus-forum-020';
@@ -35,11 +37,12 @@ const { replaceHtml, htmlFragment } = globalThis.MTSafeDOM;
     return Boolean(el.isContentEditable && (el.getAttribute('contenteditable') !== 'false'));
   }
   function findEditor() {
-    if (validEditor(activeEditor) && activeEditor.isConnected) return activeEditor;
+    if (validEditor(activeEditor) && activeEditor.isConnected && activeEditor.getClientRects().length) return activeEditor;
     const selectors = [
       '.fr-element[contenteditable="true"]', '.js-editor[contenteditable="true"]',
       '[contenteditable="true"][role="textbox"]', '.message-editor [contenteditable="true"]',
       'form textarea[name="message"]', 'textarea[name="message"]', '.js-quickReply textarea',
+      '.fr-box .fr-element[contenteditable]', '[data-xf-init~="editor"] .fr-element',
       '[data-xf-init="editor"] textarea', 'textarea[placeholder*="сообщен"]'
     ];
     for (const sel of selectors) {
@@ -92,8 +95,11 @@ const { replaceHtml, htmlFragment } = globalThis.MTSafeDOM;
     let handled = false;
     try { handled = document.execCommand('insertHTML', false, richHtml); } catch { /* modern fallback below */ }
     if (!handled) {
-      const range = sel?.rangeCount ? sel.getRangeAt(0) : null;
-      if (!range || !el.contains(range.commonAncestorContainer)) throw new Error('Не удалось определить курсор редактора');
+      let range = sel?.rangeCount ? sel.getRangeAt(0) : null;
+      if (!range || !el.contains(range.commonAncestorContainer)) {
+        range=document.createRange();range.selectNodeContents(el);range.collapse(false);
+        if(sel){sel.removeAllRanges();sel.addRange(range);}
+      }
       range.deleteContents();
       const fragment = htmlFragment(richHtml);
       const last = fragment.lastChild;
@@ -116,39 +122,68 @@ const { replaceHtml, htmlFragment } = globalThis.MTSafeDOM;
   }
   function threadPage() { return /\/threads\//i.test(location.pathname); }
   function nativeActions() {
-    if (!threadPage()) return [];
-    const links = [...document.querySelectorAll('a[href],button')].filter(n => !n.closest('#rp-nexus-forum-020'));
-    const kinds = [
-      { id: 'close', title: 'Закрыть / открыть тему', href: /\/(?:lock|unlock|close|open)(?:[\/?#]|$)/i, text: /^(?:закрыть|открыть|заблокировать|разблокировать)(?:\s+(?:тему|обсуждение))?$/i },
-      { id: 'move', title: 'Переместить тему', href: /\/(?:move|move-thread)(?:[\/?#]|$)/i, text: /^(?:переместить|перенести)(?:\s+(?:тему|обсуждение))?$/i },
-    ];
-    return kinds.map(kind => {
-      const match = links.find(el => {
-        const href = el.getAttribute('href') ?? '';
-        if (href && !href.startsWith('#')) {
-          let u; try { u = new URL(href, location.href); } catch { return false; }
-          if (u.origin !== location.origin) return false;
-        }
-        return kind.href.test(href) || kind.text.test(el.textContent.trim());
-      });
-      return { ...kind, node: match };
-    }).filter(x => x.node);
+    return ['close','move'].map(id=>({id,title:id==='close'?'Закрыть / открыть тему':'Переместить тему',node:XF.moderationAction(document,location.href,id)})).filter(x=>x.node);
   }
   function nativeMenu() {
-    return [...document.querySelectorAll('button,a')].find(x => !x.closest('#rp-nexus-forum-020') && /(?:инструменты\s*темы|управление\s*темой|thread\s*tools|moderation)/i.test(x.textContent.trim()));
+    // XenForo 2.x themes may hide the thread tools behind a textless menu trigger.
+    const candidates=[...document.querySelectorAll('.block-outer-opposite [data-xf-click="menu"], .p-title-pageAction [data-xf-click="menu"], .block-outer [data-xf-click="menu"], .js-threadAction [data-xf-click="menu"], button,a')];
+    return candidates.find(x=>!x.closest('#rp-nexus-forum-020') && x.getClientRects().length &&
+      (x.matches('.block-outer-opposite [data-xf-click="menu"], .p-title-pageAction [data-xf-click="menu"], .block-outer [data-xf-click="menu"], .js-threadAction [data-xf-click="menu"]') ||
+       /(?:инструменты\s*темы|управление\s*темой|thread\s*tools|moderation)/i.test(x.textContent.trim())));
   }
   async function openNative(action) {
     if (!threadPage()) { notify('Откройте страницу конкретной темы.'); return; }
     let result = nativeActions().find(x => x.id === action);
     if (!result?.node) {
       const menu = nativeMenu();
-      if (menu) { menu.click(); await new Promise(r => setTimeout(r, 180)); result = nativeActions().find(x => x.id === action); }
+      if (menu) {
+        menu.click();
+        // XenForo overlays can animate and mount their entries asynchronously.
+        for(let i=0;i<5&&!result?.node;i++){
+          await new Promise(r=>setTimeout(r,120));
+          result=nativeActions().find(x=>x.id===action);
+        }
+      }
     }
     if (!result?.node) { notify('Действие не доступно в интерфейсе форума или нет прав.'); return; }
     if (!confirm(`Открыть штатное действие форума «${result.title}»? Подтвердите операцию на самом сайте.`)) return;
     result.node.click();
     notify('Открыто штатное действие форума. Завершите его на сайте.');
   }
+  // Insert user-owned links only into the current forum's visible XenForo navigation.
+  let navSignature='';
+  function mountNavigation() {
+    const profile=activeProfile();
+    const wanted=customLinks.filter(x=>x.profileId==='*'||x.profileId===profile?.id).slice(0,30);
+    const host=XF.identify(location.href,document)?.host;
+    const selectors=[...(XF.FORUMS[host]?.nav||[]),'.offCanvasMenu-list'];
+    const containers=[...new Set(selectors.map(selector=>document.querySelector(selector)).filter(Boolean))];
+    const signature=JSON.stringify(wanted.map(x=>[x.id,x.title,x.url]));
+    if(navSignature===signature && containers.every(container=>container.querySelector('[data-mt-xf-nav]') || !wanted.length))return;
+    for(const container of containers){
+      container.querySelectorAll('[data-mt-xf-nav]').forEach(node=>node.remove());
+      for(const link of wanted){
+        const el=document.createElement(container.matches('.offCanvasMenu-list')?'div':'li');
+        el.setAttribute('data-mt-xf-nav',link.id);
+        el.className=container.matches('.offCanvasMenu-list')?'offCanvasMenu-linkHolder':'p-navEl';
+        const a=document.createElement('a');a.className=container.matches('.offCanvasMenu-list')?'offCanvasMenu-link':'p-navEl-link';
+        a.textContent=link.title;a.href=link.url;a.target='_blank';a.rel='noopener noreferrer';
+        a.title='Пользовательская ссылка MajesticToolkit';el.append(a);container.append(el);
+      }
+    }
+    navSignature=signature;
+  }
+  function publicMemberCard() {
+    const member=XF.memberProfile(document,location.href);
+    if(!member)return '<p class="sub">Откройте публичную страницу пользователя XenForo (/members/…), чтобы увидеть сведения, доступные без дополнительных запросов.</p>';
+    return `<div class="item"><strong>${C.esc(member.name)}</strong>${member.subtitle?`<p>${C.esc(member.subtitle)}</p>`:''}<div class="sub">${C.esc(member.site)} · данные открытой страницы</div>${member.stats.map(x=>`<div class="bar"><span>${C.esc(x.label)}</span><strong>${C.esc(x.value)}</strong></div>`).join('')}</div>`;
+  }
+  let navTimer;
+  const navigationObserver=new MutationObserver(()=>{
+    clearTimeout(navTimer);navTimer=setTimeout(mountNavigation,180);
+  });
+  navigationObserver.observe(document.querySelector('.p-header,.p-nav')||document.body,{subtree:true,childList:true});
+  window.addEventListener('pagehide',()=>{navigationObserver.disconnect();clearTimeout(navTimer);},{once:true});
   function draw() {
     if (!expanded) { panel.classList.remove('open'); launcher.setAttribute('aria-expanded', 'false'); return; }
     panel.classList.add('open'); launcher.setAttribute('aria-expanded', 'true');
@@ -158,6 +193,8 @@ const { replaceHtml, htmlFragment } = globalThis.MTSafeDOM;
       <label class="sub" for="rpn-search">Быстрый ответ</label><input class="field" id="rpn-search" type="search" autocomplete="off" placeholder="Поиск по шаблонам">
       <div class="bar"><input class="field" id="rpn-nickname" placeholder="{{nickname}} (необязательно)" maxlength="200" style="width:50%;margin:3px 0"><input class="field" id="rpn-reason" placeholder="{{reason}}" maxlength="200" style="width:50%;margin:3px 0"></div>
       <div id="rpn-template-list"></div>
+      <div class="section"><div class="bar"><b>Пользовательские ссылки</b><span class="sub">${customLinks.filter(x=>x.profileId==='*'||x.profileId===profile?.id).length}</span></div><div class="actions">${customLinks.filter(x=>x.profileId==='*'||x.profileId===profile?.id).slice(0,15).map(x=>`<button class="btn secondary" data-link="${C.esc(x.id)}">${C.esc(x.title)}</button>`).join('')||'<span class="sub">Добавьте ссылки в рабочем пространстве.</span>'}</div></div>
+      <div class="section"><div class="bar"><b>Публичный профиль XenForo</b></div>${publicMemberCard()}</div>
       <div class="section"><div class="bar"><b>Управление темой</b><span class="sub">Только штатные функции форума</span></div><div class="actions"><button class="btn secondary" data-act="close">Закрыть / открыть</button><button class="btn secondary" data-act="move">Переместить</button></div></div>
       <div class="section"><div class="bar"><b>Жалобы и доказательства</b></div><div class="actions"><button class="btn" data-act="track">Отслеживать текущую тему</button><button class="btn secondary" data-act="complaints">Все жалобы ↗</button></div></div><div class="actions"><button class="btn secondary" data-act="workspace">Все шаблоны ↗</button><button class="btn secondary" data-act="hide">Скрыть</button></div><div class="msg" role="status" aria-live="polite"></div>`);
     renderList('');
@@ -176,6 +213,8 @@ const { replaceHtml, htmlFragment } = globalThis.MTSafeDOM;
       const payload = response.value;
       state = payload.profile ? {activeProfileId:payload.profile.id,profiles:[payload.profile]} : null;
       templates = payload.templates.map(C.cleanTemplate);
+      customLinks = XF.validateLinks(payload.links||[]);
+      navSignature='';mountNavigation();
       if (expanded) draw();
     } catch (err) { console.warn('MajesticToolkit: binder storage unavailable', err); }
   }
@@ -183,6 +222,7 @@ const { replaceHtml, htmlFragment } = globalThis.MTSafeDOM;
   panel.addEventListener('input', ev => { if (ev.target.id === 'rpn-search') renderList(ev.target.value); });
   panel.addEventListener('click', ev => {
     const b = ev.target.closest('button'); if (!b) return;
+    if (b.dataset.link) { const link=customLinks.find(x=>x.id===b.dataset.link); if(link){ const a=document.createElement('a');a.href=link.url;a.target='_blank';a.rel='noopener noreferrer';a.click();}return; }
     if (b.dataset.insert) { const t = templates.find(x => x.id === b.dataset.insert); if (t) void applyTemplate(t); return; }
     if (b.dataset.copy) { const t = templates.find(x => x.id === b.dataset.copy); if (!t) return;
       const body = C.interpolate(t.text, makeVariables(findEditor() ?? document.body));
@@ -203,6 +243,8 @@ const { replaceHtml, htmlFragment } = globalThis.MTSafeDOM;
   });
   document.addEventListener('keydown', ev => {
     if (ev.repeat || ev.isComposing || !ev.altKey || !ev.shiftKey || ev.ctrlKey || ev.metaKey || !/^Digit[1-9]$/.test(ev.code)) return;
+    // Do not steal shortcuts while the user edits an unrelated form.
+    if (ev.target instanceof HTMLElement && (ev.target.isContentEditable||ev.target.matches('input,textarea,select')) && !validEditor(ev.target)) return;
     const slot = Number(ev.code.slice(-1));
     const p = activeProfile();
     const item = C.slotTemplates(templates, p?.id ?? '').get(slot);

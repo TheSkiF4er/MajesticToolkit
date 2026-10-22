@@ -3,16 +3,25 @@ const { replaceHtml, insertHtml } = globalThis.MTSafeDOM;
 import { api } from '../lib/browser.mjs';
 import '../lib/forum-core.js';
 import { listTemplates, upsertTemplate, removeTemplate } from '../lib/forum-store.mjs';
+import '../lib/xenforo-core.js';
+import {listXenForoLinks,saveXenForoLink,deleteXenForoLink} from '../lib/xenforo-store.mjs';
 const C = globalThis.RPNForumCore;
 let templates = [];
+let forumLinks = [];
+const XF=globalThis.MTXenForo;
+export const xenforoLinks=()=>forumLinks;
 let search = '';
 const e = C.esc;
-export async function refreshForum() { templates = await listTemplates(); }
+export async function refreshForum() { [templates,forumLinks] = await Promise.all([listTemplates(),listXenForoLinks()]); }
 export function forumSection(state) {
   const current = state.profiles.find(x => x.id === state.activeProfileId);
   const matching = C.selectTemplates(templates, current.id);
   return `<div class="stack"><section class="card"><div class="row spread"><div><h3>Биндер ответов</h3><p class="subtle">BBCode, переменные, категории, горячие клавиши Alt+Shift+1…9. Шаблоны привязываются к профилю или доступны глобально.</p></div><button class="button primary" data-forum-action="create">+ Новый шаблон</button></div><div class="row"><input id="forum-search" type="search" placeholder="Поиск по названию, категории или тексту" value="${e(search)}" aria-label="Поиск шаблонов" style="flex:1;min-width:220px"><span class="tag">${matching.length} доступно · ${templates.length} всего</span></div></section>
   <div id="forum-items" class="stack">${matching.length ? matching.map(t => `<article class="card" data-template-card data-filter="${e([t.label,t.category,t.text].join(' ').toLocaleLowerCase('ru'))}"><div class="row spread"><div><strong>${e(t.label)}</strong><p class="subtle">${e(t.category || 'Без категории')} · ${t.profileId === '*' ? 'Все профили' : (current.id === t.profileId ? 'Активный профиль' : 'Другой профиль')} · ${e(t.format.toUpperCase())}</p></div>${t.shortcut ? `<span class="tag">Alt+Shift+${t.shortcut}</span>` : ''}</div><pre class="template-text">${e(t.text)}</pre><div class="row"><button class="button secondary" data-forum-action="copy" data-id="${e(t.id)}">Копировать</button><button class="button secondary" data-forum-action="insert" data-id="${e(t.id)}">Вставить в форум</button><button class="button secondary" data-forum-action="edit" data-id="${e(t.id)}">Редактировать</button><button class="button danger" data-forum-action="delete" data-id="${e(t.id)}">Удалить</button></div></article>`).join('') : '<section class="card empty">Пока нет шаблонов для текущего профиля. Создайте шаблон, выбрав этот профиль или «Все профили».</section>'}</div>
+  <section class="card stack"><h3>Пользовательская навигация XenForo</h3><p class="subtle">Ссылки появятся в шапке форума выбранного проекта после разрешения доступа. Используются только HTTPS-адреса, открываются в новой вкладке. Ограничение: 60 записей.</p>
+    <form id="xf-navigation-form" class="stack"><input type="hidden" name="id" value=""><div class="grid"><label>Название ссылки<input name="title" maxlength="70" placeholder="Правила сервера" required></label><label>Адрес HTTPS<input name="url" type="url" maxlength="2048" placeholder="https://example.com/rules" required></label></div><label>Профиль<select name="profileId"><option value="*">Все профили</option>${state.profiles.map(p=>`<option value="${e(p.id)}" ${p.id===state.activeProfileId?'selected':''}>${e(p.name)} · ${e(p.server)}</option>`).join('')}</select></label><div class="row"><button class="button primary" type="submit">Сохранить ссылку</button><button class="button secondary" type="button" data-forum-action="clear-link-form">Отмена редактирования</button></div></form>
+    ${forumLinks.filter(x=>x.profileId==='*'||x.profileId===state.activeProfileId).map(x=>`<article class="row spread"><div><strong>${e(x.title)}</strong><p class="subtle">${e(x.url)}</p></div><div class="row"><button class="button secondary" data-forum-action="edit-link" data-id="${e(x.id)}">Изменить</button><button class="button danger" data-forum-action="remove-link" data-id="${e(x.id)}">Удалить</button></div></article>`).join('')||'<p class="subtle">Пользовательских ссылок пока нет.</p>'}</section>
+  <section class="card"><h3>Публичные профили XenForo</h3><p class="subtle">На открытой странице /members/ плавающая панель отображает имя, статус и общедоступные показатели, присутствующие в DOM. Данные не запрашиваются с закрытых страниц и не сохраняются.</p></section>
   <section class="card"><h3>Подстановка переменных</h3><p class="lead"><code>{{nickname}}</code>, <code>{{reason}}</code>, <code>{{server}}</code>, <code>{{project}}</code>, <code>{{thread}}</code>, <code>{{url}}</code>, <code>{{date}}</code>, <code>{{time}}</code>, <code>{{selection}}</code></p><p class="subtle">На форуме {{nickname}} и {{reason}} заполняются в панели MajesticToolkit, {{selection}} берётся из выделения редактора. Неизвестные переменные остаются в шаблоне, а сообщения не отправляются автоматически.</p></section>
   <section class="card"><h3>Инструменты модерации</h3><p class="lead">В плавающей панели на странице темы доступны переходы к штатным действиям закрытия/открытия и перемещения. Они отображаются при наличии таких действий в интерфейсе форума и исполняются только через механизмы сайта. Отдельно подтвердите завершение операции на форуме.</p><p class="subtle">Для работы разрешите доступ в разделе «Сайты и доступ», затем обновите открытую вкладку форума.</p><button class="button secondary" data-action="nav" data-view="sites">Управлять разрешениями</button></section></div>`;
 }
@@ -73,6 +82,18 @@ export async function handleForumAction(button, state, rerender, feedback) {
   if (action === 'create') { editDialog(state); return true; }
   if (action === 'edit') { editDialog(state, id); return true; }
   if (action === 'cancel') { document.getElementById('forum-template-dialog')?.close(); return true; }
+  if (action === 'clear-link-form') {document.getElementById('xf-navigation-form')?.reset();return true;}
+  if (action === 'edit-link') {
+    const link=forumLinks.find(x=>x.id===id);if(!link)throw Error('Ссылка не найдена');
+    const form=document.getElementById('xf-navigation-form');
+    for(const field of ['id','title','url','profileId'])form.elements.namedItem(field).value=link[field];
+    form.elements.namedItem('title').focus();return true;
+  }
+  if (action === 'remove-link') {
+    if(!forumLinks.some(x=>x.id===id))throw Error('Ссылка не найдена');
+    if(!confirm('Удалить ссылку из меню форума?'))return true;
+    await deleteXenForoLink(id);await refreshForum();rerender();feedback('Пользовательская ссылка удалена');return true;
+  }
   const t = templates.find(x => x.id === id);
   if (!t) throw new Error('Шаблон не найден');
   if (action === 'delete') {
@@ -95,6 +116,14 @@ export async function handleForumAction(button, state, rerender, feedback) {
   return true;
 }
 export async function handleForumSubmit(event, state, rerender, feedback) {
+  if (event.target.id==='xf-navigation-form') {
+    event.preventDefault();const elements=event.target.elements;
+    const profileId=elements.namedItem('profileId').value;
+    if(profileId!=='*'&&!state.profiles.some(x=>x.id===profileId))throw Error('Профиль не найден');
+    const id=elements.namedItem('id').value;
+    await saveXenForoLink({title:elements.namedItem('title').value,url:elements.namedItem('url').value,profileId},id||null);
+    await refreshForum();rerender();feedback('Ссылка сохранена для XenForo');return true;
+  }
   if (event.target.id !== 'forum-template-form') return false;
   event.preventDefault();
   const form = event.target.elements;

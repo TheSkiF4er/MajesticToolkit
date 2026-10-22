@@ -19,7 +19,7 @@ test('background restricts storage in browsers offering trusted-context access l
 });
 test('all four MV3 manifests have the same version and optional sites',async()=>{
  const manifests=await Promise.all(['chromium','firefox','firefox-android','safari'].map(async n=>JSON.parse(await read(`../manifests/${n}.json`))));
- assert.deepEqual([...new Set(manifests.map(m=>m.version))],['1.0.0']);
+ assert.deepEqual([...new Set(manifests.map(m=>m.version))],['1.1.0']);
  for(const manifest of manifests){
    assert.equal(manifest.manifest_version,3);
    assert.deepEqual(manifest.optional_host_permissions,manifests[0].optional_host_permissions);

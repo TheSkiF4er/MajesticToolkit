@@ -1,4 +1,4 @@
-# Mozilla AMO: воспроизводимая сборка (MajesticToolkit 1.0.0)
+# Mozilla AMO: воспроизводимая сборка (MajesticToolkit 1.1.0)
 
 Этот документ является инструкцией для рецензента. **Исходный архив содержит авторский код до сборки:** файлы из `src/`, манифесты из `manifests/`, скрипты `scripts/`, тесты и документацию. В исходный пакет **не нужно** помещать машинно сгенерированные `dist/` или `release/`. Бандлеры и минификаторы не используются. Все исходные файлы читаемы и копируются в сборку без транспиляции. Mozilla получает их именно в первоначальном виде.
 
@@ -29,7 +29,7 @@
    ```
 
 4. Команда автоматически: удалит и создаст `dist/`, скопирует исходные ресурсы, запишет платформенные `manifest.json`, проверит синтаксис и разрешения, создаст воспроизводимые ZIP-файлы для всех четырёх платформ, проверит SHA-256 и побайтовое содержимое каждого ZIP.
-5. Результат для Firefox Desktop: **`release/MajesticToolkit-1.0.0-firefox.zip`**. Для Android: `release/MajesticToolkit-1.0.0-firefox-android.zip`.
+5. Результат для Firefox Desktop: **`release/MajesticToolkit-1.1.0-firefox.zip`**. Для Android: `release/MajesticToolkit-1.1.0-firefox-android.zip`.
 6. Полный прогон регрессионных тестов выполняется отдельно командой:
 
    ```sh
@@ -50,12 +50,4 @@
 
 ## 4. Проверка полного совпадения
 
-Для подготовленного исправленного Firefox Desktop-пакета SHA-256:
-
-```text
-d90ef7bfa058b415dc87357423585a33b0fbb5a35953eb4abca1dba29202143c  MajesticToolkit-1.0.0-firefox.zip
-```
-
-На Linux/macOS: `sha256sum release/MajesticToolkit-1.0.0-firefox.zip`; на Windows PowerShell: `Get-FileHash release/MajesticToolkit-1.0.0-firefox.zip -Algorithm SHA256`.
-
-**Заявка Mozilla:** после этих исправлений архив Firefox имеет **другой SHA-256**, чем ранее загруженная версия 1.0.0. Для идентичного исходника обязательно отправьте обновлённые двоичный ZIP и исходный ZIP совместно. Если версия 1.0.0 уже опубликована, используйте следующий номер версии.
+После запуска сборки сравните SHA-256 файла `release/MajesticToolkit-1.1.0-firefox.zip` с хешем **фактически отправляемого** ZIP. На Linux/macOS выполните `sha256sum release/MajesticToolkit-1.1.0-firefox.zip`; на Windows PowerShell — `Get-FileHash release/MajesticToolkit-1.1.0-firefox.zip -Algorithm SHA256`. `release/SHA256SUMS` генерируется автоматически вместе с релизными архивами. Если файл расширения и исходный архив пересобирались отдельно, сравните контрольные суммы. Не прикладывайте исходники версии 1.1.0 к ранее отправленному ZIP версии 1.0.0.

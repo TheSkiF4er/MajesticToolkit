@@ -8,7 +8,7 @@ async function walk(dir){const nodes=await readdir(dir,{withFileTypes:true});ret
 const targets=['chromium','firefox','firefox-android','safari'];
 for(const browser of targets){
  const output=resolve(root,'dist',browser),m=JSON.parse(await readFile(resolve(output,'manifest.json'),'utf8'));
- if(m.manifest_version!==3 || m.version!=='1.0.0')throw Error(`${browser}: version / Manifest V3 invalid`);
+ if(m.manifest_version!==3 || m.version!=='1.1.0')throw Error(`${browser}: version / Manifest V3 invalid`);
  if(m.permissions.some(p=>!permissions.has(p)) || m.optional_host_permissions.length!==origins.size || m.optional_host_permissions.some(x=>!origins.has(x)))throw Error(`${browser}: expanded permissions`);
  if(m.host_permissions?.length)throw Error(`${browser}: unsolicited access to websites`);
  if(browser.startsWith('firefox')) {

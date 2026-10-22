@@ -24,14 +24,14 @@ jobs:
           find src dist -type f \( -name '*.js' -o -name '*.mjs' \) -print0 | xargs -0 -n 1 node --check
       - name: Mozilla AMO lint (Firefox desktop and Android)
         run: |
-          npm exec --yes --package=addons-linter@10.14.0 -- addons-linter release/MajesticToolkit-1.0.0-firefox.zip
-          npm exec --yes --package=addons-linter@10.14.0 -- addons-linter release/MajesticToolkit-1.0.0-firefox-android.zip
+          npm exec --yes --package=addons-linter@10.14.0 -- addons-linter release/MajesticToolkit-1.1.0-firefox.zip
+          npm exec --yes --package=addons-linter@10.14.0 -- addons-linter release/MajesticToolkit-1.1.0-firefox-android.zip
       - name: Upload reproducible release archives
         uses: actions/upload-artifact@v4
         with:
-          name: MajesticToolkit-1.0.0-verified-${{ github.run_id }}
+          name: MajesticToolkit-1.1.0-verified-${{ github.run_id }}
           path: |
-            release/MajesticToolkit-1.0.0-*.zip
+            release/MajesticToolkit-1.1.0-*.zip
             release/SHA256SUMS
             release/release-manifest.json
           if-no-files-found: error

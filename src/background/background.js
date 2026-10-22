@@ -1,6 +1,8 @@
 /* MajesticToolkit background: static ES module dependencies for all browsers. */
 import * as importedStore from '../lib/complaints-store.mjs';
 import * as importedForum from '../lib/forum-store.mjs';
+import * as importedXenForo from '../lib/xenforo-store.mjs';
+import '../lib/xenforo-core.js';
 import '../lib/complaints-core.js';
 const api = globalThis.browser ?? globalThis.chrome;
 const FORUMS = [
@@ -26,7 +28,7 @@ async function syncScripts() {
       const granted = await api.permissions.contains({origins:[site.origin]});
       if (granted && !ids.has(site.id)) {
         const isForum = FORUMS.includes(site);
-        await api.scripting.registerContentScripts([{id:site.id,matches:[site.origin],js:isForum ? ['lib/safe-dom.js','lib/forum-core.js','lib/complaints-core.js','content/forum.js'] : ['lib/safe-dom.js','lib/complaints-core.js','content/evidence.js'],runAt:'document_idle',allFrames:false,persistAcrossSessions:true}]);
+        await api.scripting.registerContentScripts([{id:site.id,matches:[site.origin],js:isForum ? ['lib/safe-dom.js','lib/forum-core.js','lib/xenforo-core.js','lib/complaints-core.js','content/forum.js'] : ['lib/safe-dom.js','lib/complaints-core.js','content/evidence.js'],runAt:'document_idle',allFrames:false,persistAcrossSessions:true}]);
       } else if (!granted && ids.has(site.id)) await api.scripting.unregisterContentScripts({ids:[site.id]});
     }
   } catch (error) { console.error('MajesticToolkit: не удалось зарегистрировать скрипты',error); }
@@ -83,7 +85,7 @@ function start() {
 api.runtime.onInstalled.addListener(start);
 api.runtime.onStartup?.addListener(start);
 api.storage.onChanged.addListener((changes,area) => {
-  if (area !== 'local' || !Object.keys(changes).some(k=> k==='rpNexusStateV1'||k.startsWith('rpnForumTemplateV2:'))) return;
+  if (area !== 'local' || !Object.keys(changes).some(k=> k==='rpNexusStateV1'||k.startsWith('rpnForumTemplateV2:')||k.startsWith('majesticToolkitXfNavV11:'))) return;
   void api.tabs.query({}).then(tabs=>Promise.allSettled(tabs.filter(t=>t.id&&FORUMS.some(f=>t.url?.startsWith(f.origin.slice(0,-1)))).map(t=>api.tabs.sendMessage(t.id,{type:'RP_NEXUS_REFRESH_FORUM_DATA'})))).catch(()=>{});
 });
 api.permissions.onAdded.addListener(() => {void syncScripts();});
@@ -109,9 +111,12 @@ api.runtime.onMessage.addListener((message,sender,sendResponse) => {
       const state = (await api.storage.local.get('rpNexusStateV1')).rpNexusStateV1;
       if (!state?.activeProfileId) return {profile:null, templates:[]};
       const {listTemplates} = await forumStorePromise;
-      const profile = state.profiles.find(p=>p.id===state.activeProfileId);
-      const templates = (await listTemplates()).filter(t=>t.profileId==='*'||t.profileId===state.activeProfileId);
-      return {profile:profile ? {id:profile.id, project:profile.project,server:profile.server} : null, templates};
+      // Select only a profile belonging to the sender's forum, not an unrelated active project.
+      const profile = globalThis.MTXenForo.matchingProfile(state.profiles,state.activeProfileId,sender.url);
+      if (!profile) return {profile:null,templates:[],links:[]};
+      const templates = (await listTemplates()).filter(t=>t.profileId==='*'||t.profileId===profile.id);
+      const links = (await importedXenForo.listXenForoLinks()).filter(x=>x.profileId==='*'||x.profileId===profile.id);
+      return {profile:{id:profile.id,name:profile.name,project:profile.project,server:profile.server},templates,links};
     }
     if (message.type === 'RP_NEXUS_VIDEO_CASES') {
       if (!isVideo) throw Error('Недоверенный источник');
