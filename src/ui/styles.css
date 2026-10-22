@@ -130,3 +130,6 @@ textarea{width:100%;resize:vertical;background:var(--panel);color:var(--ink);bor
 }
 @media(pointer:coarse){button,.button,.nav button{min-height:44px}input:not([type=checkbox]),select{min-height:44px}}
 @media(prefers-reduced-motion:reduce){*,*:before,*:after{scroll-behavior:auto!important;animation-duration:.01ms!important;transition-duration:.01ms!important}}
+
+/* Knowledge Workspace 1.3.0 */
+.knowledge-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,290px),1fr));gap:12px}.knowledge-item,.knowledge-relation{border:1px solid var(--stroke);border-radius:12px;padding:12px;min-width:0;overflow-wrap:anywhere}.knowledge-item .row,.knowledge-relation .row,.knowledge-form{flex-wrap:wrap}.knowledge-relations{display:grid;gap:12px}.knowledge-relation{display:flex;align-items:center;justify-content:space-between;gap:15px}.knowledge-relation p{white-space:pre-wrap}.knowledge-form>.field{min-width:min(100%,210px);flex:1}.knowledge-form button{align-self:end}.knowledge-item .subtle{margin:6px 0 12px}@media(max-width:700px){.knowledge-relation{flex-direction:column;align-items:stretch}.knowledge-form{display:grid;grid-template-columns:minmax(0,1fr)}}

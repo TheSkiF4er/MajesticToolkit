@@ -8,7 +8,7 @@ async function walk(dir){const nodes=await readdir(dir,{withFileTypes:true});ret
 const targets=['chromium','firefox','firefox-android','safari'];
 for(const browser of targets){
  const output=resolve(root,'dist',browser),m=JSON.parse(await readFile(resolve(output,'manifest.json'),'utf8'));
- if(m.manifest_version!==3 || m.version!=='1.2.0')throw Error(`${browser}: version / Manifest V3 invalid`);
+ if(m.manifest_version!==3 || m.version!=='1.3.0')throw Error(`${browser}: version / Manifest V3 invalid`);
  if(m.permissions.some(p=>!permissions.has(p)) || m.optional_host_permissions.length!==origins.size || m.optional_host_permissions.some(x=>!origins.has(x)))throw Error(`${browser}: expanded permissions`);
  if(m.host_permissions?.length)throw Error(`${browser}: unsolicited access to websites`);
  if(browser.startsWith('firefox')) {
@@ -34,7 +34,7 @@ for(const browser of targets){
  }
  if(browser==='firefox-android'&&m.sidebar_action)throw Error('Firefox Android must not have desktop sidebar');
  if(browser==='safari'&&m.side_panel)throw Error('Safari should use workspace fallback');
- for(const path of [m.action.default_popup,'ui/workspace.html','ui/sidebar.html','ui/main.mjs','lib/recovery.mjs','lib/state.mjs','content/forum.js','content/evidence.js','ui/monitor-page.mjs','lib/monitor-core.mjs','lib/monitor-store.mjs','lib/monitor-backup.mjs',...Object.values(m.icons)])await access(resolve(output,path));
+ for(const path of [m.action.default_popup,'ui/workspace.html','ui/sidebar.html','ui/main.mjs','lib/recovery.mjs','lib/state.mjs','content/forum.js','content/evidence.js','ui/monitor-page.mjs','lib/monitor-core.mjs','lib/monitor-store.mjs','lib/monitor-backup.mjs','ui/knowledge-page.mjs','lib/knowledge-core.mjs','lib/knowledge-store.mjs','lib/knowledge-backup.mjs','ui/knowledge-page.mjs','lib/knowledge-core.mjs','lib/knowledge-store.mjs','lib/knowledge-backup.mjs',...Object.values(m.icons)])await access(resolve(output,path));
  for(const f of await walk(output))if(/\.(m?js)$/.test(f))execFileSync(process.execPath,['--check',f],{stdio:'pipe'});
  console.log(`${browser}: manifest, static scripts, syntax and permissions validated`);
 }

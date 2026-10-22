@@ -90,3 +90,13 @@ export async function uploadBackupToDrive(name,text) {
 }
 export async function listGoogleFiles(){const data=await googleRequest('https://www.googleapis.com/drive/v3/files?pageSize=50&orderBy=modifiedTime%20desc&fields=files(id,name,mimeType,modifiedTime,webViewLink),nextPageToken&q=trashed%3Dfalse');return cleanGoogleFileList(data);}
 export async function readBackupFromDrive(id){const access=await accessToken();const url=`https://www.googleapis.com/drive/v3/files/${googleFileId(id)}?alt=media`;const r=await fetch(url,{headers:{Authorization:`Bearer ${access}`}});if(!r.ok)throw Error(`Google Drive: HTTP ${r.status}`);if(Number(r.headers.get('content-length')||0)>48*1024*1024)throw Error('Файл больше 48 МиБ');const text=await r.text();if(new TextEncoder().encode(text).length>48*1024*1024)throw Error('Файл больше 48 МиБ');return text;}
+/** Copies a user-selected Google Doc/Sheet using the existing Drive file scope.
+ * Files outside drive.file access may return HTTP 403; never bypasses Google permissions. */
+export async function copyGoogleTemplate(kind,fileId,title){
+ if(!['google-doc','google-sheet'].includes(kind)||typeof title!=='string'||!title.trim()||title.length>180)throw Error('Некорректный шаблон Google');
+ const id=googleFileId(fileId);
+ const data=await googleRequest(`https://www.googleapis.com/drive/v3/files/${id}/copy?fields=id,name,mimeType,webViewLink`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:title.trim()})});
+ if(!data.id)throw Error('Google не создал копию');
+ const next=googleFileId(data.id);
+ return {id:next,url:kind==='google-doc'?`https://docs.google.com/document/d/${next}/edit`:`https://docs.google.com/spreadsheets/d/${next}/edit`};
+}
