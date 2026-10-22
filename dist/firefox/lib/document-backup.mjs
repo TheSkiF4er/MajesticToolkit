@@ -1,6 +1,0 @@
-import {makeBackupV6,parseBackupV6} from './government-backup.mjs';
-import {validateDocuments,DOCUMENT_LIMITS} from './document-core.mjs';
-export function makeBackupV7(state,templates,cases,economy,laws,government,documents,cleanTemplate){const data=JSON.parse(makeBackupV6(state,templates,cases,economy,laws,government,cleanTemplate));data.schemaVersion=7;data.documents=validateDocuments(documents,state.profiles.map(p=>p.id),government);return JSON.stringify(data,null,2);}
-export function parseBackupV7(text,validateState,cleanTemplate){if(typeof text!=='string'||new TextEncoder().encode(text).length>DOCUMENT_LIMITS.backupBytes)throw Error('Резервная копия превышает 48 МиБ');let input;try{input=JSON.parse(text);}catch{throw Error('Некорректный JSON');}
- if(input?.schemaVersion!==7)return {...parseBackupV6(text,validateState,cleanTemplate),documents:[]};
- if(input.format!=='majestictoolkit-backup'||!Array.isArray(input.documents))throw Error('Неверный формат резервной копии');const previous={...input,schemaVersion:6};delete previous.documents;const old=parseBackupV6(JSON.stringify(previous),validateState,cleanTemplate);return {...old,schemaVersion:7,documents:validateDocuments(input.documents,old.state.profiles.map(p=>p.id),old.government)};}
