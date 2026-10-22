@@ -1,3 +1,4 @@
+const { replaceHtml, htmlFragment } = globalThis.MTSafeDOM;
 /* On-page, click-to-save evidence only. No recording, uploads or passive collection. */
 (() => {
   'use strict';
@@ -18,7 +19,7 @@
     if (!response?.ok) throw Error(response?.error || 'Не удалось получить список жалоб');
     all = response.value;
     const current=select.value;
-    select.innerHTML=all.length ? all.map(x=>`<option value="${escape(x.id)}">${escape(x.title)}</option>`).join('') : '<option value="">Нет жалоб в активном профиле</option>';
+    replaceHtml(select, all.length ? all.map(x=>`<option value="${escape(x.id)}">${escape(x.title)}</option>`).join('') : '<option value="">Нет жалоб в активном профиле</option>');
     if(all.some(x=>x.id===current)) select.value=current;
   }
   launch.addEventListener('click',()=>{open=!open; panel.classList.toggle('open',open);launch.setAttribute('aria-expanded',String(open));if(open)void refresh().catch(err=>info.textContent=err.message);});

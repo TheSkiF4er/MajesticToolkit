@@ -1,7 +1,7 @@
+/* MajesticToolkit background: static ES module dependencies for all browsers. */
 import * as importedStore from '../lib/complaints-store.mjs';
 import * as importedForum from '../lib/forum-store.mjs';
 import '../lib/complaints-core.js';
-/* MajesticToolkit 0.3 — permission-gated forum / evidence integration, local notifications. */
 const api = globalThis.browser ?? globalThis.chrome;
 const FORUMS = [
   { id:'rp-nexus-majestic-forum-v3', origin:'https://forum.majestic-rp.ru/*' },
@@ -26,7 +26,7 @@ async function syncScripts() {
       const granted = await api.permissions.contains({origins:[site.origin]});
       if (granted && !ids.has(site.id)) {
         const isForum = FORUMS.includes(site);
-        await api.scripting.registerContentScripts([{id:site.id,matches:[site.origin],js:isForum ? ['lib/forum-core.js','lib/complaints-core.js','content/forum.js'] : ['lib/complaints-core.js','content/evidence.js'],runAt:'document_idle',allFrames:false,persistAcrossSessions:true}]);
+        await api.scripting.registerContentScripts([{id:site.id,matches:[site.origin],js:isForum ? ['lib/safe-dom.js','lib/forum-core.js','lib/complaints-core.js','content/forum.js'] : ['lib/safe-dom.js','lib/complaints-core.js','content/evidence.js'],runAt:'document_idle',allFrames:false,persistAcrossSessions:true}]);
       } else if (!granted && ids.has(site.id)) await api.scripting.unregisterContentScripts({ids:[site.id]});
     }
   } catch (error) { console.error('MajesticToolkit: не удалось зарегистрировать скрипты',error); }

@@ -1,3 +1,5 @@
+import '../lib/safe-dom.js';
+const { replaceHtml, insertHtml } = globalThis.MTSafeDOM;
 import { api } from '../lib/browser.mjs';
 import '../lib/forum-core.js';
 import { listTemplates, upsertTemplate, removeTemplate } from '../lib/forum-store.mjs';
@@ -18,7 +20,7 @@ function ensureDialog(state) {
   let dlg = document.getElementById('forum-template-dialog');
   if (!dlg) {
     dlg = document.createElement('dialog'); dlg.id = 'forum-template-dialog';
-    dlg.innerHTML = `<form id="forum-template-form"><h2 id="forum-template-title">Шаблон</h2><input name="id" type="hidden"><label>Название<input name="label" maxlength="90" required placeholder="Одобрение жалобы"></label><label>Категория<input name="category" maxlength="60" placeholder="Жалобы / Суд / Общие"></label><label>Профиль<select name="profileId"></select></label><div class="grid"><label>Формат<select name="format"><option value="bbcode">BBCode</option><option value="plain">Простой текст</option></select></label><label>Горячая клавиша<select name="shortcut"><option value="0">Без сочетания</option>${Array.from({length:9},(_,i)=>`<option value="${i+1}">Alt+Shift+${i+1}</option>`).join('')}</select></label></div><label>Текст шаблона<textarea name="text" maxlength="16000" rows="8" required spellcheck="true" placeholder="Здравствуйте, {{nickname}}!"></textarea></label><div class="row"><button class="button secondary" type="button" data-bb="b">B</button><button class="button secondary" type="button" data-bb="i">I</button><button class="button secondary" type="button" data-bb="u">U</button><button class="button secondary" type="button" data-bb="url">Ссылка</button><button class="button secondary" type="button" data-bb="quote">Цитата</button></div><div class="preview-area"><p class="subtle">Предпросмотр BBCode</p><div id="forum-preview"></div></div><div class="dialog-actions"><button type="button" class="button secondary" data-forum-action="cancel">Отмена</button><button class="button primary" type="submit">Сохранить шаблон</button></div></form>`;
+    replaceHtml(dlg, `<form id="forum-template-form"><h2 id="forum-template-title">Шаблон</h2><input name="id" type="hidden"><label>Название<input name="label" maxlength="90" required placeholder="Одобрение жалобы"></label><label>Категория<input name="category" maxlength="60" placeholder="Жалобы / Суд / Общие"></label><label>Профиль<select name="profileId"></select></label><div class="grid"><label>Формат<select name="format"><option value="bbcode">BBCode</option><option value="plain">Простой текст</option></select></label><label>Горячая клавиша<select name="shortcut"><option value="0">Без сочетания</option>${Array.from({length:9},(_,i)=>`<option value="${i+1}">Alt+Shift+${i+1}</option>`).join('')}</select></label></div><label>Текст шаблона<textarea name="text" maxlength="16000" rows="8" required spellcheck="true" placeholder="Здравствуйте, {{nickname}}!"></textarea></label><div class="row"><button class="button secondary" type="button" data-bb="b">B</button><button class="button secondary" type="button" data-bb="i">I</button><button class="button secondary" type="button" data-bb="u">U</button><button class="button secondary" type="button" data-bb="url">Ссылка</button><button class="button secondary" type="button" data-bb="quote">Цитата</button></div><div class="preview-area"><p class="subtle">Предпросмотр BBCode</p><div id="forum-preview"></div></div><div class="dialog-actions"><button type="button" class="button secondary" data-forum-action="cancel">Отмена</button><button class="button primary" type="submit">Сохранить шаблон</button></div></form>`);
     document.body.append(dlg);
     dlg.addEventListener('input', () => showPreview(dlg));
     dlg.addEventListener('change', () => showPreview(dlg));
@@ -35,14 +37,14 @@ function ensureDialog(state) {
     });
   }
   const select = dlg.querySelector('select[name="profileId"]');
-  select.innerHTML = `<option value="*">Все профили</option>` + state.profiles.map(p => `<option value="${e(p.id)}">${e(p.name)} · ${e(p.server)}</option>`).join('');
+  replaceHtml(select, `<option value="*">Все профили</option>` + state.profiles.map(p => `<option value="${e(p.id)}">${e(p.name)} · ${e(p.server)}</option>`).join(''));
   return dlg;
 }
 function showPreview(dlg) {
   const text = dlg.querySelector('textarea[name="text"]').value;
   const format = dlg.querySelector('[name="format"]').value;
   const preview = dlg.querySelector('#forum-preview');
-  preview.innerHTML = format === 'bbcode' ? C.bbcodeToHtml(text) : e(text).replace(/\r?\n/g, '<br>');
+  replaceHtml(preview, format === 'bbcode' ? C.bbcodeToHtml(text) : e(text).replace(/\r?\n/g, '<br>'));
 }
 function editDialog(state, id = null) {
   const dialog = ensureDialog(state);

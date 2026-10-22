@@ -1,3 +1,5 @@
+import '../lib/safe-dom.js';
+const { replaceHtml, insertHtml } = globalThis.MTSafeDOM;
 import { listEconomy, addEconomy, updateEconomy, removeEconomy, getEconomy } from '../lib/economy-store.mjs';
 import { resaleCalc, craftCalc, workCalc, dealTotals, summarizeEconomy, summarizeMatches, formatCurrency, DEAL_CATEGORIES, toCsv } from '../lib/economy-core.mjs';
 import { escapeHtml as e } from '../lib/sites.mjs';
@@ -75,7 +77,7 @@ function download(filename,content,type){const blob=new Blob([content],{type});c
 function openEditor(type,item=null){const dialog=document.getElementById('economy-dialog');if(!dialog)throw Error('Откройте раздел экономики');
   const form=dialog.querySelector('form');form.reset();form.elements.namedItem('recordId').value=item?.id||'';form.elements.namedItem('recordType').value=type;
   dialog.querySelector('#economy-dialog-title').textContent=(item?'Изменить: ':'Добавить: ')+formTypes[type];
-  dialog.querySelector('#economy-fields').innerHTML=formFields(type,item||{});dialog.showModal();}
+  replaceHtml(dialog.querySelector('#economy-fields'), formFields(type,item||{}));dialog.showModal();}
 export async function handleEconomyAction(button,state,render,feedback){const action=button.dataset.economyAction;
   if(action==='new'){openEditor(button.dataset.type);return;}
   if(action==='cancel'){document.getElementById('economy-dialog')?.close();return;}

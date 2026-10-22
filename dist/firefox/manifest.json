@@ -43,7 +43,8 @@
   "background": {
     "scripts": [
       "background/background.js"
-    ]
+    ],
+    "type": "module"
   },
   "options_ui": {
     "page": "ui/workspace.html",

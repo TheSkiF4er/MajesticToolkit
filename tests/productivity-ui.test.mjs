@@ -7,11 +7,17 @@ globalThis.browser={storage:{local:{
  async remove(keys){for(const k of Array.isArray(keys)?keys:[keys])delete records[k];}
 }}};
 const elements={
- 'productivity-results':{innerHTML:''},
- 'productivity-answer':{innerHTML:''},
+ 'productivity-results':{innerHTML:'', replaceChildren(fragment){this.innerHTML=fragment.children.map(n=>n.textContent).join('');}},
+ 'productivity-answer':{innerHTML:'', replaceChildren(fragment){this.innerHTML=fragment.children.map(n=>n.textContent).join('');}},
  'productivity-search':{focus(){this.focused=true;},select(){this.selected=true;}}
 };
-globalThis.document={getElementById:id=>elements[id]||null};
+// Minimal inert-parser seam for Node tests; browser DOM security is tested separately.
+globalThis.DOMParser=class {parseFromString(html){return {body:{firstElementChild:{childNodes:[{nodeType:3,nodeValue:html.slice(5,-6)}]}}};}};
+globalThis.document={
+ getElementById:id=>elements[id]||null,
+ createTextNode:value=>({textContent:value,nodeType:3}),
+ createDocumentFragment:()=>({children:[],appendChild(node){this.children.push(node);}})
+};
 const {upsertTemplate}=await import('../src/lib/forum-store.mjs');
 const {productivitySection,refreshProductivitySearch,setSearchQuery,answerProductivity,searchFocus}=await import('../src/ui/productivity-page.mjs');
 const state={activeProfileId:'profile_test_abcdefgh'};

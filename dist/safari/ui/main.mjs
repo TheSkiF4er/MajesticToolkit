@@ -1,3 +1,5 @@
+import '../lib/safe-dom.js';
+const { replaceHtml, insertHtml } = globalThis.MTSafeDOM;
 import { api, openSidePanel, openTab, openWorkspace } from '../lib/browser.mjs';
 import { createRestorePoint, completeRestorePoint, examineRestorePoint, applyRestorePoint, discardRestorePoint } from '../lib/recovery.mjs';
 import { addProfile, deleteProfile, editProfile, getActiveProfile, projectLabel, savePreferences, selectProfile } from '../lib/model.mjs';
@@ -78,10 +80,10 @@ function render() {
   document.documentElement.dataset.theme = state.preferences.theme;
   document.documentElement.dataset.accent = productivity.accent;
   document.body.dataset.compact = String(state.preferences.compact);
-  if (popup) { app.innerHTML = renderPopup(); return; }
+  if (popup) { replaceHtml(app, renderPopup()); return; }
   const title = titles[view];
   const contents = { home: sectionHome, search: () => productivitySection(state), forum: () => forumSection(state), complaints: () => complaintsSection(state), economy: () => economySection(state), law: () => lawSection(state), government: () => governmentSection(state), documents: () => documentSection(state), integrations: () => integrationsSection(state), profiles: sectionProfiles, sites: sectionSites, settings: sectionSettings, backup: sectionBackup };
-  app.innerHTML = `<div class="layout"><aside class="side"><div class="brand"><div class="logo">MT</div><div><h1>MajesticToolkit</h1><p>Версия 1.0.0</p></div></div><nav class="nav" aria-label="Разделы">${NAV.map(([id, label, icon]) => `<button type="button" data-action="nav" data-view="${id}" class="${view === id ? 'active' : ''}" ${view === id ? 'aria-current="page"' : ''}><span aria-hidden="true">${icon}</span>${e(label)}</button>`).join('')}</nav><div class="side-footer">Локальные данные · Без облачной регистрации</div></aside><main class="main"><header class="topline"><div><p class="eyebrow">MajesticToolkit / ${e(title[0])}</p><h2>${e(title[0])}</h2><p class="lead">${e(title[1])}</p></div>${mode === 'sidebar' ? '' : '<span class="tag">v1.0.0</span>'}</header>${contents[view]()}</main></div>`;
+  replaceHtml(app, `<div class="layout"><aside class="side"><div class="brand"><div class="logo">MT</div><div><h1>MajesticToolkit</h1><p>Версия 1.0.0</p></div></div><nav class="nav" aria-label="Разделы">${NAV.map(([id, label, icon]) => `<button type="button" data-action="nav" data-view="${id}" class="${view === id ? 'active' : ''}" ${view === id ? 'aria-current="page"' : ''}><span aria-hidden="true">${icon}</span>${e(label)}</button>`).join('')}</nav><div class="side-footer">Локальные данные · Без облачной регистрации</div></aside><main class="main"><header class="topline"><div><p class="eyebrow">MajesticToolkit / ${e(title[0])}</p><h2>${e(title[0])}</h2><p class="lead">${e(title[1])}</p></div>${mode === 'sidebar' ? '' : '<span class="tag">v1.0.0</span>'}</header>${contents[view]()}</main></div>`);
 }
 async function refreshPermission() {
   try { permissionGranted = await api.permissions.contains({ origins: [FORUM_SITE.origin] }); }

@@ -1,3 +1,4 @@
+const { replaceHtml, htmlFragment } = globalThis.MTSafeDOM;
 /* Forum Toolkit v0.2: local binder + editor integration. No automated posting or moderation requests. */
 (() => {
   'use strict';
@@ -94,7 +95,7 @@
       const range = sel?.rangeCount ? sel.getRangeAt(0) : null;
       if (!range || !el.contains(range.commonAncestorContainer)) throw new Error('Не удалось определить курсор редактора');
       range.deleteContents();
-      const fragment = range.createContextualFragment(richHtml);
+      const fragment = htmlFragment(richHtml);
       const last = fragment.lastChild;
       range.insertNode(fragment);
       if (last) { range.setStartAfter(last); range.collapse(true); sel.removeAllRanges(); sel.addRange(range); }
@@ -153,12 +154,12 @@
     panel.classList.add('open'); launcher.setAttribute('aria-expanded', 'true');
     const profile = activeProfile();
     const visible = C.selectTemplates(templates, profile?.id ?? '', '');
-    panel.innerHTML = `<div class="bar"><div><div class="name">MajesticToolkit · Forum</div><div class="sub">${C.esc(profile?.name || 'Без профиля')} · ${C.esc(profile?.server || '')}</div></div><button class="btn secondary" data-act="workspace" title="Управление шаблонами">Настроить ↗</button></div>
+    replaceHtml(panel, `<div class="bar"><div><div class="name">MajesticToolkit · Forum</div><div class="sub">${C.esc(profile?.name || 'Без профиля')} · ${C.esc(profile?.server || '')}</div></div><button class="btn secondary" data-act="workspace" title="Управление шаблонами">Настроить ↗</button></div>
       <label class="sub" for="rpn-search">Быстрый ответ</label><input class="field" id="rpn-search" type="search" autocomplete="off" placeholder="Поиск по шаблонам">
       <div class="bar"><input class="field" id="rpn-nickname" placeholder="{{nickname}} (необязательно)" maxlength="200" style="width:50%;margin:3px 0"><input class="field" id="rpn-reason" placeholder="{{reason}}" maxlength="200" style="width:50%;margin:3px 0"></div>
       <div id="rpn-template-list"></div>
       <div class="section"><div class="bar"><b>Управление темой</b><span class="sub">Только штатные функции форума</span></div><div class="actions"><button class="btn secondary" data-act="close">Закрыть / открыть</button><button class="btn secondary" data-act="move">Переместить</button></div></div>
-      <div class="section"><div class="bar"><b>Жалобы и доказательства</b></div><div class="actions"><button class="btn" data-act="track">Отслеживать текущую тему</button><button class="btn secondary" data-act="complaints">Все жалобы ↗</button></div></div><div class="actions"><button class="btn secondary" data-act="workspace">Все шаблоны ↗</button><button class="btn secondary" data-act="hide">Скрыть</button></div><div class="msg" role="status" aria-live="polite"></div>`;
+      <div class="section"><div class="bar"><b>Жалобы и доказательства</b></div><div class="actions"><button class="btn" data-act="track">Отслеживать текущую тему</button><button class="btn secondary" data-act="complaints">Все жалобы ↗</button></div></div><div class="actions"><button class="btn secondary" data-act="workspace">Все шаблоны ↗</button><button class="btn secondary" data-act="hide">Скрыть</button></div><div class="msg" role="status" aria-live="polite"></div>`);
     renderList('');
   }
   function renderList(query) {
@@ -166,7 +167,7 @@
     if (!target) return;
     const p = activeProfile();
     const visible = C.selectTemplates(templates, p?.id ?? '', query);
-    target.innerHTML = visible.length ? visible.slice(0, 75).map(t => `<article class="item"><div class="item-head"><span class="item-title">${C.esc(t.label)}</span><span class="sub">${t.shortcut ? 'Alt+Shift+' + t.shortcut : C.esc(t.category || t.format)}</span></div><div class="item-body">${C.esc(t.text.slice(0, 200))}</div><div class="actions"><button class="btn" data-insert="${C.esc(t.id)}">Вставить</button><button class="btn secondary" data-copy="${C.esc(t.id)}">Копировать</button></div></article>`).join('') : '<div class="empty">Шаблонов нет. Создайте их в разделе «Форум» рабочего пространства.</div>';
+    replaceHtml(target, visible.length ? visible.slice(0, 75).map(t => `<article class="item"><div class="item-head"><span class="item-title">${C.esc(t.label)}</span><span class="sub">${t.shortcut ? 'Alt+Shift+' + t.shortcut : C.esc(t.category || t.format)}</span></div><div class="item-body">${C.esc(t.text.slice(0, 200))}</div><div class="actions"><button class="btn" data-insert="${C.esc(t.id)}">Вставить</button><button class="btn secondary" data-copy="${C.esc(t.id)}">Копировать</button></div></article>`).join('') : '<div class="empty">Шаблонов нет. Создайте их в разделе «Форум» рабочего пространства.</div>');
   }
   async function readStorage() {
     try {

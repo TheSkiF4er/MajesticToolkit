@@ -1,3 +1,5 @@
+import '../lib/safe-dom.js';
+const { replaceHtml, insertHtml } = globalThis.MTSafeDOM;
 import '../lib/complaints-core.js';
 import { api } from '../lib/browser.mjs';
 import { listCases } from '../lib/complaints-store.mjs';
@@ -42,7 +44,7 @@ function createDialog() {
   let dlg = document.getElementById('complaint-dialog');
   if (dlg) return dlg;
   dlg = document.createElement('dialog'); dlg.id = 'complaint-dialog';
-  dlg.innerHTML = `<form id="complaint-form"><h2 id="complaint-dialog-title">Добавить жалобу</h2><input type="hidden" name="id"><label>Название<input name="title" required maxlength="240" placeholder="Жалоба на игрока / судебное дело"></label><label>HTTPS-ссылка на тему форума<input type="url" name="url" required maxlength="2048" placeholder="https://forum.majestic-rp.ru/threads/.../"></label><div class="grid"><label>Статус<select name="status">${Object.entries(LABELS).map(([id,label]) => `<option value="${id}">${label}</option>`).join('')}</select></label><label>Срок рассмотрения<input name="deadline" type="datetime-local"></label></div><label class="check"><input name="watching" type="checkbox" checked> Проверять новые сообщения в открытых вкладках</label><label>Заметки<textarea name="note" rows="3" maxlength="12000" placeholder="Что необходимо проверить"></textarea></label><div class="dialog-actions"><button type="button" class="button secondary" data-case-action="cancel">Отмена</button><button type="submit" class="button primary">Сохранить</button></div></form>`;
+  replaceHtml(dlg, `<form id="complaint-form"><h2 id="complaint-dialog-title">Добавить жалобу</h2><input type="hidden" name="id"><label>Название<input name="title" required maxlength="240" placeholder="Жалоба на игрока / судебное дело"></label><label>HTTPS-ссылка на тему форума<input type="url" name="url" required maxlength="2048" placeholder="https://forum.majestic-rp.ru/threads/.../"></label><div class="grid"><label>Статус<select name="status">${Object.entries(LABELS).map(([id,label]) => `<option value="${id}">${label}</option>`).join('')}</select></label><label>Срок рассмотрения<input name="deadline" type="datetime-local"></label></div><label class="check"><input name="watching" type="checkbox" checked> Проверять новые сообщения в открытых вкладках</label><label>Заметки<textarea name="note" rows="3" maxlength="12000" placeholder="Что необходимо проверить"></textarea></label><div class="dialog-actions"><button type="button" class="button secondary" data-case-action="cancel">Отмена</button><button type="submit" class="button primary">Сохранить</button></div></form>`);
   document.body.append(dlg);
   return dlg;
 }
@@ -50,7 +52,7 @@ function evidenceDialog() {
   let dlg = document.getElementById('evidence-dialog');
   if (dlg) return dlg;
   dlg = document.createElement('dialog'); dlg.id = 'evidence-dialog';
-  dlg.innerHTML = `<form id="complaint-evidence-form"><h2>Добавить доказательство</h2><input type="hidden" name="caseId"><label>Название<input name="title" required maxlength="180" placeholder="Видеозапись №1"></label><label>HTTPS-ссылка<input name="url" type="url" required maxlength="2048" placeholder="https://www.youtube.com/watch?v=..."></label><label>Таймкод (секунды, необязательно)<input name="seconds" type="number" min="0" max="86400" step="1" placeholder="125"></label><label>Комментарий<textarea name="note" maxlength="1000" rows="3"></textarea></label><div class="dialog-actions"><button type="button" class="button secondary" data-case-action="cancel-evidence">Отмена</button><button type="submit" class="button primary">Прикрепить</button></div></form>`;
+  replaceHtml(dlg, `<form id="complaint-evidence-form"><h2>Добавить доказательство</h2><input type="hidden" name="caseId"><label>Название<input name="title" required maxlength="180" placeholder="Видеозапись №1"></label><label>HTTPS-ссылка<input name="url" type="url" required maxlength="2048" placeholder="https://www.youtube.com/watch?v=..."></label><label>Таймкод (секунды, необязательно)<input name="seconds" type="number" min="0" max="86400" step="1" placeholder="125"></label><label>Комментарий<textarea name="note" maxlength="1000" rows="3"></textarea></label><div class="dialog-actions"><button type="button" class="button secondary" data-case-action="cancel-evidence">Отмена</button><button type="submit" class="button primary">Прикрепить</button></div></form>`);
   document.body.append(dlg);
   return dlg;
 }

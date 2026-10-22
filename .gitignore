@@ -1,0 +1,27 @@
+# Generated platform bundles and deterministic release packages
+/dist/
+/release/
+
+# Local dependencies, caches and test outputs
+/node_modules/
+/.npm/
+/.cache/
+/coverage/
+/.nyc_output/
+/test-results/
+/playwright-report/
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+
+# Local editor settings and temporary files
+.idea/
+.vscode/
+*.swp
+*.tmp
+*.bak
+*.orig
+.env
+.env.*
+!.env.example

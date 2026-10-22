@@ -1,3 +1,5 @@
+import '../lib/safe-dom.js';
+const { replaceHtml, insertHtml } = globalThis.MTSafeDOM;
 import { listLawRecords, getLawRecord, newLawBook, editLawBook, newLawEdition, chooseLawEdition, newLawMemo, editLawMemo, toggleLawFavorite, removeLawRecord, replaceLawRecords } from '../lib/law-store.mjs';
 import { activeEdition, parseArticles, searchLaws, exportLawDataset, parseLawDataset } from '../lib/law-core.mjs';
 import { escapeHtml as e } from '../lib/sites.mjs';
@@ -10,7 +12,7 @@ const excerpt=(text,n=350)=>text.length>n?text.slice(0,n).trim()+'…':text;
 const link=(url,title)=>url?`<a href="${e(url)}" target="_blank" rel="noopener noreferrer">${e(title)} ↗</a>`:'';
 function lawDialog(title,body,formType,recordId='',other=''){
  const old=document.getElementById('law-dialog');if(old?.open)old.close();old?.remove();
- const element=document.createElement('dialog');element.id='law-dialog';element.innerHTML=`<form id="law-form"><h2>${e(title)}</h2><input type="hidden" name="formType" value="${e(formType)}"><input type="hidden" name="recordId" value="${e(recordId)}">${other}${body}<div class="dialog-actions"><button type="button" class="button secondary" data-law-action="close">Отмена</button><button type="submit" class="button primary">Сохранить</button></div></form>`;document.body.append(element);element.showModal();element.addEventListener('close',()=>element.remove(),{once:true});element.querySelector('input:not([type=hidden]),textarea')?.focus();return element;
+ const element=document.createElement('dialog');element.id='law-dialog';replaceHtml(element, `<form id="law-form"><h2>${e(title)}</h2><input type="hidden" name="formType" value="${e(formType)}"><input type="hidden" name="recordId" value="${e(recordId)}">${other}${body}<div class="dialog-actions"><button type="button" class="button secondary" data-law-action="close">Отмена</button><button type="submit" class="button primary">Сохранить</button></div></form>`);document.body.append(element);element.showModal();element.addEventListener('close',()=>element.remove(),{once:true});element.querySelector('input:not([type=hidden]),textarea')?.focus();return element;
 }
 function textField(name,label,value='',extra=''){return `<label class="field">${label}<input name="${name}" value="${e(String(value))}" ${extra}></label>`;}
 const lines=(book)=>activeEdition(book).articles.map(a=>`Статья ${a.key}. ${a.title}\n${a.text}`).join('\n\n');

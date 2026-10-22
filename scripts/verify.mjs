@@ -26,8 +26,12 @@ for(const browser of targets){
  if(browser==='chromium'||browser==='safari'){
    if(m.background.type!=='module'||!m.background.service_worker)throw Error(`${browser}: service worker must be ESM`);
    const worker=await readFile(resolve(output,m.background.service_worker),'utf8');
-   if(!worker.startsWith('import * as importedStore') || /\bimport\s*\(/.test(worker))throw Error(`${browser}: background has dynamic imports`);
- }else if(!m.background.scripts?.length)throw Error(`${browser}: missing background scripts`);
+   if(!worker.includes("import * as importedStore from '../lib/complaints-store.mjs'") || /\bimport\s*\(/.test(worker))throw Error(`${browser}: background has dynamic imports`);
+ }else {
+   if(!m.background.scripts?.length||m.background.type!=='module')throw Error(`${browser}: Firefox must use module background scripts`);
+   const worker=await readFile(resolve(output,m.background.scripts[0]),'utf8');
+   if(!worker.includes("import * as importedStore from '../lib/complaints-store.mjs'")||/\bimport\s*\(/.test(worker))throw Error(`${browser}: Firefox background has dynamic imports`);
+ }
  if(browser==='firefox-android'&&m.sidebar_action)throw Error('Firefox Android must not have desktop sidebar');
  if(browser==='safari'&&m.side_panel)throw Error('Safari should use workspace fallback');
  for(const path of [m.action.default_popup,'ui/workspace.html','ui/sidebar.html','ui/main.mjs','lib/recovery.mjs','lib/state.mjs','content/forum.js','content/evidence.js',...Object.values(m.icons)])await access(resolve(output,path));

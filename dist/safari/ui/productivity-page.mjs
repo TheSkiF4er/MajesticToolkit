@@ -1,3 +1,5 @@
+import '../lib/safe-dom.js';
+const { replaceHtml, insertHtml } = globalThis.MTSafeDOM;
 import {CATEGORIES,SECTION_FOR,searchRecords,answerLocal,excerpt} from '../lib/productivity-core.mjs';
 import {getLocalIndex,invalidateSearch} from '../lib/productivity-search.mjs';
 import {escapeHtml as e} from '../lib/sites.mjs';
@@ -22,7 +24,7 @@ function resultHtml(state){
   return `<p class="subtle">Совпадений: ${results.length}${results.length===40?' (первые 40)':''} · ${lastDuration.toLocaleString('ru-RU')} мс · индекс: ${rows.length} записей</p><div class="productivity-results">${results.length?results.map(row=>`<article class="productivity-hit" data-productivity-key="${esc(row.key)}"><div class="row spread"><strong>${esc(row.title)}</strong><span class="tag">${esc(CATEGORIES[row.type])}</span></div><p class="subtle">${esc(row.description)}</p><p class="productivity-excerpt">${esc(row.snippet)}</p><div class="row"><button class="button secondary" data-productivity-action="details" data-key="${esc(row.key)}">${details===row.key?'Скрыть':'Просмотреть'} запись</button><button class="button secondary" data-productivity-action="copy" data-key="${esc(row.key)}">Копировать</button><button class="button secondary" data-productivity-action="go" data-target="${esc(SECTION_FOR[row.type])}">Перейти в раздел</button></div>${details===row.key?`<div class="productivity-detail"><p>${esc(row.description)}</p><pre>${esc(row.body||row.title)}</pre>${row.url?`<button class="button secondary" data-productivity-action="source" data-key="${esc(row.key)}">Открыть источник ↗</button>`:''}</div>`:''}</article>`).join(''):'<div class="empty">Совпадений нет. Проверьте запрос, фильтры или профиль.</div>'}</div>`;
 }
 function answerHtml(){if(!answer)return '';return `<div class="productivity-answer"><pre>${esc(answer.answer)}</pre>${answer.refs.length?`<p class="subtle">Источники в локальном индексе: ${answer.refs.map(r=>esc(r.title)).join(' · ')}</p>`:''}</div>`;}
-export function renderSearchResults(state){const el=document.getElementById('productivity-results');if(el&&state)el.innerHTML=resultHtml(state);}
+export function renderSearchResults(state){const el=document.getElementById('productivity-results');if(el&&state)replaceHtml(el, resultHtml(state));}
 let searchTimer;
 export function setSearchQuery(value,state){
   query=String(value).slice(0,500);details='';clearTimeout(searchTimer);
@@ -33,7 +35,7 @@ export function setSearchScope(value,state){allProfiles=Boolean(value);details='
 export function searchFocus(){const input=document.getElementById('productivity-search');input?.focus();input?.select();}
 export async function handleProductivityAction(btn,state,navigate,feedback){
   const action=btn.dataset.productivityAction;
-  if(action==='clear-assistant'){answer=null;const el=document.getElementById('productivity-answer');if(el)el.innerHTML='';const input=document.getElementById('productivity-question');if(input)input.value='';return;}
+  if(action==='clear-assistant'){answer=null;const el=document.getElementById('productivity-answer');if(el)replaceHtml(el, '');const input=document.getElementById('productivity-question');if(input)input.value='';return;}
   if(action==='reindex'){clearProductivityCache();await refreshProductivitySearch();feedback(`Индекс обновлён: ${rows.length} записей`);return;}
   if(action==='go'){navigate(btn.dataset.target);return;}
   const item=rows.find(r=>r.key===btn.dataset.key && (allProfiles||r.profileId===state.activeProfileId||r.profileId==='*'));
@@ -47,5 +49,5 @@ export async function handleProductivityAction(btn,state,navigate,feedback){
 }
 export async function answerProductivity(question,state){
   if(!loaded)await refreshProductivitySearch();answer=answerLocal(question,rows,state.activeProfileId);
-  const el=document.getElementById('productivity-answer');if(el)el.innerHTML=answerHtml();return answer;
+  const el=document.getElementById('productivity-answer');if(el)replaceHtml(el, answerHtml());return answer;
 }
