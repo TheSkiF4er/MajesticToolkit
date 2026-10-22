@@ -2,17 +2,15 @@
   "manifest_version": 3,
   "name": "MajesticToolkit",
   "short_name": "MajesticToolkit",
-  "description": "MajesticToolkit: форумы, жалобы, экономика, законы, документы и Google Workspace.",
+  "description": "MajesticToolkit для Safari: локальные инструменты RP, справочники, документы и экономика.",
   "version": "1.0.0",
   "permissions": [
     "storage",
     "activeTab",
     "scripting",
-    "sidePanel",
     "alarms",
     "notifications",
-    "unlimitedStorage",
-    "identity"
+    "unlimitedStorage"
   ],
   "optional_host_permissions": [
     "https://forum.majestic-rp.ru/*",

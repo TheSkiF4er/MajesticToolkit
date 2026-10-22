@@ -1,24 +1,30 @@
 name: Stable release checks
 on:
   push:
-    branches: [main]
     tags: ['v*']
-  pull_request:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  verify:
+  release-validation:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: npm run verify
-      - name: Artifact checksums
+      - name: Regression suite and deterministic packages
+        run: npm run verify
+      - name: Verify SHA-256 manifest
         run: cd release && sha256sum -c SHA256SUMS
-      - uses: actions/upload-artifact@v4
+      - name: Mozilla AMO lint
+        run: |
+          npm exec --yes --package=addons-linter@10.14.0 -- addons-linter release/MajesticToolkit-1.0.0-firefox.zip
+          npm exec --yes --package=addons-linter@10.14.0 -- addons-linter release/MajesticToolkit-1.0.0-firefox-android.zip
+      - name: Publish downloadable CI artifacts (not marketplace publication)
+        uses: actions/upload-artifact@v4
         with:
-          name: MajesticToolkit-1.0.0-builds
+          name: MajesticToolkit-1.0.0-release-${{ github.run_id }}
           path: release/
+          if-no-files-found: error

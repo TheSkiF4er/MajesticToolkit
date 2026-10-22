@@ -26,5 +26,12 @@ for(const row of index.artifacts){
   pos+=30+nameLen+extraLen+size;count++;
  }
  if(count!==row.files||manifest?.version!=='1.0.0')throw Error('ZIP manifest/file count mismatch: '+row.file);
+ if(row.file.includes('-firefox')) {
+   if(manifest.browser_specific_settings?.gecko?.id!=='majestictoolkit@theskif4er.github.io' ||
+      JSON.stringify(manifest.browser_specific_settings.gecko.data_collection_permissions?.required)!=='["none"]' ||
+      manifest.browser_specific_settings.gecko.data_collection_permissions?.optional?.length!==4)
+     throw Error('Firefox ZIP missing AMO privacy declaration / stable ID');
+ }
+
  console.log(`${row.file}: ${count} files verified, SHA256 ${row.sha256.slice(0,12)}…`);
 }

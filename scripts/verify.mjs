@@ -11,6 +11,17 @@ for(const browser of targets){
  if(m.manifest_version!==3 || m.version!=='1.0.0')throw Error(`${browser}: version / Manifest V3 invalid`);
  if(m.permissions.some(p=>!permissions.has(p)) || m.optional_host_permissions.length!==origins.size || m.optional_host_permissions.some(x=>!origins.has(x)))throw Error(`${browser}: expanded permissions`);
  if(m.host_permissions?.length)throw Error(`${browser}: unsolicited access to websites`);
+ if(browser.startsWith('firefox')) {
+   const gecko=m.browser_specific_settings?.gecko;
+   if(gecko?.id!=='majestictoolkit@theskif4er.github.io')throw Error('Firefox: incorrect add-on ID');
+   if(Number(gecko.strict_min_version)<140)throw Error('Firefox: built-in data consent requires 140+');
+   if(browser==='firefox-android' && Number(m.browser_specific_settings?.gecko_android?.strict_min_version)<142)throw Error('Firefox Android: built-in consent requires 142+');
+   const consent=gecko.data_collection_permissions;
+   const expected=['authenticationInfo','personallyIdentifyingInfo','personalCommunications','websiteContent'];
+   if(JSON.stringify(consent?.required)!==JSON.stringify(['none']) || JSON.stringify(consent?.optional)!==JSON.stringify(expected))throw Error('Firefox: incorrect optional data disclosure');
+   if(gecko.update_url)throw Error('AMO-hosted Firefox must use Mozilla updates');
+ }
+
  if(m.content_security_policy?.extension_pages?.includes('unsafe-eval'))throw Error(`${browser}: unsafe CSP`);
  if(browser==='chromium'||browser==='safari'){
    if(m.background.type!=='module'||!m.background.service_worker)throw Error(`${browser}: service worker must be ESM`);

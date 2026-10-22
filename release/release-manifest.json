@@ -5,26 +5,26 @@
   "artifacts": [
     {
       "file": "MajesticToolkit-1.0.0-chromium.zip",
-      "sha256": "ec919c314568a4d9aeeff86f40d5abdd72f321a3a8d8f6e05d72b2829bceb534",
-      "size": 134399,
+      "sha256": "bde752bcb0d978570f7c08ca148980f924fa42fc36cb0a9ffd529904f1a9346b",
+      "size": 134910,
       "files": 52
     },
     {
       "file": "MajesticToolkit-1.0.0-firefox.zip",
-      "sha256": "b39400e60454c5452100852b2238e1f977571ded42daf59e47d0139a064b2665",
-      "size": 134409,
+      "sha256": "b29ebbd43d12eacfe46c75751e2204eb863c72f40a6d8fc8a2b30000b0243dba",
+      "size": 135035,
       "files": 52
     },
     {
       "file": "MajesticToolkit-1.0.0-firefox-android.zip",
-      "sha256": "3816829d0b5ec4c438c4842026b5f0fd68096adf734b9c87907c38e50a20fe87",
-      "size": 134383,
+      "sha256": "861ff142096ce84405fd345cadc8c1bc523c8d0af3bfa850551e0bbaff94a5f9",
+      "size": 135014,
       "files": 52
     },
     {
       "file": "MajesticToolkit-1.0.0-safari.zip",
-      "sha256": "dfca8b7e064dcdcb885865dab88bd49494bf9a72ba717d7f1726218636012438",
-      "size": 134364,
+      "sha256": "67b6219b3524f1edbe49d8d102917d60ba7aaae0abbe0f7cb485fb7fc95261ae",
+      "size": 134883,
       "files": 52
     }
   ]

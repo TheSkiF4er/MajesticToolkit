@@ -24,6 +24,9 @@ cd release && sha256sum -c SHA256SUMS
 
 ## Публикация
 
+Проверка с Mozilla Add-ons Linter выполняется в GitHub Actions (`addons-linter@10.14.0`) после `npm run verify`. Без доступа к npm в локальной среде результат этого отдельного lint-гейта не подтверждён. См. [AMO_SUBMISSION.md](AMO_SUBMISSION.md).
+
+
 - Chrome Web Store: создать аккаунт разработчика, загрузить `chromium.zip`, предоставить privacy disclosure, скриншоты и пройти review.
 - Mozilla AMO: проверить стабильный Gecko ID, подписать `firefox.zip` через AMO; отдельно подготовить листинг для Android, если совместимость подтверждена.
 - Edge Add-ons: отдельный листинг и review с Chromium-пакетом.

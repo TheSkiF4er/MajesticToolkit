@@ -10,11 +10,10 @@ const staticBackground = `import * as importedStore from '../lib/complaints-stor
   .replace("const corePromise = import(api.runtime.getURL('lib/complaints-core.js')).then(() => globalThis.RPNComplaints);", 'const corePromise = Promise.resolve(globalThis.RPNComplaints);');
 if (staticBackground.includes('import(api.runtime.getURL(')) throw Error('Chromium service worker still has dynamic imports');
 for (const browser of ['chromium', 'firefox', 'firefox-android', 'safari']) {
-  const manifestBrowser = browser.startsWith('firefox') ? 'firefox' : 'chromium';
   const dest = resolve(outputRoot, browser);
   await mkdir(dest, {recursive:true});
   for (const part of ['lib','ui','content','background','assets','_locales']) await cp(resolve(root,'src',part),resolve(dest,part),{recursive:true});
-  const manifest = JSON.parse(await readFile(resolve(root,'manifests',`${manifestBrowser}.json`),'utf8'));
+  const manifest = JSON.parse(await readFile(resolve(root,'manifests',`${browser}.json`),'utf8'));
   if (manifest.version !== '1.0.0') throw Error('Manifest version is not 1.0.0');
   if (browser === 'firefox-android') delete manifest.sidebar_action;
   if (browser === 'safari') {

@@ -18,9 +18,18 @@ async function setSession(token){volatileToken=token;try {await api.storage.sess
 async function readSession(){if(volatileToken)return volatileToken;try{const s=await api.storage.session?.get(TOKEN_KEY);return s?.[TOKEN_KEY]||null;}catch{return null;}}
 export async function disconnectGoogle(){volatileToken=null;try{await api.storage.session?.remove(TOKEN_KEY);}catch{/* noop */}}
 export async function googleStatus(){const session=await readSession();return Boolean(session?.access_token&&session.expires_at>Date.now()+60000);}
+// Firefox 140+/Android 142+: optional collection must be explicitly allowed before
+// user-selected documents, authentication and exports leave the local browser.
+// Other browsers receive their ordinary optional host permission prompt.
+export const GOOGLE_DATA_COLLECTION=['authenticationInfo','personallyIdentifyingInfo','personalCommunications','websiteContent'];
+export function googlePermissionRequest(){
+  const declared=api.runtime?.getManifest?.()?.browser_specific_settings?.gecko?.data_collection_permissions;
+  return declared?.optional ? {origins,data_collection:GOOGLE_DATA_COLLECTION} : {origins};
+}
 export async function connectGoogle(){
-  // Permission prompt must be invoked directly from a user click, before other awaits.
-  if(!await api.permissions.request({origins}))throw Error('Доступ к Google APIs не предоставлен');
+  // Request both host and data consent from the original user click. No Google
+  // traffic (including the OAuth flow) is started until both are granted.
+  if(!await api.permissions.request(googlePermissionRequest()))throw Error('Доступ к Google APIs или согласие на передачу данных не предоставлены');
   const clientId=await getClientId();if(!clientId)throw Error('Укажите Google OAuth Client ID');
   const redirect=redirectUri();
   const {state,verifier,challenge}=await cryptoChallenge();
