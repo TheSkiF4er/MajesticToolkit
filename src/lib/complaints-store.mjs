@@ -48,6 +48,14 @@ export function removeComplaintEvidence(id, evidenceId) {
     return item;
   });
 }
+// Serialized with evidence and status mutations to avoid lost workflow events.
+export function mutateCaseWorkflow(id,action,payload={}) {
+  return enqueue(async()=>{
+    const updated=C.workflowAction(await getCase(id),action,payload);
+    await api.storage.local.set({[CASE_PREFIX+id]:updated});
+    return updated;
+  });
+}
 export function removeComplaint(id) { return enqueue(async () => { await getCase(id); await api.storage.local.remove(CASE_PREFIX + id); }); }
 export function observeThread(url, postId) {
   return enqueue(async () => {

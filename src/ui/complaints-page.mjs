@@ -33,12 +33,26 @@ function linkForEvidence(item) {
 function evidenceList(c) {
   return c.evidence.length ? c.evidence.map(it => `<div class="case-evidence"><div><strong>${esc(it.title)}</strong> ${it.seconds !== null ? `<span class="tag">${C.timecode(it.seconds)}</span>` : ''}<p class="subtle">${esc(it.note)}</p></div><div class="row"><button class="button secondary" data-url="${esc(linkForEvidence(it))}">Открыть ↗</button><button class="button danger" data-case-action="delete-evidence" data-id="${esc(c.id)}" data-evidence-id="${esc(it.id)}">Удалить</button></div></div>`).join('') : '<p class="subtle">Доказательства пока не прикреплены.</p>';
 }
+function workflowPanel(c){
+  const w=c.workflow,stage=w.stage,stages=C.WORKFLOW_STAGES,index=stages.indexOf(stage);
+  const label=C.WORKFLOW_LABELS[stage],done=w.checks[stage]??false;
+  const checks=stages.slice(0,-1).map((name,i)=>`<div class="workflow-check ${i>index?'workflow-locked':''}"><span>${i+1}. ${esc(C.WORKFLOW_LABELS[name])}</span><label class="check"><input type="checkbox" data-case-workflow-check="${esc(name)}" data-id="${esc(c.id)}" ${w.checks[name]?'checked':''} ${i>index?'disabled':''}> ${esc(C.WORKFLOW_CHECKS[name])}</label></div>`).join('');
+  const history=w.history.slice(-30).reverse().map(row=>`<li><small>${esc(safeDate(row.at))}</small> · ${esc(row.text)}</li>`).join('');
+  return `<section class="workflow-panel"><div class="row spread"><h3>Процесс рассмотрения · ${esc(label)}</h3><span class="tag">Шаг ${index+1}/${stages.length}</span></div><p class="subtle">Каждый этап выполняется вручную. Отметки означают проверку пользователем; MajesticToolkit не устанавливает обстоятельства автоматически.</p>
+    <div class="workflow-checks">${checks}</div>
+    <div class="row"><button class="button secondary" data-case-action="workflow-previous" data-id="${esc(c.id)}" ${index===0?'disabled':''}>← Назад</button><button class="button primary" data-case-action="workflow-next" data-id="${esc(c.id)}" ${index===stages.length-1||!done?'disabled':''}>${index===stages.length-2?'Завершить рассмотрение':'Следующий этап →'}</button></div>
+    <div class="workflow-draft"><label class="field">Тип проекта решения<select data-case-decision="${esc(c.id)}">${Object.entries(C.DECISION_KINDS).map(([key,title])=>`<option value="${esc(key)}" ${key===w.decision?'selected':''}>${esc(title)}</option>`).join('')}</select></label><p class="subtle">Сначала выберите тип решения, затем создайте черновик. Текст необходимо проверить и дополнить самостоятельно.</p><div class="row"><button class="button secondary" data-case-action="workflow-generate" data-id="${esc(c.id)}">Создать черновик решения</button><button class="button secondary" data-case-action="workflow-copy" data-id="${esc(c.id)}">Скопировать журнал</button></div></div>
+    <label class="field">Запись в журнале<textarea data-case-note="${esc(c.id)}" maxlength="500" rows="2" placeholder="Результат проверки, причина задержки, следующий шаг"></textarea></label><div class="row"><button class="button secondary" data-case-action="workflow-note" data-id="${esc(c.id)}">Добавить запись</button></div>
+    <details><summary>Журнал действий (${w.history.length})</summary><ol class="workflow-history">${history||'<li>Событий пока нет</li>'}</ol></details>
+    <p class="subtle">Уведомления о сроках формируются для открытых жалоб (за сутки, час, 15 минут и после истечения срока) при запущенном браузере. Рассылка и модерация на форуме не выполняются.</p>
+  </section>`;
+}
 export function complaintsSection(state) {
   const own = cases.filter(c => c.profileId === state.activeProfileId);
   const rows = visible(state);
   const totals = {count:own.length, open:own.filter(c => c.status !== 'done').length, unread:own.filter(c => c.unread).length, due:own.filter(c => c.deadline && c.status !== 'done' && Date.parse(c.deadline) <= Date.now()+15*60000).length};
-  return `<div class="stack"><section class="card"><div class="row spread"><div><h3>Complaint Manager 0.3.0</h3><p class="lead">Жалобы, черновики и доказательства для активного профиля. Данные сохраняются только в вашем браузере.</p></div><button class="button primary" data-case-action="create">+ Добавить жалобу</button></div><div class="case-stats"><div><strong>${totals.count}</strong><small>Всего</small></div><div><strong>${totals.open}</strong><small>Активных</small></div><div><strong>${totals.unread}</strong><small>Новые сообщения</small></div><div><strong>${totals.due}</strong><small>Срок ≤15 мин</small></div></div><div class="row"><input style="flex:1;min-width:185px" id="complaint-search" type="search" aria-label="Поиск жалоб" placeholder="Найти жалобу" value="${esc(query)}"><select id="complaint-filter" aria-label="Статус жалоб" style="max-width:165px"><option value="all">Все статусы</option>${Object.entries(LABELS).map(([id,label]) => `<option value="${id}" ${filter === id ? 'selected':''}>${label}</option>`).join('')}<option value="unread" ${filter === 'unread'?'selected':''}>Непрочитанные</option></select><button class="button secondary" data-case-action="scan">Проверить открытые вкладки</button></div><p class="subtle">Проверка выполняется при открытии темы и периодически в открытых вкладках форума. В закрытом браузере и для закрытых вкладок мониторинг не работает.</p></section>
-  <div class="stack" id="complaint-list">${rows.length ? rows.map(c => `<article class="card case-card" data-case-card data-filter="${esc([c.title,c.url,c.note,c.draft].join(' ').toLocaleLowerCase('ru'))}" data-status="${esc(c.status)}" data-unread="${c.unread}"><div class="row spread"><div><h3>${esc(c.title)} ${c.unread ? '<span class="tag case-soon">Есть новые сообщения</span>' : ''}</h3><p class="subtle">${esc(c.url)}</p></div><div class="row"><span class="tag">${LABELS[c.status]}</span>${deadline(c)}</div></div><p class="case-note">${esc(c.note || 'Нет заметок')}</p><div class="row"><button class="button secondary" data-url="${esc(c.url)}">Открыть тему ↗</button><button class="button secondary" data-case-action="edit" data-id="${esc(c.id)}">Редактировать</button><button class="button secondary" data-case-action="draft" data-id="${esc(c.id)}">Черновик</button><button class="button secondary" data-case-action="evidence" data-id="${esc(c.id)}">Доказательства (${c.evidence.length})</button>${c.unread ? `<button class="button secondary" data-case-action="read" data-id="${esc(c.id)}">Прочитано</button>` : ''}<button class="button danger" data-case-action="delete" data-id="${esc(c.id)}">Удалить</button></div>${selected === c.id ? `<div class="case-expanded"><label class="field">Черновик ответа (сохраняется автоматически)<textarea data-case-draft="${esc(c.id)}" maxlength="30000" rows="7" placeholder="Ваш ответ на жалобу…">${esc(c.draft)}</textarea></label><div class="row"><button class="button secondary" data-case-action="save-draft" data-id="${esc(c.id)}">Сохранить сейчас</button><button class="button secondary" data-case-action="copy-draft" data-id="${esc(c.id)}">Копировать текст</button><button class="button primary" data-case-action="new-evidence" data-id="${esc(c.id)}">+ Доказательство</button></div><h3>Доказательства</h3>${evidenceList(c)}</div>` : ''}</article>`).join('') : '<section class="card empty">Жалобы не найдены. Добавьте тему форума или измените фильтр.</section>'}</div></div>`;
+  return `<div class="stack"><section class="card"><div class="row spread"><div><h3>Complaint Manager 1.4.0</h3><p class="lead">Жалобы, черновики и доказательства для активного профиля. Данные сохраняются только в вашем браузере.</p></div><button class="button primary" data-case-action="create">+ Добавить жалобу</button></div><div class="case-stats"><div><strong>${totals.count}</strong><small>Всего</small></div><div><strong>${totals.open}</strong><small>Активных</small></div><div><strong>${totals.unread}</strong><small>Новые сообщения</small></div><div><strong>${totals.due}</strong><small>Срок ≤15 мин</small></div></div><div class="row"><input style="flex:1;min-width:185px" id="complaint-search" type="search" aria-label="Поиск жалоб" placeholder="Найти жалобу" value="${esc(query)}"><select id="complaint-filter" aria-label="Статус жалоб" style="max-width:165px"><option value="all">Все статусы</option>${Object.entries(LABELS).map(([id,label]) => `<option value="${id}" ${filter === id ? 'selected':''}>${label}</option>`).join('')}<option value="unread" ${filter === 'unread'?'selected':''}>Непрочитанные</option></select><button class="button secondary" data-case-action="scan">Проверить открытые вкладки</button></div><p class="subtle">Проверка выполняется при открытии темы и периодически в открытых вкладках форума. В закрытом браузере и для закрытых вкладок мониторинг не работает.</p></section>
+  <div class="stack" id="complaint-list">${rows.length ? rows.map(c => `<article class="card case-card" data-case-card data-filter="${esc([c.title,c.url,c.note,c.draft].join(' ').toLocaleLowerCase('ru'))}" data-status="${esc(c.status)}" data-unread="${c.unread}"><div class="row spread"><div><h3>${esc(c.title)} ${c.unread ? '<span class="tag case-soon">Есть новые сообщения</span>' : ''}</h3><p class="subtle">${esc(c.url)}</p></div><div class="row"><span class="tag">${LABELS[c.status]}</span>${deadline(c)}</div></div><p class="case-note">${esc(c.note || 'Нет заметок')}</p><div class="row"><button class="button secondary" data-url="${esc(c.url)}">Открыть тему ↗</button><button class="button secondary" data-case-action="edit" data-id="${esc(c.id)}">Редактировать</button><button class="button secondary" data-case-action="draft" data-id="${esc(c.id)}">Черновик</button><button class="button secondary" data-case-action="evidence" data-id="${esc(c.id)}">Доказательства (${c.evidence.length})</button><button class="button secondary" data-case-action="workflow-open" data-id="${esc(c.id)}">Этапы / журнал</button>${c.unread ? `<button class="button secondary" data-case-action="read" data-id="${esc(c.id)}">Прочитано</button>` : ''}<button class="button danger" data-case-action="delete" data-id="${esc(c.id)}">Удалить</button></div>${selected === c.id ? `<div class="case-expanded"><label class="field">Черновик ответа (сохраняется автоматически)<textarea data-case-draft="${esc(c.id)}" maxlength="30000" rows="7" placeholder="Ваш ответ на жалобу…">${esc(c.draft)}</textarea></label><div class="row"><button class="button secondary" data-case-action="save-draft" data-id="${esc(c.id)}">Сохранить сейчас</button><button class="button secondary" data-case-action="copy-draft" data-id="${esc(c.id)}">Копировать текст</button><button class="button primary" data-case-action="new-evidence" data-id="${esc(c.id)}">+ Доказательство</button></div><h3>Доказательства</h3>${evidenceList(c)}${workflowPanel(c)}</div>` : ''}</article>`).join('') : '<section class="card empty">Жалобы не найдены. Добавьте тему форума или измените фильтр.</section>'}</div></div>`;
 }
 function createDialog() {
   let dlg = document.getElementById('complaint-dialog');
@@ -77,6 +91,7 @@ export async function handleComplaintAction(button, state, render, feedback) {
     form.elements.title.value = item?.title || '';
     form.elements.url.value = item?.url || '';
     form.elements.status.value = item?.status || 'new';
+    form.elements.status.querySelector('option[value=done]').disabled = item?.workflow.stage!=='closed';
     form.elements.deadline.value = formatDatetime(item?.deadline);
     form.elements.watching.checked = item?.watching ?? true;
     form.elements.note.value = item?.note ?? '';
@@ -92,14 +107,38 @@ export async function handleComplaintAction(button, state, render, feedback) {
     await refreshComplaints(); render(); feedback(`Проверено открытых вкладок: ${response.value ?? 0}`); return;
   }
   const item = cases.find(c => c.id === id);
-  if (!item) throw Error('Жалоба не найдена');
+  if (!item || item.profileId!==state.activeProfileId) throw Error('Жалоба не найдена в текущем профиле');
   if (action === 'delete') {
     if (!confirm(`Удалить «${item.title}», черновик и ${item.evidence.length} доказательств?`)) return;
     await request('delete', {id}); if (selected === id) selected = null;
     await refreshComplaints(); render(); feedback('Жалоба удалена'); return;
   }
   if (action === 'read') { await request('update', {id, patch:{unread:false}}); await refreshComplaints(); render(); feedback('Отмечено как прочитанное'); return; }
-  if (action === 'draft' || action === 'evidence') {
+  if(action?.startsWith('workflow-') && action!=='workflow-open'){
+    await flushDraftIfDirty(item);
+    if(action==='workflow-generate'){
+      const liveDraft=document.querySelector(`[data-case-draft="${CSS.escape(id)}"]`)?.value ?? item.draft;
+      if(liveDraft && !confirm('Заменить существующий черновик новым шаблоном решения?'))return;
+      const draft=C.draftDecision(item);
+      await request('update',{id,patch:{draft}});
+      await refreshComplaints();selected=id;render();feedback('Черновик создан. Проверьте все факты и нормы перед использованием.');return;
+    }
+    if(action==='workflow-copy'){
+      await navigator.clipboard.writeText(item.workflow.history.map(row=>`${safeDate(row.at)} — ${row.text}`).join('\n'));
+      feedback('Журнал скопирован');return;
+    }
+    if(action==='workflow-note'){
+      const input=document.querySelector(`[data-case-note="${CSS.escape(id)}"]`);
+      await request('workflow',{id,workflowAction:'note',payload:{text:input?.value||''}});
+    } else {
+      const previous=action==='workflow-previous';
+      const confirmFinish=action==='workflow-next'&&item.workflow.stage==='decision';
+      if(confirmFinish&&!confirm('Завершить рассмотрение? Действие изменит статус жалобы, но ничего не отправит на форум.'))return;
+      await request('workflow',{id,workflowAction:previous?'previous':'next',payload:{confirm:confirmFinish}});
+    }
+    await refreshComplaints();selected=id;render();feedback('Процесс рассмотрения обновлён');return;
+  }
+  if (action === 'draft' || action === 'evidence' || action === 'workflow-open') {
     selected = selected === id ? null : id; render();
     if (selected && action === 'draft') document.querySelector(`[data-case-draft="${CSS.escape(id)}"]`)?.focus();
     return;
@@ -117,6 +156,12 @@ export async function handleComplaintAction(button, state, render, feedback) {
     const value = document.querySelector(`[data-case-draft="${CSS.escape(id)}"]`)?.value ?? item.draft;
     await navigator.clipboard.writeText(value); feedback('Черновик скопирован'); return;
   }
+}
+async function flushDraftIfDirty(item){
+  const area=document.querySelector(`[data-case-draft="${CSS.escape(item.id)}"]`);
+  if(!area || area.value===item.draft)return;
+  clearTimeout(draftTimer);
+  await request('update',{id:item.id,patch:{draft:area.value}});
 }
 async function saveDraft(id) {
   const area = document.querySelector(`[data-case-draft="${CSS.escape(id)}"]`);
@@ -147,4 +192,17 @@ export async function handleComplaintSubmit(event, state, render, feedback) {
     document.getElementById('evidence-dialog')?.close(); selected = caseId;
     await refreshComplaints(); render(); feedback('Доказательство прикреплено');
   }
+}
+
+export async function handleComplaintWorkflowChange(input,state,render,feedback){
+  const id=input.dataset.caseWorkflowCheck||input.dataset.caseDecision;
+  if(!id)return false;
+  const item=cases.find(c=>c.id===input.dataset.id||c.id===input.dataset.caseDecision);
+  if(!item||item.profileId!==state.activeProfileId)throw Error('Жалоба не найдена в активном профиле');
+  const check=Boolean(input.dataset.caseWorkflowCheck);
+  try{
+    await flushDraftIfDirty(item);
+    await request('workflow',{id:item.id,workflowAction:check?'check':'decision',payload:check?{stage:input.dataset.caseWorkflowCheck,done:input.checked}:{kind:input.value}});
+  }catch(error){if(check)input.checked=!input.checked;throw error;}
+  await refreshComplaints();selected=item.id;render();feedback('Настройка рассмотрения сохранена');return true;
 }

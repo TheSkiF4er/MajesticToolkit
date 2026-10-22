@@ -60,17 +60,21 @@ async function scanTabs() {
   return count;
 }
 async function checkDeadlines() {
-  const store = await storePromise;
-  const now = Date.now();
-  const current = (await store.listCases()).filter(c => c.deadline && c.status !== 'done' && Date.parse(c.deadline) <= now + 15 * 60000);
-  for (const item of current) {
-    const key = `rpnDeadlineSentV3:${item.id}`;
-    const saved = (await api.storage.local.get(key))[key];
-    if (saved === item.deadline) continue;
+  const store=await storePromise;
+  const core=await corePromise;
+  const now=Date.now();
+  const levels={ '24h':'менее суток до срока','1h':'менее часа до срока','15m':'менее 15 минут до срока',overdue:'срок истёк' };
+  for(const item of await store.listCases()){
+    if(!item.deadline||item.status==='done')continue;
+    const tier=core.deadlineTier(item.deadline,now);
+    if(!tier)continue;
+    const key=`majesticDeadlineV14:${item.id}`;
+    const saved=(await api.storage.local.get(key))[key];
+    if(saved?.deadline===item.deadline && saved?.tier===tier)continue;
     try {
-      await api.notifications.create(`rpn_deadline_${item.id}`, {type:'basic', iconUrl:'assets/icon-128.png',title:'MajesticToolkit · Срок жалобы',message:`${item.title.slice(0,110)}: ${Date.parse(item.deadline) <= now ? 'срок прошёл' : 'менее 15 минут до срока'}.`});
-      await api.storage.local.set({[key]:item.deadline});
-    } catch(error) { console.warn('MajesticToolkit: уведомление о сроке',error); }
+      await api.notifications.create(`rpn_deadline_${item.id}`,{type:'basic',iconUrl:'assets/icon-128.png',title:'MajesticToolkit · Срок жалобы',message:`${item.title.slice(0,110)}: ${levels[tier]}.`});
+      await api.storage.local.set({[key]:{deadline:item.deadline,tier}});
+    }catch(error){console.warn('MajesticToolkit: уведомление о сроке',error);}
   }
 }
 async function tick() { try { await scanTabs(); await checkDeadlines(); } catch(error) { console.warn('MajesticToolkit: периодическая проверка',error); } }
@@ -171,6 +175,7 @@ api.runtime.onMessage.addListener((message,sender,sendResponse) => {
         case 'addEvidence': return store.addComplaintEvidence(message.id,message.input);
         case 'removeEvidence': return store.removeComplaintEvidence(message.id,message.evidenceId);
         case 'replace': return store.replaceCases(message.cases);
+        case 'workflow': return store.mutateCaseWorkflow(message.id,message.workflowAction,message.payload);
         default: throw Error('Неизвестное действие');
       }
     }

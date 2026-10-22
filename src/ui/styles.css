@@ -133,3 +133,12 @@ textarea{width:100%;resize:vertical;background:var(--panel);color:var(--ink);bor
 
 /* Knowledge Workspace 1.3.0 */
 .knowledge-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,290px),1fr));gap:12px}.knowledge-item,.knowledge-relation{border:1px solid var(--stroke);border-radius:12px;padding:12px;min-width:0;overflow-wrap:anywhere}.knowledge-item .row,.knowledge-relation .row,.knowledge-form{flex-wrap:wrap}.knowledge-relations{display:grid;gap:12px}.knowledge-relation{display:flex;align-items:center;justify-content:space-between;gap:15px}.knowledge-relation p{white-space:pre-wrap}.knowledge-form>.field{min-width:min(100%,210px);flex:1}.knowledge-form button{align-self:end}.knowledge-item .subtle{margin:6px 0 12px}@media(max-width:700px){.knowledge-relation{flex-direction:column;align-items:stretch}.knowledge-form{display:grid;grid-template-columns:minmax(0,1fr)}}
+
+/* Complaint review workflow 1.4.0 */
+.workflow-panel{display:grid;gap:12px;background:var(--sub);padding:15px;border:1px solid var(--stroke);border-radius:12px}
+.workflow-panel h3{margin:0}.workflow-checks{display:grid;gap:8px}
+.workflow-check{display:grid;gap:6px;padding:9px 11px;border:1px solid var(--stroke);border-radius:9px;background:var(--panel)}
+.workflow-check>span{font-weight:700}.workflow-check .check{font-weight:400;align-items:flex-start;line-height:1.5}
+.workflow-locked{opacity:.58}.workflow-panel textarea{min-height:66px}.workflow-panel details{border-top:1px solid var(--stroke);padding-top:10px}
+.workflow-panel summary{cursor:pointer;font-weight:650}.workflow-history{max-height:230px;overflow-y:auto;overflow-wrap:anywhere;padding-left:22px;line-height:1.7}
+.workflow-draft{display:grid;gap:7px;border-top:1px solid var(--stroke);padding-top:13px}

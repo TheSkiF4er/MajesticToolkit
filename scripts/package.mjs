@@ -19,9 +19,9 @@ function zip(entries){let offset=0;const local=[],central=[];for(const [name,con
 await mkdir(release,{recursive:true});const summary=[];
 for(const browser of ['chromium','firefox','firefox-android','safari']){
  const folder=resolve(root,'dist',browser),files=(await walk(folder)).sort();const entries=await Promise.all(files.map(async path=>[relative(folder,path).split(sep).join('/'),await readFile(path)]));
- const blob=zip(entries);const filename=`MajesticToolkit-1.3.0-${browser}.zip`;await writeFile(resolve(release,filename),blob);
+ const blob=zip(entries);const filename=`MajesticToolkit-1.4.0-${browser}.zip`;await writeFile(resolve(release,filename),blob);
  summary.push({file:filename,sha256:createHash('sha256').update(blob).digest('hex'),size:blob.length,files:entries.length});
  console.log(`${filename}: ${entries.length} files, ${blob.length} bytes`);
 }
 await writeFile(resolve(release,'SHA256SUMS'),summary.map(r=>`${r.sha256}  ${r.file}`).join('\n')+'\n');
-await writeFile(resolve(release,'release-manifest.json'),JSON.stringify({product:'MajesticToolkit',version:'1.3.0',generatedBy:'scripts/package.mjs',artifacts:summary},null,2)+'\n');
+await writeFile(resolve(release,'release-manifest.json'),JSON.stringify({product:'MajesticToolkit',version:'1.4.0',generatedBy:'scripts/package.mjs',artifacts:summary},null,2)+'\n');
