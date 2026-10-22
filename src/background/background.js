@@ -1,6 +1,7 @@
 /* MajesticToolkit background: static ES module dependencies for all browsers. */
 import * as importedStore from '../lib/complaints-store.mjs';
 import * as importedForum from '../lib/forum-store.mjs';
+import * as importedMonitor from '../lib/monitor-store.mjs';
 import * as importedXenForo from '../lib/xenforo-store.mjs';
 import '../lib/xenforo-core.js';
 import '../lib/complaints-core.js';
@@ -118,6 +119,18 @@ api.runtime.onMessage.addListener((message,sender,sendResponse) => {
       const links = (await importedXenForo.listXenForoLinks()).filter(x=>x.profileId==='*'||x.profileId===profile.id);
       return {profile:{id:profile.id,name:profile.name,project:profile.project,server:profile.server},templates,links};
     }
+    if (message.type === 'MAJESTIC_SAVE_PUBLIC_PLAYER') {
+      if(!isForum||!sender.url)throw Error('Запрос принят только с поддерживаемого форума');
+      const profile=(await api.storage.local.get('rpNexusStateV1')).rpNexusStateV1;
+      const linked=globalThis.MTXenForo.matchingProfile(profile?.profiles,profile?.activeProfileId,sender.url);
+      if(!linked)throw Error('Не найден профиль для этого форума');
+      const card=message.card;
+      const actual=new URL(sender.url),target=new URL(card?.url);
+      if(actual.origin!==target.origin||actual.pathname!==target.pathname||!/^\/members\/[^/]+/i.test(actual.pathname))throw Error('Сохранять можно только открытую публичную страницу пользователя');
+      const validated={...card,profileId:linked.id,url:actual.origin+actual.pathname,capturedAt:new Date().toISOString()};
+      await importedMonitor.storePlayer(validated);
+      return {saved:true,name:validated.name};
+    }
     if (message.type === 'RP_NEXUS_VIDEO_CASES') {
       if (!isVideo) throw Error('Недоверенный источник');
       const state = (await api.storage.local.get('rpNexusStateV1')).rpNexusStateV1;
@@ -163,7 +176,7 @@ api.runtime.onMessage.addListener((message,sender,sendResponse) => {
     }
     throw Error('Неизвестный запрос');
   }
-  if (!['RP_NEXUS_OPEN_WORKSPACE','RP_NEXUS_SCAN_OPEN_TABS','RP_NEXUS_TRACK_CURRENT_THREAD','RP_NEXUS_THREAD_OBSERVED','RP_NEXUS_VIDEO_ADD','RP_NEXUS_CASE_MUTATE','RP_NEXUS_FORUM_DATA','RP_NEXUS_VIDEO_CASES'].includes(message.type)) return;
+  if (!['RP_NEXUS_OPEN_WORKSPACE','RP_NEXUS_SCAN_OPEN_TABS','RP_NEXUS_TRACK_CURRENT_THREAD','RP_NEXUS_THREAD_OBSERVED','RP_NEXUS_VIDEO_ADD','RP_NEXUS_CASE_MUTATE','RP_NEXUS_FORUM_DATA','RP_NEXUS_VIDEO_CASES','MAJESTIC_SAVE_PUBLIC_PLAYER'].includes(message.type)) return;
   void task().then(value => sendResponse({ok:true,value})).catch(error => sendResponse({ok:false,error:error?.message || 'Ошибка'}));
   return true;
 });

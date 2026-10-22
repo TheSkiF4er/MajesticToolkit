@@ -194,7 +194,7 @@ const { replaceHtml, htmlFragment } = globalThis.MTSafeDOM;
       <div class="bar"><input class="field" id="rpn-nickname" placeholder="{{nickname}} (необязательно)" maxlength="200" style="width:50%;margin:3px 0"><input class="field" id="rpn-reason" placeholder="{{reason}}" maxlength="200" style="width:50%;margin:3px 0"></div>
       <div id="rpn-template-list"></div>
       <div class="section"><div class="bar"><b>Пользовательские ссылки</b><span class="sub">${customLinks.filter(x=>x.profileId==='*'||x.profileId===profile?.id).length}</span></div><div class="actions">${customLinks.filter(x=>x.profileId==='*'||x.profileId===profile?.id).slice(0,15).map(x=>`<button class="btn secondary" data-link="${C.esc(x.id)}">${C.esc(x.title)}</button>`).join('')||'<span class="sub">Добавьте ссылки в рабочем пространстве.</span>'}</div></div>
-      <div class="section"><div class="bar"><b>Публичный профиль XenForo</b></div>${publicMemberCard()}</div>
+      <div class="section"><div class="bar"><b>Публичный профиль XenForo</b></div>${publicMemberCard()}${XF.memberProfile(document,location.href)?'<button class="btn secondary" data-act="save-member">Сохранить карточку</button>':''}</div>
       <div class="section"><div class="bar"><b>Управление темой</b><span class="sub">Только штатные функции форума</span></div><div class="actions"><button class="btn secondary" data-act="close">Закрыть / открыть</button><button class="btn secondary" data-act="move">Переместить</button></div></div>
       <div class="section"><div class="bar"><b>Жалобы и доказательства</b></div><div class="actions"><button class="btn" data-act="track">Отслеживать текущую тему</button><button class="btn secondary" data-act="complaints">Все жалобы ↗</button></div></div><div class="actions"><button class="btn secondary" data-act="workspace">Все шаблоны ↗</button><button class="btn secondary" data-act="hide">Скрыть</button></div><div class="msg" role="status" aria-live="polite"></div>`);
     renderList('');
@@ -227,6 +227,12 @@ const { replaceHtml, htmlFragment } = globalThis.MTSafeDOM;
     if (b.dataset.copy) { const t = templates.find(x => x.id === b.dataset.copy); if (!t) return;
       const body = C.interpolate(t.text, makeVariables(findEditor() ?? document.body));
       void navigator.clipboard.writeText(body).then(() => notify('Текст скопирован')).catch(() => notify('Копирование запрещено браузером')); return;
+    }
+    if (b.dataset.act === 'save-member') {
+      const card=XF.memberProfile(document,location.href);
+      if(!card){notify('Откройте публичную страницу /members/');return;}
+      void api.runtime.sendMessage({type:'MAJESTIC_SAVE_PUBLIC_PLAYER',card}).then(result=>notify(result?.ok?'Публичная карточка сохранена в «Серверы и игроки».':(result?.error||'Не удалось сохранить карточку'))).catch(err=>notify(err.message));
+      return;
     }
     if (b.dataset.act === 'workspace') { try { api.runtime.sendMessage({ type: 'RP_NEXUS_OPEN_WORKSPACE', view: 'forum' }); } catch { notify('Не удалось открыть настройки'); } return; }
     if (b.dataset.act === 'track') {

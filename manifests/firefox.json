@@ -2,8 +2,8 @@
   "manifest_version": 3,
   "name": "MajesticToolkit",
   "short_name": "MajesticToolkit",
-  "description": "MajesticToolkit: XenForo, биндер, навигация, жалобы, законы, документы и Google.",
-  "version": "1.1.0",
+  "description": "MajesticToolkit: XenForo, мониторинг серверов, публичные профили, документы и Google.",
+  "version": "1.2.0",
   "permissions": [
     "storage",
     "activeTab",
@@ -22,7 +22,8 @@
     "https://www.googleapis.com/*",
     "https://docs.googleapis.com/*",
     "https://sheets.googleapis.com/*",
-    "https://oauth2.googleapis.com/*"
+    "https://oauth2.googleapis.com/*",
+    "https://api.majestic-files.com/*"
   ],
   "action": {
     "default_title": "MajesticToolkit",

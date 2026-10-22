@@ -1,7 +1,7 @@
 /** Crash-survivable rollback of extension-owned local records. Never includes OAuth/session tokens. */
 export const RECOVERY_KEY = 'majesticToolkitRecoveryV1';
 export const RECOVERY_LIMIT = 20 * 1024 * 1024;
-const OWNED_KEYS = new Set(['rpNexusStateV1', 'majesticToolkitProductivityV9', 'majesticToolkit:externalLinks:v8']);
+const OWNED_KEYS = new Set(['rpNexusStateV1', 'majesticToolkitProductivityV9', 'majesticToolkit:externalLinks:v8', 'majesticToolkitMonitorV12']);
 const OWNED_PREFIXES = ['rpnForumTemplateV2:', 'rpnComplaintV3:', 'rpnEconomyV4:', 'majesticLawV5:', 'majesticGovernmentV6:', 'majesticDocumentV7:', 'majesticToolkitXfNavV11:'];
 export const isOwnedKey = key => OWNED_KEYS.has(key) || OWNED_PREFIXES.some(prefix => key.startsWith(prefix));
 const serialize = value => JSON.stringify(value);
