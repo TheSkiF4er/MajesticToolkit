@@ -8,7 +8,21 @@ const read=async(url,fetcher=fetch)=>{
    if(!response.ok)throw Error(`Источник ответил HTTP ${response.status}`);
    const type=response.headers?.get?.('content-type')||'';
    if(type&&!/json/i.test(type))throw Error('Источник вернул не JSON');
-   const body=await response.text();if(body.length>1048576)throw Error('Ответ источника слишком большой');
+   const length=Number(response.headers?.get?.('content-length'));
+   if(Number.isFinite(length)&&length>1048576)throw Error('Ответ источника слишком большой');
+   let body;
+   if(response.body?.getReader){
+     const reader=response.body.getReader(),chunks=[];let total=0;
+     try{
+       while(true){const {done,value}=await reader.read();if(done)break;total+=value.byteLength;
+         if(total>1048576)throw Error('Ответ источника слишком большой');chunks.push(value);
+       }
+       const result=new Uint8Array(total);let i=0;for(const chunk of chunks){result.set(chunk,i);i+=chunk.byteLength;}
+       body=new TextDecoder('utf-8',{fatal:true}).decode(result);
+     }finally{reader.releaseLock();}
+   }else{
+     body=await response.text();if(new TextEncoder().encode(body).length>1048576)throw Error('Ответ источника слишком большой');
+   }
    return JSON.parse(body);
  }catch(error){if(error instanceof SyntaxError)throw Error('Источник вернул некорректный JSON');throw error;}
  finally{clearTimeout(timeout);}

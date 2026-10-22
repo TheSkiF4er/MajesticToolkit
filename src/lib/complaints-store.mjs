@@ -57,14 +57,17 @@ export function mutateCaseWorkflow(id,action,payload={}) {
   });
 }
 export function removeComplaint(id) { return enqueue(async () => { await getCase(id); await api.storage.local.remove(CASE_PREFIX + id); }); }
-export function observeThread(url, postId) {
+export function observeThread(url, postId, profileId = null) {
   return enqueue(async () => {
     const key = C.threadKey(url);
-    const cases = (await listCases()).filter(c => c.threadKey === key && c.watching);
+    const cases = (await listCases()).filter(c => c.threadKey === key && c.watching && (!profileId || c.profileId===profileId));
     const changed = [];
     for (const c of cases) {
       const result = C.observeCase(c, postId);
-      await api.storage.local.set({ [CASE_PREFIX + c.id]: result.item });
+      const samePost=result.item.lastSeenPostId===c.lastSeenPostId;
+      const lastCheck=c.lastCheckedAt?Date.parse(c.lastCheckedAt):0;
+      // Suppress redundant full-record writes during repeated scans of an unchanged thread.
+      if(result.changed || !samePost || Date.now()-lastCheck>=4*60000)await api.storage.local.set({ [CASE_PREFIX + c.id]: result.item });
       if (result.changed) changed.push(result.item);
     }
     return changed;

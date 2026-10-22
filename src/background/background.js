@@ -5,6 +5,7 @@ import * as importedMonitor from '../lib/monitor-store.mjs';
 import * as importedXenForo from '../lib/xenforo-store.mjs';
 import '../lib/xenforo-core.js';
 import '../lib/complaints-core.js';
+import {contentSender,extensionPageSender,matchingForumProfile,validatePayloadSize} from '../lib/message-security.mjs';
 const api = globalThis.browser ?? globalThis.chrome;
 const FORUMS = [
   { id:'rp-nexus-majestic-forum-v3', origin:'https://forum.majestic-rp.ru/*' },
@@ -24,13 +25,16 @@ async function syncScripts() {
     const registrations = await api.scripting.getRegisteredContentScripts();
     const old = registrations.filter(r => LEGACY.includes(r.id)).map(r => r.id);
     if (old.length) await api.scripting.unregisterContentScripts({ids:old});
-    const ids = new Set(registrations.map(r => r.id));
+    const byId = new Map(registrations.map(r=>[r.id,r]));
     for (const site of [...FORUMS, ...VIDEOS]) {
       const granted = await api.permissions.contains({origins:[site.origin]});
-      if (granted && !ids.has(site.id)) {
-        const isForum = FORUMS.includes(site);
-        await api.scripting.registerContentScripts([{id:site.id,matches:[site.origin],js:isForum ? ['lib/safe-dom.js','lib/forum-core.js','lib/xenforo-core.js','lib/complaints-core.js','content/forum.js'] : ['lib/safe-dom.js','lib/complaints-core.js','content/evidence.js'],runAt:'document_idle',allFrames:false,persistAcrossSessions:true}]);
-      } else if (!granted && ids.has(site.id)) await api.scripting.unregisterContentScripts({ids:[site.id]});
+      const isForum = FORUMS.includes(site);
+      const wanted={id:site.id,matches:[site.origin],js:isForum ? ['lib/safe-dom.js','lib/forum-core.js','lib/xenforo-core.js','lib/complaints-core.js','content/forum.js'] : ['lib/safe-dom.js','lib/complaints-core.js','content/evidence.js'],runAt:'document_idle',allFrames:false,persistAcrossSessions:true};
+      const current=byId.get(site.id);
+      const obsolete=current&&(JSON.stringify(current.js)!==JSON.stringify(wanted.js) || JSON.stringify(current.matches)!==JSON.stringify(wanted.matches) || current.runAt!==wanted.runAt || current.allFrames!==false);
+      // Persisted registrations from a previous version must be replaced on upgrade.
+      if(current&&(!granted||obsolete))await api.scripting.unregisterContentScripts({ids:[site.id]});
+      if(granted&&(!current||obsolete))await api.scripting.registerContentScripts([wanted]);
     }
   } catch (error) { console.error('MajesticToolkit: не удалось зарегистрировать скрипты',error); }
 }
@@ -98,10 +102,11 @@ api.permissions.onRemoved.addListener(() => {void syncScripts();});
 api.alarms.onAlarm.addListener(alarm => {if (alarm.name === 'rp-nexus-open-tabs-v3') void tick();});
 api.runtime.onMessage.addListener((message,sender,sendResponse) => {
   if (!message || typeof message !== 'object') return;
-  const isTrustedExtension = sender.id === api.runtime.id && sender.url?.startsWith(api.runtime.getURL(''));
-  const isForum = FORUMS.some(x => sender.url?.startsWith(x.origin.replace('*','')));
-  const isVideo = VIDEOS.some(x => sender.url?.startsWith(x.origin.replace('*','')));
+  const isTrustedExtension=extensionPageSender(sender,api.runtime);
+  const isForum=contentSender(sender,api.runtime.id,'forum');
+  const isVideo=contentSender(sender,api.runtime.id,'video');
   async function task() {
+    validatePayloadSize(message);
     if (message.type === 'RP_NEXUS_OPEN_WORKSPACE') {
       if (!isForum && !isVideo && !isTrustedExtension) throw Error('Недоверенный источник');
       await api.tabs.create({url:api.runtime.getURL('ui/workspace.html' + (['forum','complaints'].includes(message.view) ? '#'+message.view : ''))});
@@ -148,15 +153,16 @@ api.runtime.onMessage.addListener((message,sender,sendResponse) => {
       const core = await corePromise;
       if (core.threadKey(message.url) !== core.threadKey(sender.url)) throw Error('Тема не совпадает со страницей');
       const saved = (await api.storage.local.get('rpNexusStateV1')).rpNexusStateV1;
-      const profileId = saved?.activeProfileId;
-      if (!profileId) throw Error('Нет активного профиля');
-      return store.createComplaint({profileId, url:message.url,title:message.title});
+      const profile=matchingForumProfile(saved,sender.url,globalThis.MTXenForo);
+      return store.createComplaint({profileId:profile.id, url:message.url,title:message.title});
     }
     if (message.type === 'RP_NEXUS_THREAD_OBSERVED') {
       if (!isForum || !sender.url) throw Error('Сайт не поддерживается');
       const core = await corePromise;
       if (core.threadKey(message.url) !== core.threadKey(sender.url)) throw Error('Тема не совпадает со страницей');
-      const changes = await store.observeThread(message.url,message.postId);
+      const saved=(await api.storage.local.get('rpNexusStateV1')).rpNexusStateV1;
+      const profile=matchingForumProfile(saved,sender.url,globalThis.MTXenForo);
+      const changes = await store.observeThread(message.url,message.postId,profile.id);
       for (const item of changes) await notifyChange(item);
       return changes.length;
     }
@@ -164,6 +170,9 @@ api.runtime.onMessage.addListener((message,sender,sendResponse) => {
       if (!isVideo || !sender.url) throw Error('Сайт не поддерживается');
       const url = new URL(message.input?.url);
       if (url.origin !== new URL(sender.url).origin || url.pathname !== new URL(sender.url).pathname) throw Error('Недопустимая ссылка на видео');
+      const current=(await store.getCase(message.id));
+      const state=(await api.storage.local.get('rpNexusStateV1')).rpNexusStateV1;
+      if(current.profileId!==state?.activeProfileId)throw Error('Жалоба принадлежит другому профилю');
       return store.addComplaintEvidence(message.id,message.input);
     }
     if (message.type === 'RP_NEXUS_CASE_MUTATE') {
