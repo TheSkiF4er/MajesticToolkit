@@ -26,18 +26,21 @@ export function googlePermissionRequest(){
   const declared=api.runtime?.getManifest?.()?.browser_specific_settings?.gecko?.data_collection_permissions;
   return declared?.optional ? {origins,data_collection:GOOGLE_DATA_COLLECTION} : {origins};
 }
-export async function connectGoogle(){
-  // Request both host and data consent from the original user click. No Google
-  // traffic (including the OAuth flow) is started until both are granted.
-  if(!await api.permissions.request(googlePermissionRequest()))throw Error('Доступ к Google APIs или согласие на передачу данных не предоставлены');
-  const clientId=await getClientId();if(!clientId)throw Error('Укажите Google OAuth Client ID');
+export async function connectGoogle(configuredClientId){
+  // UI passes the saved ID already in memory: validation before permission prompt
+  // without any async operation that would lose Firefox user activation.
+  const clientId = configuredClientId === undefined ? undefined : normalizeClientId(configuredClientId);
+  if (configuredClientId !== undefined && !clientId) throw Error('Укажите Google OAuth Client ID');
+  const consent = api.permissions.request(googlePermissionRequest());
+  if(!await consent)throw Error('Доступ к Google APIs или согласие на передачу данных не предоставлены');
+  const oauthClientId = clientId || await getClientId();if(!oauthClientId)throw Error('Укажите Google OAuth Client ID');
   const redirect=redirectUri();
   const {state,verifier,challenge}=await cryptoChallenge();
-  const target=authUrl({clientId,redirectUri:redirect,state,challenge});
+  const target=authUrl({clientId:oauthClientId,redirectUri:redirect,state,challenge});
   const result=await api.identity.launchWebAuthFlow({url:target,interactive:true});
   if(!result)throw Error('Авторизация Google не завершена');
   const code=parseRedirect(result,redirect,state);
-  const body=new URLSearchParams({client_id:clientId,code,code_verifier:verifier,redirect_uri:redirect,grant_type:'authorization_code'});
+  const body=new URLSearchParams({client_id:oauthClientId,code,code_verifier:verifier,redirect_uri:redirect,grant_type:'authorization_code'});
   const response=await fetch('https://oauth2.googleapis.com/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body});
   const data=await response.json().catch(()=>({}));
   if(!response.ok||typeof data.access_token!=='string')throw Error(data.error_description||data.error||'Ошибка получения Google OAuth token');

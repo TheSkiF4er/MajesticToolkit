@@ -1,5 +1,13 @@
 # История изменений
 
+## 1.5.2 — Firefox Android Permission & Reliability Hotfix (2026-10-26)
+
+- Firefox Android: optional host permissions are requested synchronously from the real user gesture, without awaiting `permissions.contains()` before `permissions.request()`; applies to Majestic RP, Russia Online and video overlays.
+- Google OAuth: verify the configured Client ID before requesting optional access and Firefox data consent; retain the original user-gesture context for the consent call.
+- Workspace: optional module loading failures are isolated, nonblocking and visible with a retry action. Core profile recovery remains available on invalid state.
+- Google Drive: correct version in backup filenames.
+- New regression tests for permission-call ordering, denied grants, Google configuration and workspace fault isolation. No expansion of permissions or changes to local storage schema.
+
 ## 1.5.1 — Functional Reliability Hotfix (2026-10-26)
 
 - Исправлена фактическая обработка отправки формы `xf-navigation-form` в главном UI: пользовательские ссылки XenForo теперь сохраняются через `handleForumSubmit`, а не отправляются как обычная HTML-форма.

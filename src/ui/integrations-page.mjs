@@ -42,7 +42,7 @@ export function integrationsSection(state){
 function getRedirectSafe(){try{return redirectUri();}catch{return 'Недоступен для этого браузера';}}
 export async function handleIntegrationAction(button,state,render,feedback,createBackup){
   const a=button.dataset.integrationAction,profile=state.activeProfileId;
-  if(a==='connect'){await connectGoogle();await refreshIntegrations();render();feedback('Google подключён');return;}
+  if(a==='connect'){if(!clientId)throw Error('Сначала сохраните Google OAuth Client ID');await connectGoogle(clientId);await refreshIntegrations();render();feedback('Google подключён');return;}
   if(a==='disconnect'){await disconnectGoogle();await refreshIntegrations();render();feedback('Google отключён');return;}
   if(a==='remove-link'){if(!confirm('Удалить закладку?'))return;await deleteLink(button.dataset.id);await refreshIntegrations();render();feedback('Закладка удалена');return;}
   if(a==='copy-docossum'){
@@ -64,7 +64,7 @@ export async function handleIntegrationAction(button,state,render,feedback,creat
     await api.tabs.create({url:result.url});feedback(`Экспортировано ${rows.length-1} записей`);return;
   }
   if(a==='upload-backup'){
-    const name=`majestictoolkit-backup-0.9.0-${new Date().toISOString().slice(0,10)}.json`;
+    const name=`majestictoolkit-backup-1.5.2-${new Date().toISOString().slice(0,10)}.json`;
     const result=await uploadBackupToDrive(name,await createBackup());feedback(`Резервная копия сохранена в Drive: ${result.name||result.id}`);return;
   }
   if(a==='drive-list'){files=await listGoogleFiles();render();feedback(`Доступно файлов: ${files.length}`);return;}

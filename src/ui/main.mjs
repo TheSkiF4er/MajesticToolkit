@@ -1,6 +1,7 @@
 import '../lib/safe-dom.js';
 const { replaceHtml, insertHtml } = globalThis.MTSafeDOM;
 import { api, openSidePanel, openTab, openWorkspace } from '../lib/browser.mjs';
+import { changeHostPermission } from '../lib/permission-flow.mjs';
 import { createRestorePoint, completeRestorePoint, examineRestorePoint, applyRestorePoint, discardRestorePoint } from '../lib/recovery.mjs';
 import { addProfile, deleteProfile, editProfile, getActiveProfile, projectLabel, savePreferences, selectProfile } from '../lib/model.mjs';
 import { loadState, modifyState, restoreState, STORAGE_KEY } from '../lib/state.mjs';
@@ -45,6 +46,7 @@ let view = 'home';
 let permissionGranted = false;
 let russiaPermissionGranted = false;
 let videoPermissionGranted = false;
+let moduleErrors = [];
 const VIDEO_ORIGINS = ['https://www.youtube.com/*','https://rutube.ru/*','https://www.twitch.tv/*'];
 let timeout;
 const NAV = [ ['home','Обзор','⌂'], ['search','Поиск и помощник','⌕'], ['forum','Форум','▤'], ['monitor','Серверы и игроки','◈'], ['complaints','Жалобы','◷'], ['economy','Экономика','▥'], ['law','Законы','⚖'], ['government','Ведомства','§'], ['documents','Документы','▣'], ['integrations','Интеграции','↗'], ['knowledge','Центр знаний','◇'], ['profiles','Профили','◉'], ['sites','Сайты и доступ','↗'], ['settings','Настройки','⚙'], ['backup','Резервные копии','⇩'] ];
@@ -67,7 +69,7 @@ function sectionHome() {
   const siteGranted=activeForumHost==='forum.majestic-rp.ru' ? permissionGranted :
     activeForumHost==='forum.russia.online' ? russiaPermissionGranted : false;
   const siteName=activeForumHost==='forum.russia.online' ? 'Russia Online' : 'Majestic RP';
-  return `<div class="stack"><section class="card hero"><div class="eyebrow">Активный профиль</div><h3>${e(active.name)}</h3><p>${e(projectLabel(active.project))} · ${e(active.server)}</p><div class="row" style="margin-top:17px"><button class="button" data-action="edit" data-id="${e(active.id)}">Настроить профиль</button>${active.forumUrl ? `<button class="button" data-url="${e(active.forumUrl)}">Открыть форум ↗</button>` : ''}</div></section><div class="grid"><section class="card"><p class="eyebrow">Профили</p><div class="stat">${state.profiles.length}</div><p class="subtle">Отдельные RP-проекты и серверы</p><button class="button secondary" data-action="nav" data-view="profiles">Управлять профилями</button></section><section class="card"><p class="eyebrow">Интеграция с форумом</p><div class="stat">${siteGranted ? 'Включена' : 'Выключена'}</div><p class="subtle">Кнопка MajesticToolkit на официальном форуме ${e(siteName)}</p><button class="button secondary" data-action="nav" data-view="sites">Настроить доступ</button></section></div><section class="card"><h3>Forum Toolkit · Economy · Law Codex · Government Tools · Document Studio · Integrations 1.5.1</h3><p class="lead">Биндер, жалобы, доказательства, экономика, законодательство, процессуальные решения и ведомства.</p><div class="row"><button class="button primary" data-action="nav" data-view="search">Единый поиск</button><button class="button primary" data-action="nav" data-view="forum">Открыть биндер</button><button class="button secondary" data-action="nav" data-view="monitor">Мониторинг серверов</button><button class="button secondary" data-action="nav" data-view="complaints">Менеджер жалоб</button><button class="button secondary" data-action="nav" data-view="economy">Экономика и аналитика</button><button class="button secondary" data-action="nav" data-view="law">Law Codex</button><button class="button secondary" data-action="nav" data-view="government">Government Tools</button><button class="button secondary" data-action="nav" data-view="documents">Document Studio</button><button class="button secondary" data-action="nav" data-view="integrations">Интеграции Google</button><button class="button primary" data-action="nav" data-view="knowledge">Центр знаний</button></div></section><section class="card"><h3>Быстрый доступ</h3><p class="subtle">Переход на сайты без автоматического сбора данных</p><div class="row">${BOOKMARKS.map(link => `<button class="button secondary" data-url="${e(link.url)}">${e(link.name)} ↗</button>`).join('')}</div></section></div>`;
+  return `<div class="stack"><section class="card hero"><div class="eyebrow">Активный профиль</div><h3>${e(active.name)}</h3><p>${e(projectLabel(active.project))} · ${e(active.server)}</p><div class="row" style="margin-top:17px"><button class="button" data-action="edit" data-id="${e(active.id)}">Настроить профиль</button>${active.forumUrl ? `<button class="button" data-url="${e(active.forumUrl)}">Открыть форум ↗</button>` : ''}</div></section><div class="grid"><section class="card"><p class="eyebrow">Профили</p><div class="stat">${state.profiles.length}</div><p class="subtle">Отдельные RP-проекты и серверы</p><button class="button secondary" data-action="nav" data-view="profiles">Управлять профилями</button></section><section class="card"><p class="eyebrow">Интеграция с форумом</p><div class="stat">${siteGranted ? 'Включена' : 'Выключена'}</div><p class="subtle">Кнопка MajesticToolkit на официальном форуме ${e(siteName)}</p><button class="button secondary" data-action="nav" data-view="sites">Настроить доступ</button></section></div><section class="card"><h3>Forum Toolkit · Economy · Law Codex · Government Tools · Document Studio · Integrations 1.5.2</h3><p class="lead">Биндер, жалобы, доказательства, экономика, законодательство, процессуальные решения и ведомства.</p><div class="row"><button class="button primary" data-action="nav" data-view="search">Единый поиск</button><button class="button primary" data-action="nav" data-view="forum">Открыть биндер</button><button class="button secondary" data-action="nav" data-view="monitor">Мониторинг серверов</button><button class="button secondary" data-action="nav" data-view="complaints">Менеджер жалоб</button><button class="button secondary" data-action="nav" data-view="economy">Экономика и аналитика</button><button class="button secondary" data-action="nav" data-view="law">Law Codex</button><button class="button secondary" data-action="nav" data-view="government">Government Tools</button><button class="button secondary" data-action="nav" data-view="documents">Document Studio</button><button class="button secondary" data-action="nav" data-view="integrations">Интеграции Google</button><button class="button primary" data-action="nav" data-view="knowledge">Центр знаний</button></div></section><section class="card"><h3>Быстрый доступ</h3><p class="subtle">Переход на сайты без автоматического сбора данных</p><div class="row">${BOOKMARKS.map(link => `<button class="button secondary" data-url="${e(link.url)}">${e(link.name)} ↗</button>`).join('')}</div></section></div>`;
 }
 function sectionProfiles() {
   return `<div class="stack"><div class="row spread"><p class="lead">Храните разные игровые профили локально. Сервер и ссылка на форум задаются отдельно.</p><button class="button primary" data-action="create">+ Новый профиль</button></div>${state.profiles.map(profileRow).join('')}</div>`;
@@ -83,19 +85,34 @@ function sectionBackup() {
   return `<div class="stack"><section class="card"><h3>Скачать резервную копию</h3><p class="lead">JSON-файл с профилями, шаблонами, жалобами, экономическими операциями, сделками, результатами игроков локальной базой законов и Government Tools и документами Document Studio. Авторизационные данные сайтов и содержимое страниц не сохраняются.</p><div class="row" style="margin-top:14px"><button class="button primary" data-action="export">Скачать JSON</button></div></section><section class="card"><h3>Восстановить из файла</h3><p class="lead">Данные проверяются до применения. Импорт заменит текущие профили и настройки. Максимальный размер — 48 МиБ. Поддерживаются копии v1–v12. Формат v13 также сохраняет этапы рассмотрения жалоб, журнал действий, связи Центра знаний, ссылки XenForo и Server Monitor. При импорте старой копии новые записи сохраняются, если профили совместимы.</p><div style="margin-top:14px"><label class="field">Выберите .json<input id="backup-file" type="file" accept=".json,application/json"></label></div></section><section class="card"><h3>Точка восстановления после импорта</h3><p class="lead">Перед импортом создаётся проверенный снимок текущих данных (не более 20 МиБ). Он переживает закрытие браузера. OAuth-токены и данные других расширений в снимок не входят.</p><div class="row" style="margin-top:12px"><button class="button secondary" data-action="restore-point">Восстановить предыдущие данные</button><button class="button danger" data-action="discard-point">Удалить точку</button></div></section><section class="card"><h3>Где хранятся данные</h3><p class="lead">В локальном хранилище браузерного расширения. MajesticToolkit не имеет аккаунта, собственного сервера и телеметрии. Перед удалением расширения скачайте копию.</p></section></div>`;
 }
 const titles = {knowledge:['Центр знаний','Связи документов, законов, шаблонов и внешних справочников'],search:['Поиск и локальный помощник','Быстрый индекс всех локальных разделов, ответы с указанием источников'],integrations:['Интеграции','Google Docs, Sheets, Drive, Fletcher Wiki и Docossum'],documents:['Document Studio','Редактор, формы, шаблоны, история локальных версий и PDF'],government:['Government Tools','Конструктор решений, правовые основания, процессуальные шаблоны и ведомства'],law:['Law Codex','Законы, неизменяемые редакции, статьи, избранное и памятки'],economy:['Экономика и аналитика','Сделки, денежные операции, калькуляторы, игроки и семьи'],complaints:['Жалобы и доказательства','Отслеживание тем, сроки, черновики и таймкоды'],monitor:['Server Monitor','Официальный каталог серверов и сохранённые публичные карточки игроков'],forum:['Forum Toolkit','Шаблоны ответов, BBCode и инструменты на форуме'],home:['Обзор','Рабочая среда под ваши RP-проекты'],profiles:['Профили','Переключение между игровыми серверами'],sites:['Сайты и разрешения','Вы контролируете, где работает расширение'],settings:['Настройки','Настройте интерфейс под себя'],backup:['Резервные копии','Перенос данных между браузерами']};
+function moduleWarning() {
+  if (!moduleErrors.length) return '';
+  return `<section class="card stack" role="alert"><h3>Часть разделов временно недоступна</h3><p class="subtle">${e(moduleErrors.map(x=>x.name).join(', '))}. Остальные разделы и локальные данные доступны.</p><button type="button" class="button secondary" data-action="retry-modules">Повторить загрузку</button></section>`;
+}
+async function refreshAllModules() {
+  const tasks = [
+    ['Форум',refreshForum],['Жалобы',refreshComplaints],['Экономика',refreshEconomy],
+    ['Законы',refreshLaw],['Ведомства',refreshGovernment],['Документы',refreshDocuments],
+    ['Интеграции',refreshIntegrations],['Серверы и игроки',refreshMonitor],
+    ['Центр знаний',()=>refreshKnowledge(state.profiles.map(p=>p.id))]
+  ];
+  const results = await Promise.allSettled(tasks.map(([,fn])=>fn()));
+  moduleErrors = results.flatMap((r,i)=>r.status==='rejected'?[{name:tasks[i][0],reason:r.reason?.message||String(r.reason)}]:[]);
+  if (moduleErrors.length) console.warn('MajesticToolkit: часть модулей не загружена',moduleErrors);
+}
 function renderPopup() {
   const p = getActiveProfile(state);
-  return `<div class="popup-shell stack"><div class="brand"><span class="logo">MT</span><div><h1>MajesticToolkit</h1><p>Версия 1.5.1</p></div></div><div class="card stack"><div class="row spread"><strong>Активный профиль</strong>${tag(projectLabel(p.project))}</div><select aria-label="Выбрать профиль" id="popup-profile">${state.profiles.map(x => `<option value="${e(x.id)}" ${x.id === state.activeProfileId ? 'selected' : ''}>${e(x.name)} · ${e(x.server)}</option>`).join('')}</select><p class="subtle">${e(p.server)}</p>${p.forumUrl ? `<button class="button secondary" data-url="${e(p.forumUrl)}">Открыть форум ↗</button>` : ''}</div><div class="row"><button class="button primary" data-action="panel">Боковая панель</button><button class="button secondary" data-action="workspace">Рабочее пространство ↗</button></div><div class="row"><button class="button link" data-action="popup-search">Поиск</button><button class="button link" data-action="popup-forum">Шаблоны форума</button><button class="button link" data-action="popup-monitor">Серверы и игроки</button><button class="button link" data-action="popup-complaints">Жалобы</button><button class="button link" data-action="popup-economy">Экономика</button><button class="button link" data-action="popup-law">Законы</button><button class="button link" data-action="popup-government">Ведомства</button><button class="button link" data-action="popup-documents">Документы</button><button class="button link" data-action="popup-integrations">Интеграции</button><button class="button link" data-action="popup-knowledge">Центр знаний</button><button class="button link" data-action="popup-settings">Настройки и профили</button><button class="button link" data-url="https://docossum.com/">Docossum ↗</button><button class="button link" data-url="https://fletcher-wiki.com/">Fletcher ↗</button></div></div>`;
+  return `<div class="popup-shell stack"><div class="brand"><span class="logo">MT</span><div><h1>MajesticToolkit</h1><p>Версия 1.5.2</p></div></div><div class="card stack"><div class="row spread"><strong>Активный профиль</strong>${tag(projectLabel(p.project))}</div><select aria-label="Выбрать профиль" id="popup-profile">${state.profiles.map(x => `<option value="${e(x.id)}" ${x.id === state.activeProfileId ? 'selected' : ''}>${e(x.name)} · ${e(x.server)}</option>`).join('')}</select><p class="subtle">${e(p.server)}</p>${p.forumUrl ? `<button class="button secondary" data-url="${e(p.forumUrl)}">Открыть форум ↗</button>` : ''}</div><div class="row"><button class="button primary" data-action="panel">Боковая панель</button><button class="button secondary" data-action="workspace">Рабочее пространство ↗</button></div><div class="row"><button class="button link" data-action="popup-search">Поиск</button><button class="button link" data-action="popup-forum">Шаблоны форума</button><button class="button link" data-action="popup-monitor">Серверы и игроки</button><button class="button link" data-action="popup-complaints">Жалобы</button><button class="button link" data-action="popup-economy">Экономика</button><button class="button link" data-action="popup-law">Законы</button><button class="button link" data-action="popup-government">Ведомства</button><button class="button link" data-action="popup-documents">Документы</button><button class="button link" data-action="popup-integrations">Интеграции</button><button class="button link" data-action="popup-knowledge">Центр знаний</button><button class="button link" data-action="popup-settings">Настройки и профили</button><button class="button link" data-url="https://docossum.com/">Docossum ↗</button><button class="button link" data-url="https://fletcher-wiki.com/">Fletcher ↗</button></div></div>`;
 }
 function render() {
   if (!state) return;
   document.documentElement.dataset.theme = state.preferences.theme;
   document.documentElement.dataset.accent = productivity.accent;
   document.body.dataset.compact = String(state.preferences.compact);
-  if (popup) { replaceHtml(app, renderPopup()); return; }
+  if (popup) { replaceHtml(app, moduleWarning() + renderPopup()); return; }
   const title = titles[view];
   const contents = { home: sectionHome, search: () => productivitySection(state), forum: () => forumSection(state), monitor: () => monitorSection(state), complaints: () => complaintsSection(state), economy: () => economySection(state), law: () => lawSection(state), government: () => governmentSection(state), documents: () => documentSection(state), integrations: () => integrationsSection(state), knowledge:()=>knowledgeSection(state), profiles: sectionProfiles, sites: sectionSites, settings: sectionSettings, backup: sectionBackup };
-  replaceHtml(app, `<div class="layout"><aside class="side"><div class="brand"><div class="logo">MT</div><div><h1>MajesticToolkit</h1><p>Версия 1.5.1</p></div></div><nav class="nav" aria-label="Разделы">${NAV.map(([id, label, icon]) => `<button type="button" data-action="nav" data-view="${id}" class="${view === id ? 'active' : ''}" ${view === id ? 'aria-current="page"' : ''}><span aria-hidden="true">${icon}</span>${e(label)}</button>`).join('')}</nav><div class="side-footer">Локальные данные · Без облачной регистрации</div></aside><main class="main"><header class="topline"><div><p class="eyebrow">MajesticToolkit / ${e(title[0])}</p><h2>${e(title[0])}</h2><p class="lead">${e(title[1])}</p></div>${mode === 'sidebar' ? '' : '<span class="tag">v1.5.1</span>'}</header>${contents[view]()}</main></div>`);
+  replaceHtml(app, `<div class="layout"><aside class="side"><div class="brand"><div class="logo">MT</div><div><h1>MajesticToolkit</h1><p>Версия 1.5.2</p></div></div><nav class="nav" aria-label="Разделы">${NAV.map(([id, label, icon]) => `<button type="button" data-action="nav" data-view="${id}" class="${view === id ? 'active' : ''}" ${view === id ? 'aria-current="page"' : ''}><span aria-hidden="true">${icon}</span>${e(label)}</button>`).join('')}</nav><div class="side-footer">Локальные данные · Без облачной регистрации</div></aside><main class="main"><header class="topline"><div><p class="eyebrow">MajesticToolkit / ${e(title[0])}</p><h2>${e(title[0])}</h2><p class="lead">${e(title[1])}</p></div>${mode === 'sidebar' ? '' : '<span class="tag">v1.5.2</span>'}</header>${moduleWarning()}${contents[view]()}</main></div>`);
 }
 async function refreshPermission() {
   try { permissionGranted = await api.permissions.contains({ origins: [FORUM_SITE.origin] }); }
@@ -130,7 +147,7 @@ async function exportBackup() {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
-  anchor.download = `majestictoolkit-backup-v1.5.1-${new Date().toISOString().slice(0,10)}.json`;
+  anchor.download = `majestictoolkit-backup-v1.5.2-${new Date().toISOString().slice(0,10)}.json`;
   document.body.appendChild(anchor); anchor.click(); anchor.remove();
   setTimeout(() => URL.revokeObjectURL(url), 30000);
   feedback(`Копия: ${templates.length} шаблонов, ${cases.length} жалоб, ${economy.length} операций/матчей, ${laws.length} записей законодательства, ${government.length} ведомственных записей, ${documents.length} документов/шаблонов, ${externalLinks().length} внешних закладок`);
@@ -144,21 +161,25 @@ async function requestCaseReplacement(cases) {
 }
 
 async function changePermission(site = FORUM_SITE.origin) {
-  // Begin request synchronously from an explicit user click.
-  const granted = await api.permissions.contains({ origins: [site] });
-  if (!granted) {
-    if (!await api.permissions.request({ origins: [site] })) { feedback('Разрешение не предоставлено', true); return; }
-    feedback('Доступ предоставлен. Панель появится на открытых вкладках форума; если нет — обновите страницу.');
-  } else {
-    await api.permissions.remove({ origins: [site] });
-    feedback('Разрешение отозвано. Обновите вкладку форума.');
-  }
-  await refreshPermission(); render();
+  if (site !== FORUM_SITE.origin && site !== RUSSIA_FORUM.origin) throw Error('Неизвестный домен форума');
+  // Cached permissions are updated by onAdded/onRemoved and initial refresh.
+  // A contains() call here would lose transient user activation in Firefox Android.
+  const granted = site === FORUM_SITE.origin ? permissionGranted : russiaPermissionGranted;
+  const operation = changeHostPermission(api.permissions, [site], granted);
+  const result = await operation;
+  await refreshPermission();
+  render();
+  const nowGranted = site === FORUM_SITE.origin ? permissionGranted : russiaPermissionGranted;
+  if (!granted && nowGranted) feedback('Доступ предоставлен. Панель появится на вкладке форума.');
+  else if (granted && !nowGranted) feedback('Доступ отозван.');
+  else if (!result && !granted) feedback('Разрешение не предоставлено', true);
+  else feedback('Состояние доступа обновлено.');
 }
 
 async function executeAction(button) {
   if (button.dataset.url) { await openTab(button.dataset.url); return; }
   const { action, id } = button.dataset;
+  if (action === 'retry-modules') { await refreshAllModules(); render(); if(!moduleErrors.length)feedback('Разделы загружены'); else feedback('Не все разделы удалось загрузить',true); return; }
   if (action === 'nav') { view = button.dataset.view; if (view === 'search') await refreshProductivitySearch(); if(view==='knowledge')await refreshKnowledge(state.profiles.map(p=>p.id)); if (view === 'forum') await refreshForum(); if(view==='monitor') await refreshMonitor(); if(view==='complaints') await refreshComplaints(); if(view==='economy') await refreshEconomy(); if(view==='law') await refreshLaw(); if(view==='government') await refreshGovernment(); if(view==='documents') await refreshDocuments(); if(view==='integrations') await refreshIntegrations(); render(); return; }
   if (action === 'popup-monitor') {await api.tabs.create({url:api.runtime.getURL('ui/workspace.html#monitor')});return;}
   if (action === 'popup-search') {await api.tabs.create({url:api.runtime.getURL('ui/workspace.html#search')});return;}
@@ -212,11 +233,14 @@ async function executeAction(button) {
   }
   if (action === 'video-permission') {
     // Permission request originates directly from the user click.
-    if (!videoPermissionGranted) {
-      if (!await api.permissions.request({origins:VIDEO_ORIGINS})) { feedback('Разрешение не предоставлено',true); return; }
-      feedback('Видеооверлей разрешён. Если он не появился на странице — обновите вкладку видео.');
-    } else {await api.permissions.remove({origins:VIDEO_ORIGINS}); feedback('Разрешения отозваны. Обновите вкладку видео.');}
-    await refreshPermission();render();return;
+    const granted = videoPermissionGranted;
+    const result = await changeHostPermission(api.permissions, VIDEO_ORIGINS, granted);
+    await refreshPermission();render();
+    if(!granted && videoPermissionGranted)feedback('Видеооверлей разрешён. Если он не появился — обновите вкладку видео.');
+    else if(granted && !videoPermissionGranted)feedback('Разрешения отозваны.');
+    else if(!result&&!granted)feedback('Разрешение не предоставлено',true);
+    else feedback('Состояние разрешения обновлено.');
+    return;
   }
   if (action === 'permission') { await changePermission(button.dataset.site || FORUM_SITE.origin); return; }
   if (action === 'restore-point') {
@@ -441,7 +465,21 @@ api.storage.onChanged.addListener((changes, area) => {
 if(!popup)setInterval(()=>{if(view==='monitor')void tickMonitor().then(changed=>{if(changed)render();}).catch(err=>feedback(err.message,true));},60000);
 api.permissions.onAdded.addListener(() => { void refreshPermission().then(render); });
 api.permissions.onRemoved.addListener(() => { void refreshPermission().then(render); });
-try { [state,productivity] = await Promise.all([loadState(),loadProductivity()]); await Promise.all([refreshForum(),refreshComplaints(),refreshEconomy(),refreshLaw(),refreshGovernment(),refreshDocuments(),refreshIntegrations(),refreshMonitor(),refreshKnowledge(state.profiles.map(p=>p.id))]); await refreshPermission(); view = ['#search','#forum','#monitor','#complaints','#economy','#law','#government','#documents','#integrations','#knowledge'].includes(location.hash) ? location.hash.slice(1) : state.preferences.startPage; if(view==='search')await refreshProductivitySearch();render(); }
+try {
+  state = await loadState(); // Invalid core profile data still invokes recovery UI.
+  let productivityError;
+  try { productivity = await loadProductivity(); }
+  catch (error) { productivity = defaultProductivity(); productivityError = {name:'Настройки интерфейса',reason:error.message}; }
+  await refreshAllModules();
+  if (productivityError) moduleErrors.push(productivityError);
+  await refreshPermission();
+  view = ['#search','#forum','#monitor','#complaints','#economy','#law','#government','#documents','#integrations','#knowledge'].includes(location.hash) ? location.hash.slice(1) : state.preferences.startPage;
+  if (view === 'search') {
+    try { await refreshProductivitySearch(); }
+    catch (error) { moduleErrors.push({name:'Локальный поиск',reason:error.message}); }
+  }
+  render();
+}
 catch (err) {
   app.textContent = '';
   const message=document.createElement('p');message.textContent=`Не удалось открыть данные MajesticToolkit: ${err.message}. Данные не удалены.`;app.append(message);

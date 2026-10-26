@@ -127,6 +127,38 @@ async def exercise(browser):
     assert await page.evaluate('globalThis.__prevented') is True
     count+=1
     await context.close()
+
+    # A real click-driven Chromium/Firefox DOM check for transient activation ordering.
+    # Firefox's actual permissions API still requires a device-level acceptance test.
+    context=await browser.new_context()
+    page=await context.new_page()
+    await page.set_content('<button id="grant">Разрешить Majestic RP</button><button id="revoke">Отозвать</button><div id="status"></div>')
+    flow=(ROOT/'src/lib/permission-flow.mjs').read_text().replace('export function changeHostPermission','function changeHostPermission')
+    await page.add_script_tag(content=flow+"""
+      globalThis.__events=[];
+      let activated=false;
+      const origins=['https://forum.majestic-rp.ru/*'];
+      const permissions={
+        request({origins}){globalThis.__events.push('request');if(!activated)throw Error('permissions.request may only be called from a user input handler');return Promise.resolve(true);},
+        remove(){globalThis.__events.push('remove');return Promise.resolve(true);}
+      };
+      document.getElementById('grant').addEventListener('click',()=>{
+        activated=true;
+        const pending=changeHostPermission(permissions,origins,false);
+        activated=false;
+        pending.then(()=>document.getElementById('status').textContent='granted');
+      });
+      document.getElementById('revoke').addEventListener('click',()=>{
+        changeHostPermission(permissions,origins,true).then(()=>document.getElementById('status').textContent='revoked');
+      });
+    """)
+    await page.locator('#grant').click()
+    await page.wait_for_function("document.getElementById('status').textContent === 'granted'")
+    await page.locator('#revoke').click()
+    await page.wait_for_function("document.getElementById('status').textContent === 'revoked'")
+    assert await page.evaluate('globalThis.__events')==['request','remove']
+    count+=1
+    await context.close()
     return count
 
 async def main():
