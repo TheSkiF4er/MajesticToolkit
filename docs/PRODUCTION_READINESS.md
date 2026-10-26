@@ -32,6 +32,6 @@ GitHub Actions выполняет тесты браузерного DOM отде
 При работе с внешними сайтами нельзя обходить авторизацию, ограничения или правила их операторов. Тестовые фикстуры не содержат приватной информации пользователей.
 
 
-## 1.5.2 — Firefox Android runtime permission hotfix
+## 1.5.3 — Firefox Android runtime permission hotfix
 
 `permissions.request()` вызывается синхронно из делегированного click-обработчика, без ожидания `permissions.contains()` или чтения storage. Регрессионные тесты: `tests/permission-gesture-152.test.mjs`; браузерный DOM-клик проверяется в `tests/browser-e2e.py`. Полное подтверждение требует проверки установленной сборки в Firefox Android с системным окном выдачи прав.

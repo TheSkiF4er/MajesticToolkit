@@ -10,7 +10,7 @@ npm run verify
 cd release && sha256sum -c SHA256SUMS
 ```
 
-Команда создаёт `release/MajesticToolkit-1.5.2-{chromium,firefox,firefox-android,safari}.zip`, а также `release-manifest.json`, `SHA256SUMS`. Сборка не использует сеть или удалённые скрипты. `scripts/check-release.mjs` проверяет контрольные суммы, имена файлов и совпадение каждого извлечённого файла с `dist/`.
+Команда создаёт `release/MajesticToolkit-1.5.3-{chromium,firefox,firefox-android,safari}.zip`, а также `release-manifest.json`, `SHA256SUMS`. Сборка не использует сеть или удалённые скрипты. `scripts/check-release.mjs` проверяет контрольные суммы, имена файлов и совпадение каждого извлечённого файла с `dist/`.
 
 ## Предрелизные приёмочные испытания (обязательны для публичного статуса Stable)
 
@@ -37,8 +37,12 @@ cd release && sha256sum -c SHA256SUMS
 - Mozilla AMO: проверить стабильный Gecko ID, подписать `firefox.zip` через AMO; отдельно подготовить листинг для Android, если совместимость подтверждена.
 - Edge Add-ons: отдельный листинг и review с Chromium-пакетом.
 - Safari: собрать `.app` через инструменты Apple, подписать, пройти проверку App Store.
-- GitHub: после проверки репозитория создать tag `v1.5.2`, прикрепить пакеты и `SHA256SUMS`. Публикация/подпись не выполнена этим ZIP-патчем.
+- GitHub: после проверки репозитория создать tag `v1.5.3`, прикрепить пакеты и `SHA256SUMS`. Публикация/подпись не выполнена этим ZIP-патчем.
 
 ## Обновление проекта
 
-Применяйте архив `MajesticToolkit-1.5.2-changed-files.zip` поверх исходников предоставленной базы. Внутри только новые и изменённые файлы. Если файл удалён в новых версиях, инструкции будут в `PATCH_DELETE.txt` (в этой версии удаляемых исходников нет). После обновления запустите `npm run verify`.
+Применяйте архив `MajesticToolkit-1.5.3-changed-files.zip` поверх исходников предоставленной базы. Внутри только новые и изменённые файлы. Если файл удалён в новых версиях, инструкции будут в `PATCH_DELETE.txt` (в этой версии удаляемых исходников нет). После обновления запустите `npm run verify`.
+
+## Пошаговая установка Chromium и Safari
+
+См. [INSTALL_CHROMIUM_SAFARI.md](INSTALL_CHROMIUM_SAFARI.md): распаковывание Chromium в Developer Mode, временная установка Safari на macOS, упаковка WebExtension через Xcode, проверка контрольных сумм и миграция данных. `npm run prepare:chromium` / `npm run prepare:safari` извлекают проверенные файлы без установки в браузер.

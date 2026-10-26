@@ -25,3 +25,6 @@ Thumbs.db
 .env
 .env.*
 !.env.example
+
+# Extracted local installation bundles (untracked)
+install/

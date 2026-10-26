@@ -92,6 +92,6 @@ test('Google OAuth UI checks Client ID before requesting permission, backup uses
  assert.match(page,/if\(!clientId\)throw Error\('Сначала сохраните Google OAuth Client ID'\)/);
  assert.match(page,/await connectGoogle\(clientId\)/);
  assert.match(google,/const clientId = configuredClientId === undefined \? undefined : normalizeClientId\(configuredClientId\)/);
- assert.match(page,/majestictoolkit-backup-1\.5\.2-/);
+ assert.match(page,/majestictoolkit-backup-1\.5\.3-/);
  assert.doesNotMatch(page,/majestictoolkit-backup-0\.9\.0-/);
 });

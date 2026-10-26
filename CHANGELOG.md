@@ -1,5 +1,14 @@
 # История изменений
 
+## 1.5.3 — Chromium & Safari Installation Guides (2026-10-26)
+
+- Реальные пошаговые инструкции по установке с GitHub ZIP на Chrome, Edge, Brave и macOS Safari, включая проверку SHA-256, разрешения и обновления без удаления локальных данных.
+- Описаны временная загрузка Safari Web Extension на macOS через Developer и актуальный `safari-web-extension-packager` для создания Xcode приложения, ограничения iOS/iPadOS.
+- Добавлен работающий инструмент `scripts/prepare-install.mjs` для безопасного извлечения архивов Chromium/Safari (внутренняя проверка ZIP, CRC32, версии MV3 и SHA-256, защита от Zip Slip/повторных файлов/перезаписи).
+- Тесты распаковки, обнаружения повреждённых архивов, недопустимых путей, неверной версии и контрольных сумм.
+- Обновлены версии манифестов, релизных ZIP, CI и документация. Права расширения, ключи хранения и логика форумов не изменены.
+
+
 ## 1.5.2 — Firefox Android Permission & Reliability Hotfix (2026-10-26)
 
 - Firefox Android: optional host permissions are requested synchronously from the real user gesture, without awaiting `permissions.contains()` before `permissions.request()`; applies to Majestic RP, Russia Online and video overlays.

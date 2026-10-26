@@ -3,7 +3,7 @@
   "name": "MajesticToolkit",
   "short_name": "MajesticToolkit",
   "description": "MajesticToolkit: XenForo, мониторинг серверов, публичные профили, документы и Google.",
-  "version": "1.5.2",
+  "version": "1.5.3",
   "permissions": [
     "storage",
     "activeTab",
