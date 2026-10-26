@@ -110,6 +110,23 @@ async def exercise(browser):
     assert result['scripts']==0 and not result['href'] and not result['hacked'] and 'Safe' in result['text'],result
     count+=1
     await context.close()
+
+    # Exercise the real workspace submit-delegation code (not a recreated handler).
+    # Persistence is covered independently by functional-hotfix.test.mjs.
+    source=(ROOT/'src/ui/main.mjs').read_text()
+    block=source.split("document.addEventListener('submit', event => {",1)[1].split("document.addEventListener('keydown', event => {",1)[0]
+    context=await browser.new_context()
+    page=await context.new_page()
+    await page.set_content('''<!doctype html><form id="xf-navigation-form"><input name="title" required value="Правила"><input name="url" type="url" required value="https://example.com"><button type="submit">Сохранить ссылку</button></form>''')
+    await page.add_script_tag(content='''globalThis.__calls=0;
+       globalThis.state={profiles:[]};globalThis.render=()=>{};globalThis.feedback=()=>{};
+       globalThis.handleForumSubmit=async event=>{globalThis.__calls++;globalThis.__prevented=event.defaultPrevented;};''')
+    await page.add_script_tag(content="document.addEventListener('submit', event => {"+block)
+    await page.locator('button[type=submit]').click()
+    await page.wait_for_function('globalThis.__calls === 1')
+    assert await page.evaluate('globalThis.__prevented') is True
+    count+=1
+    await context.close()
     return count
 
 async def main():

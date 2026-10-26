@@ -104,12 +104,41 @@ export async function handleForumAction(button, state, rerender, feedback) {
     await navigator.clipboard.writeText(resultText(t, state)); feedback('Шаблон скопирован'); return true;
   }
   if (action === 'insert') {
-    const hostPatterns = ['https://forum.majestic-rp.ru/*', 'https://forum.russia.online/*'];
-    const tabs = await api.tabs.query({ active: true, currentWindow: true });
-    let forumTab = tabs.find(x => x.url && ['forum.majestic-rp.ru','forum.russia.online'].includes(new URL(x.url).hostname));
-    if (!forumTab) { forumTab = (await api.tabs.query({ url: hostPatterns })).find(x => x.active) ?? null; }
-    if (!forumTab) { feedback('Откройте форум и вставьте шаблон через плавающую панель.', true); return true; }
-    const response = await api.tabs.sendMessage(forumTab.id, { type: 'RP_NEXUS_APPLY_TEMPLATE', id });
+    // The workspace is usually the active tab, so a forum tab is normally inactive.
+    // Restrict selection to the profile that owns the template to avoid cross-project insertion.
+    const profileId = t.profileId === '*' ? state.activeProfileId : t.profileId;
+    const profile = state.profiles.find(p => p.id === profileId);
+    if (!profile) throw Error('Профиль шаблона не найден');
+    const host = (() => {
+      try { return new URL(profile.forumUrl).hostname.toLowerCase(); }
+      catch { return ''; }
+    })();
+    const allowedHosts = new Set(['forum.majestic-rp.ru','forum.russia.online']);
+    if (!allowedHosts.has(host)) {
+      feedback('Для вставки выберите профиль официального форума Majestic RP или Russia Online.', true);
+      return true;
+    }
+    const origin = `https://${host}/*`;
+    if (!await api.permissions.contains({origins:[origin]})) {
+      feedback('Сначала разрешите доступ к этому форуму в разделе «Сайты и доступ».', true);
+      return true;
+    }
+    const tabs = await api.tabs.query({url:[origin]});
+    const candidates = tabs.filter(tab => tab.id && (()=>{
+      try { return new URL(tab.url).hostname.toLowerCase() === host; }
+      catch { return false; }
+    })());
+    // Prefer the current window, then the most recently visited matching forum tab.
+    candidates.sort((a,b)=>Number(Boolean(b.active))-Number(Boolean(a.active)) ||
+      Number(Boolean(b.currentWindow))-Number(Boolean(a.currentWindow)) ||
+      (b.lastAccessed||0)-(a.lastAccessed||0));
+    if (!candidates.length) {
+      feedback('Откройте соответствующий форум и редактор ответа, затем повторите вставку.',true);
+      return true;
+    }
+    let response;
+    try { response = await api.tabs.sendMessage(candidates[0].id,{type:'RP_NEXUS_APPLY_TEMPLATE',id}); }
+    catch (error) { throw Error('Нет связи с панелью форума. Проверьте разрешение на сайт и обновите вкладку, затем повторите.'); }
     if (!response?.ok) throw new Error(response?.error || 'Вставка не подтверждена страницей форума');
     feedback('Шаблон вставлен в редактор форума'); return true;
   }

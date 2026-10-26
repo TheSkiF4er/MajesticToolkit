@@ -39,7 +39,7 @@ test('persisted content script registrations are reconciled on version changes',
  const bg=await readFile(new URL('../src/background/background.js',import.meta.url),'utf8');
  assert.match(bg,/const obsolete=current&&/);
  assert.match(bg,/obsolete\)\)await api\.scripting\.unregisterContentScripts/);
- assert.match(bg,/\(!current\|\|obsolete\)\)await api\.scripting\.registerContentScripts/);
+ assert.match(bg,/\(!current\|\|obsolete\)\)\s*\{\s*await api\.scripting\.registerContentScripts/);
  assert.match(bg,/current\.profileId!==state\?\.activeProfileId/);
  assert.match(bg,/matchingForumProfile\(saved,sender\.url/);
 });

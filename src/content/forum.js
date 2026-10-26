@@ -21,7 +21,7 @@ const { replaceHtml, htmlFragment } = globalThis.MTSafeDOM;
   const panel = document.createElement('section');
   panel.className = 'panel'; panel.setAttribute('role', 'region'); panel.setAttribute('aria-label', 'MajesticToolkit Forum Toolkit');
   const launcher = document.createElement('button');
-  launcher.type = 'button'; launcher.className = 'launcher'; launcher.textContent = 'RN'; launcher.setAttribute('aria-label', 'Открыть MajesticToolkit Forum Toolkit');
+  launcher.type = 'button'; launcher.className = 'launcher'; launcher.textContent = 'MT'; launcher.setAttribute('aria-label', 'Открыть MajesticToolkit Forum Toolkit');
   shadow.append(panel, launcher);
   (document.body ?? document.documentElement).append(root);
   const activeProfile = () => state?.profiles?.find(p => p.id === state.activeProfileId);
@@ -216,7 +216,12 @@ const { replaceHtml, htmlFragment } = globalThis.MTSafeDOM;
       customLinks = XF.validateLinks(payload.links||[]);
       navSignature='';mountNavigation();
       if (expanded) draw();
-    } catch (err) { console.warn('MajesticToolkit: binder storage unavailable', err); }
+    } catch (err) {
+      console.warn('MajesticToolkit: binder storage unavailable', err);
+      state=null;templates=[];customLinks=[];navSignature='';mountNavigation();
+      if(expanded)draw();
+      notify('Нет связи с фоновым процессом MajesticToolkit. Проверьте расширение и обновите вкладку.');
+    }
   }
   launcher.addEventListener('click', () => { expanded = !expanded; draw(); });
   panel.addEventListener('input', ev => { if (ev.target.id === 'rpn-search') renderList(ev.target.value); });

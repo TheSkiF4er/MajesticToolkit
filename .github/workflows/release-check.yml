@@ -20,12 +20,12 @@ jobs:
         run: cd release && sha256sum -c SHA256SUMS
       - name: Mozilla AMO lint
         run: |
-          npm exec --yes --package=addons-linter@10.14.0 -- addons-linter release/MajesticToolkit-1.5.0-firefox.zip
-          npm exec --yes --package=addons-linter@10.14.0 -- addons-linter release/MajesticToolkit-1.5.0-firefox-android.zip
+          npm exec --yes --package=addons-linter@10.14.0 -- addons-linter release/MajesticToolkit-1.5.1-firefox.zip
+          npm exec --yes --package=addons-linter@10.14.0 -- addons-linter release/MajesticToolkit-1.5.1-firefox-android.zip
       - name: Publish downloadable CI artifacts (not marketplace publication)
         uses: actions/upload-artifact@v4
         with:
-          name: MajesticToolkit-1.5.0-release-${{ github.run_id }}
+          name: MajesticToolkit-1.5.1-release-${{ github.run_id }}
           path: release/
           if-no-files-found: error
   browser-e2e:

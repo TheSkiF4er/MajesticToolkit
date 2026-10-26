@@ -27,14 +27,28 @@ async function syncScripts() {
     if (old.length) await api.scripting.unregisterContentScripts({ids:old});
     const byId = new Map(registrations.map(r=>[r.id,r]));
     for (const site of [...FORUMS, ...VIDEOS]) {
-      const granted = await api.permissions.contains({origins:[site.origin]});
-      const isForum = FORUMS.includes(site);
-      const wanted={id:site.id,matches:[site.origin],js:isForum ? ['lib/safe-dom.js','lib/forum-core.js','lib/xenforo-core.js','lib/complaints-core.js','content/forum.js'] : ['lib/safe-dom.js','lib/complaints-core.js','content/evidence.js'],runAt:'document_idle',allFrames:false,persistAcrossSessions:true};
-      const current=byId.get(site.id);
-      const obsolete=current&&(JSON.stringify(current.js)!==JSON.stringify(wanted.js) || JSON.stringify(current.matches)!==JSON.stringify(wanted.matches) || current.runAt!==wanted.runAt || current.allFrames!==false);
-      // Persisted registrations from a previous version must be replaced on upgrade.
-      if(current&&(!granted||obsolete))await api.scripting.unregisterContentScripts({ids:[site.id]});
-      if(granted&&(!current||obsolete))await api.scripting.registerContentScripts([wanted]);
+      try {
+        const granted = await api.permissions.contains({origins:[site.origin]});
+        const isForum = FORUMS.includes(site);
+        const wanted={id:site.id,matches:[site.origin],js:isForum ? ['lib/safe-dom.js','lib/forum-core.js','lib/xenforo-core.js','lib/complaints-core.js','content/forum.js'] : ['lib/safe-dom.js','lib/complaints-core.js','content/evidence.js'],runAt:'document_idle',allFrames:false,persistAcrossSessions:true};
+        const current=byId.get(site.id);
+        const obsolete=current&&(JSON.stringify(current.js)!==JSON.stringify(wanted.js) || JSON.stringify(current.matches)!==JSON.stringify(wanted.matches) || current.runAt!==wanted.runAt || current.allFrames!==false);
+        // Persisted registrations from a previous version must be replaced on upgrade.
+        if(current&&(!granted||obsolete))await api.scripting.unregisterContentScripts({ids:[site.id]});
+        if(granted&&(!current||obsolete)) {
+          await api.scripting.registerContentScripts([wanted]);
+          // registerContentScripts only affects future navigations. Enable on existing tabs now.
+          // The content scripts guard against duplicate initialization on the same document.
+          try {
+            const tabs = await api.tabs.query({url:[site.origin]});
+            await Promise.allSettled(tabs.filter(tab=>Number.isInteger(tab.id)&&tab.id>=0).map(tab=>
+              api.scripting.executeScript({target:{tabId:tab.id},files:wanted.js})
+            ));
+          } catch (error) {
+            console.warn('MajesticToolkit: existing tabs will need refresh',site.origin,error);
+          }
+        }
+      } catch(error) { console.error('MajesticToolkit: не удалось настроить сайт',site.origin,error); }
     }
   } catch (error) { console.error('MajesticToolkit: не удалось зарегистрировать скрипты',error); }
 }
@@ -82,12 +96,19 @@ async function checkDeadlines() {
   }
 }
 async function tick() { try { await scanTabs(); await checkDeadlines(); } catch(error) { console.warn('MajesticToolkit: периодическая проверка',error); } }
+let pendingSync=Promise.resolve();
+function scheduleSyncScripts(){
+  // Two permission events may fire before Chrome has persisted the first registration.
+  const job=pendingSync.then(syncScripts);
+  pendingSync=job.catch(error=>console.error('MajesticToolkit: синхронизация скриптов',error));
+  return job;
+}
 function start() {
   // Content scripts are not permitted to read extension-owned storage where supported.
   void (async()=>{
     try { await api.storage.local.setAccessLevel?.({accessLevel:'TRUSTED_CONTEXTS'}); }
     catch(error){console.warn('MajesticToolkit: storage access level unsupported',error);}
-    await syncScripts();
+    await scheduleSyncScripts();
   })();
   void api.alarms.create('rp-nexus-open-tabs-v3',{periodInMinutes:5}).catch(err => console.warn('MajesticToolkit: alarms',err));
 }
@@ -97,8 +118,8 @@ api.storage.onChanged.addListener((changes,area) => {
   if (area !== 'local' || !Object.keys(changes).some(k=> k==='rpNexusStateV1'||k.startsWith('rpnForumTemplateV2:')||k.startsWith('majesticToolkitXfNavV11:'))) return;
   void api.tabs.query({}).then(tabs=>Promise.allSettled(tabs.filter(t=>t.id&&FORUMS.some(f=>t.url?.startsWith(f.origin.slice(0,-1)))).map(t=>api.tabs.sendMessage(t.id,{type:'RP_NEXUS_REFRESH_FORUM_DATA'})))).catch(()=>{});
 });
-api.permissions.onAdded.addListener(() => {void syncScripts();});
-api.permissions.onRemoved.addListener(() => {void syncScripts();});
+api.permissions.onAdded.addListener(() => {void scheduleSyncScripts();});
+api.permissions.onRemoved.addListener(() => {void scheduleSyncScripts();});
 api.alarms.onAlarm.addListener(alarm => {if (alarm.name === 'rp-nexus-open-tabs-v3') void tick();});
 api.runtime.onMessage.addListener((message,sender,sendResponse) => {
   if (!message || typeof message !== 'object') return;
