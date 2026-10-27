@@ -14,7 +14,8 @@ test('official mixed-project catalog preserves IDs, project association and regi
 test('live figures require explicit numeric facts and accepted IDs',()=>{
  const v=normalizeLive({result:{servers:[{id:'RU1',online:123,queue:2,status:'online'},{id:'RO1',players:44,queueCount:0,status:'offline'},{id:'NOT-VALID',players:555}]}},catalog);
  assert.deepEqual(v,[{id:'RU1',online:123,queue:2,availability:'online'},{id:'RO1',online:44,queue:0,availability:'offline'}]);
- assert.throws(()=>normalizeLive({result:{servers:[{id:'RU1',online:'123'}]}},catalog),/подтверждённых/);
+ assert.equal(normalizeLive({result:{servers:[{id:'RU1',online:'123'}]}},catalog)[0].online,123);
+ assert.throws(()=>normalizeLive({result:{servers:[{id:'RU1',online:'12x'}]}},catalog),/подтверждённых/);
  assert.throws(()=>normalizeLive({},catalog),/не предоставил/);
 });
 test('favorites and cached samples survive offline without manufacturing statistics',()=>{

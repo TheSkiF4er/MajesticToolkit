@@ -1,5 +1,5 @@
 import {api} from './browser.mjs';
-import {CATALOG_URL,LIVE_URL,MONITOR_ORIGIN,normalizeCatalog,normalizeLive} from './monitor-core.mjs';
+import {CATALOG_URL,LIVE_URL,LIVE_MIRROR,MONITOR_ORIGIN,MIRROR_ORIGIN,normalizeCatalog,normalizeLive} from './monitor-core.mjs';
 import {loadMonitor,storeCatalog,storeLive} from './monitor-store.mjs';
 const read=async(url,fetcher=fetch)=>{
  const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),9000);
@@ -34,8 +34,17 @@ export async function refreshOfficialCatalog(fetcher=fetch){
  if(!await hasMonitorPermission())throw Error('Разрешите доступ к официальному API');
  const catalog=normalizeCatalog(await read(CATALOG_URL,fetcher));await storeCatalog(catalog);return catalog;
 }
+export async function requestMonitorMirrorPermission(permissions=api.permissions){return permissions.request({origins:[MIRROR_ORIGIN]});}
 export async function refreshVerifiedOnline(fetcher=fetch){
  if(!await hasMonitorPermission())throw Error('Разрешите доступ к официальному API');
  const data=await loadMonitor();if(!data.catalog.length)throw Error('Сначала обновите каталог серверов');
- const stats=normalizeLive(await read(LIVE_URL,fetcher),data.catalog);await storeLive(stats);return stats;
+ let primaryError;
+ try{const stats=normalizeLive(await read(LIVE_URL,fetcher),data.catalog);await storeLive(stats);return stats;}
+ catch(error){primaryError=error;}
+ if(await api.permissions.contains({origins:[MIRROR_ORIGIN]})){
+   try{const stats=normalizeLive(await read(LIVE_MIRROR,fetcher),data.catalog);await storeLive(stats);return stats;}
+   catch(error){throw Error('Основной API: '+primaryError.message+'. Резервный API: '+error.message);}
+ }
+ throw Error('Основной источник онлайн-статистики недоступен: '+primaryError.message+'. Для резервного официального API нажмите «Разрешить резервный API».');
 }
+

@@ -3,12 +3,12 @@ import {resolve,relative} from 'node:path';
 import {execFileSync} from 'node:child_process';
 const root=resolve(import.meta.dirname,'..');
 const permissions=new Set(['storage','activeTab','scripting','sidePanel','alarms','notifications','unlimitedStorage','identity']);
-const origins=new Set(['https://forum.majestic-rp.ru/*','https://forum.russia.online/*','https://www.youtube.com/*','https://rutube.ru/*','https://www.twitch.tv/*','https://www.googleapis.com/*','https://docs.googleapis.com/*','https://sheets.googleapis.com/*','https://oauth2.googleapis.com/*','https://api.majestic-files.com/*']);
+const origins=new Set(['https://forum.majestic-rp.ru/*','https://forum.russia.online/*','https://www.youtube.com/*','https://rutube.ru/*','https://www.twitch.tv/*','https://www.googleapis.com/*','https://docs.googleapis.com/*','https://sheets.googleapis.com/*','https://oauth2.googleapis.com/*','https://api.majestic-files.com/*','https://api.majestic-files.net/*','https://fletcher-wiki.com/*','https://www.fletcher-wiki.com/*']);
 async function walk(dir){const nodes=await readdir(dir,{withFileTypes:true});return (await Promise.all(nodes.map(async n=>n.isDirectory()?walk(resolve(dir,n.name)):[resolve(dir,n.name)]))).flat();}
 const targets=['chromium','firefox','firefox-android','safari'];
 for(const browser of targets){
  const output=resolve(root,'dist',browser),m=JSON.parse(await readFile(resolve(output,'manifest.json'),'utf8'));
- if(m.manifest_version!==3 || m.version!=='1.5.3')throw Error(`${browser}: version / Manifest V3 invalid`);
+ if(m.manifest_version!==3 || m.version!=='1.5.4')throw Error(`${browser}: version / Manifest V3 invalid`);
  if(m.permissions.some(p=>!permissions.has(p)) || m.optional_host_permissions.length!==origins.size || m.optional_host_permissions.some(x=>!origins.has(x)))throw Error(`${browser}: expanded permissions`);
  if(m.host_permissions?.length)throw Error(`${browser}: unsolicited access to websites`);
  if(browser.startsWith('firefox')) {

@@ -6,10 +6,10 @@ const root=resolve(import.meta.dirname,'..');
 const release=resolve(root,'release');
 const sha=data=>createHash('sha256').update(data).digest('hex');
 const index=JSON.parse(await readFile(resolve(release,'release-manifest.json'),'utf8'));
-if(index.version!=='1.5.3'||index.artifacts.length!==4)throw Error('Release manifest invalid');
+if(index.version!=='1.5.4'||index.artifacts.length!==4)throw Error('Release manifest invalid');
 const lines=(await readFile(resolve(release,'SHA256SUMS'),'utf8')).trim().split('\n');
 for(const row of index.artifacts){
- if(!/^MajesticToolkit-1\.5\.3-(chromium|firefox|firefox-android|safari)\.zip$/.test(row.file))throw Error('Unexpected release filename');
+ if(!/^MajesticToolkit-1\.5\.4-(chromium|firefox|firefox-android|safari)\.zip$/.test(row.file))throw Error('Unexpected release filename');
  const bytes=await readFile(resolve(release,row.file));
  if(bytes.length!==row.size||sha(bytes)!==row.sha256||!lines.includes(`${row.sha256}  ${row.file}`))throw Error('SHA256 mismatch: '+row.file);
  let pos=0,count=0,manifest;
@@ -20,12 +20,12 @@ for(const row of index.artifacts){
   if(method!==8||!(flags&0x800))throw Error('Bad ZIP flags');
   const content=inflateRawSync(bytes.subarray(pos+30+nameLen+extraLen,pos+30+nameLen+extraLen+size));
   if(content.length!==expanded)throw Error('ZIP uncompressed size mismatch: '+name);
-  const browser=row.file.replace('MajesticToolkit-1.5.3-','').replace('.zip','');
+  const browser=row.file.replace('MajesticToolkit-1.5.4-','').replace('.zip','');
   if(sha(content)!==sha(await readFile(resolve(root,'dist',browser,name))))throw Error('Packaged bytes differ from build: '+name);
   if(name==='manifest.json')manifest=JSON.parse(content.toString('utf8'));
   pos+=30+nameLen+extraLen+size;count++;
  }
- if(count!==row.files||manifest?.version!=='1.5.3')throw Error('ZIP manifest/file count mismatch: '+row.file);
+ if(count!==row.files||manifest?.version!=='1.5.4')throw Error('ZIP manifest/file count mismatch: '+row.file);
  if(row.file.includes('-firefox')) {
    if(manifest.browser_specific_settings?.gecko?.id!=='majestictoolkit@theskif4er.github.io' ||
       JSON.stringify(manifest.browser_specific_settings.gecko.data_collection_permissions?.required)!=='["none"]' ||

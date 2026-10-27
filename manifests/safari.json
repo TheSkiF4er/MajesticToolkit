@@ -3,7 +3,7 @@
   "name": "MajesticToolkit",
   "short_name": "MajesticToolkit",
   "description": "MajesticToolkit: XenForo, мониторинг серверов, публичные профили, документы и Google.",
-  "version": "1.5.3",
+  "version": "1.5.4",
   "permissions": [
     "storage",
     "activeTab",
@@ -22,7 +22,10 @@
     "https://docs.googleapis.com/*",
     "https://sheets.googleapis.com/*",
     "https://oauth2.googleapis.com/*",
-    "https://api.majestic-files.com/*"
+    "https://api.majestic-files.com/*",
+    "https://api.majestic-files.net/*",
+    "https://fletcher-wiki.com/*",
+    "https://www.fletcher-wiki.com/*"
   ],
   "action": {
     "default_title": "MajesticToolkit",

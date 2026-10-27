@@ -24,7 +24,7 @@ export function validateKnowledge(raw,profileIds){if(!raw||typeof raw!=='object'
  }
  return {version:1,resources,relations};
 }
-export function sourceNodes(profileId,{documents=[],laws=[],government=[],forum=[],links=[],resources=[]}={}){
+export function sourceNodes(profileId,{documents=[],laws=[],government=[],forum=[],links=[],resources=[],sources=[]}={}){
  const nodes=[];const push=(kind,row,title,extra={})=>{if(row?.profileId&&row.profileId!==profileId&&row.profileId!=='*')return;nodes.push({kind,id:row.id,title:String(title||'Без названия'),profileId:row.profileId??'*',...extra});};
  for(const r of documents){push(r.type==='template'?'document-template':'document',r,r.type==='template'?r.title:r.versions?.at(-1)?.title);}
  for(const r of laws){if(r.type==='book')push('law',r,r.title,{url:r.sourceUrl||''});else if(r.type==='memo')push('law-memo',r,r.title);}
@@ -32,6 +32,7 @@ export function sourceNodes(profileId,{documents=[],laws=[],government=[],forum=
  for(const r of forum)push('forum-template',r,r.label);
  for(const r of links)push('external',r,r.title,{url:r.url,description:r.notes||''});
  for(const r of resources)push(r.kind,r,r.title,{url:googleResourceUrl(r.kind,r.fileId),description:r.notes});
+ for(const r of sources)push('external',r,r.title,{url:r.url,description:(r.kind==='forum'?'Форум · ':'Fletcher Wiki · ')+r.body});
  return nodes.sort((a,b)=>a.title.localeCompare(b.title,'ru'));
 }
 export const nodeKey=n=>`${n.kind}:${n.id}`;

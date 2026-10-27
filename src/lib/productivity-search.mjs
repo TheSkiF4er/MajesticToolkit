@@ -8,6 +8,7 @@ import {listGovernment} from './government-store.mjs';
 import {listDocumentRecords} from './document-store.mjs';
 import {listLinks} from './integration-store.mjs';
 import {buildSearchRecords} from './productivity-core.mjs';
+import {listSources} from './source-library.mjs';
 let index=null;let inflight=null;let epoch=0;
 export function invalidateSearch(){index=null;epoch++;}
 export async function getLocalIndex(){
@@ -15,10 +16,10 @@ export async function getLocalIndex(){
   if(inflight)return inflight;
   const version=epoch;
   const task=(async()=>{
-    const [templates,cases,economy,laws,government,documents,links]=await Promise.all([
-      listTemplates(),listCases(),listEconomy(),listLawRecords(),listGovernment(),listDocumentRecords(),listLinks()
+    const [templates,cases,economy,laws,government,documents,links,sources]=await Promise.all([
+      listTemplates(),listCases(),listEconomy(),listLawRecords(),listGovernment(),listDocumentRecords(),listLinks(),listSources()
     ]);
-    return buildSearchRecords({templates,cases,economy,laws,government,documents,links});
+    return buildSearchRecords({templates,cases,economy,laws,government,documents,links,sources});
   })();
   inflight=task;
   let rows;

@@ -1,8 +1,8 @@
 import {openTab} from '../lib/browser.mjs';
 import {escapeHtml as e} from '../lib/sites.mjs';
 import {loadMonitor,favoriteServer,removePlayer,setAutoRefresh} from '../lib/monitor-store.mjs';
-import {hasMonitorPermission,requestMonitorPermission,refreshOfficialCatalog,refreshVerifiedOnline} from '../lib/monitor-service.mjs';
-import {CATALOG_URL,LIVE_URL} from '../lib/monitor-core.mjs';
+import {hasMonitorPermission,requestMonitorPermission,requestMonitorMirrorPermission,refreshOfficialCatalog,refreshVerifiedOnline} from '../lib/monitor-service.mjs';
+import {CATALOG_URL,LIVE_URL,LIVE_MIRROR} from '../lib/monitor-core.mjs';
 let data=null,permission=false,filter='all',error='',busy=false;
 export async function refreshMonitor(){[data,permission]=await Promise.all([loadMonitor(),hasMonitorPermission()]);return data;}
 export const monitorRecords=()=>data;
@@ -17,8 +17,8 @@ export function monitorSection(state){
  const catalog=data.catalog.filter(s=>filter==='all'||(filter==='favorites'&&data.favorites.includes(s.id))||filter===s.project);
  const players=data.players.filter(x=>x.profileId===state.activeProfileId);
  return `<div class="stack"><section class="card stack"><h3>Server Monitor & Player Profiles</h3><p class="subtle">Каталог загружается непосредственно с публичного API Majestic. Дополнительный источник статистики онлайна опрашивается только после разрешения. Если он не отвечает или не содержит проверяемых значений, онлайн не выдумывается и показывается как недоступный.</p>
-   <div class="row"><button class="button primary" data-monitor-action="enable" ${permission?'disabled':''}>${permission?'API разрешён':'Разрешить официальный API'}</button><button class="button secondary" data-monitor-action="catalog" ${!permission||busy?'disabled':''}>Обновить каталог</button><button class="button secondary" data-monitor-action="online" ${!permission||busy||!data.catalog.length?'disabled':''}>Проверить онлайн</button><button class="button secondary" data-monitor-action="source">Открыть источник</button></div>
-   <label class="check"><input type="checkbox" id="monitor-auto-refresh" ${data.autoRefresh?'checked':''} ${!permission?'disabled':''}> Обновлять проверенный онлайн каждые 5 минут при открытом рабочем пространстве (после первого успешного запроса)</label><p class="subtle">Каталог: ${date(data.observedAt)} · Онлайн: ${date(data.liveAt)} · Источники: ${e(CATALOG_URL)} и ${e(LIVE_URL)}. Нет опроса в фоне, когда рабочее пространство закрыто.</p>
+   <div class="row"><button class="button primary" data-monitor-action="enable" ${permission?'disabled':''}>${permission?'API разрешён':'Разрешить официальный API'}</button><button class="button secondary" data-monitor-action="enable-mirror">Разрешить резервный API</button><button class="button secondary" data-monitor-action="catalog" ${!permission||busy?'disabled':''}>Обновить каталог</button><button class="button secondary" data-monitor-action="online" ${!permission||busy||!data.catalog.length?'disabled':''}>Проверить онлайн</button><button class="button secondary" data-monitor-action="source">Открыть источник</button></div>
+   <label class="check"><input type="checkbox" id="monitor-auto-refresh" ${data.autoRefresh?'checked':''} ${!permission?'disabled':''}> Обновлять проверенный онлайн каждые 5 минут при открытом рабочем пространстве (после первого успешного запроса)</label><p class="subtle">Каталог: ${date(data.observedAt)} · Онлайн: ${date(data.liveAt)} · Источники: ${e(CATALOG_URL)}, ${e(LIVE_URL)} (резервный: ${e(LIVE_MIRROR)}). Нет опроса в фоне, когда рабочее пространство закрыто.</p>
    ${error?`<p class="error" role="alert">${e(error)}</p>`:''}
   </section>
   <section class="card stack"><div class="row spread"><h3>Серверы (${catalog.length})</h3><select id="monitor-filter" aria-label="Фильтр серверов"><option value="all" ${filter==='all'?'selected':''}>Все</option><option value="favorites" ${filter==='favorites'?'selected':''}>Избранные</option><option value="majestic" ${filter==='majestic'?'selected':''}>Majestic RP</option><option value="russia-online" ${filter==='russia-online'?'selected':''}>Россия Онлайн</option></select></div>
@@ -37,6 +37,7 @@ export async function handleMonitorAction(button,state,rerender,feedback){
    if(!await requestMonitorPermission()){feedback('Доступ к API отклонён',true);return;}
    permission=true;await refreshMonitor();rerender();feedback('Доступ к официальному API предоставлен');return;
  }
+ if(action==='enable-mirror'){if(!await requestMonitorMirrorPermission()){feedback('Разрешение резервного API отклонено',true);return;}feedback('Резервный официальный API разрешён');return;}
  if(action==='favorite'){data=await favoriteServer(button.dataset.id);rerender();return;}
  if(action==='delete-player'){
    if(!confirm('Удалить сохранённую публичную карточку?'))return;

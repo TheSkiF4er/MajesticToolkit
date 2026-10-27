@@ -2,12 +2,14 @@
 export const MONITOR_KEY='majesticToolkitMonitorV12';
 export const CATALOG_URL='https://api.majestic-files.com/meta/general';
 export const LIVE_URL='https://api.majestic-files.com/meta/servers';
+export const LIVE_MIRROR='https://api.majestic-files.net/meta/servers';
+export const MIRROR_ORIGIN='https://api.majestic-files.net/*';
 export const MONITOR_ORIGIN='https://api.majestic-files.com/*';
 export const MAX_SAVED_PLAYERS=250;
 export const MAX_FAVORITES=80;
 const obj=x=>x&&typeof x==='object'&&!Array.isArray(x);
 const clean=(x,max=150)=>{if(typeof x!=='string'||!x.trim()||x.trim().length>max)throw Error('Неверное строковое поле');return x.trim();};
-const count=n=>Number.isInteger(n)&&n>=0&&n<=1000000?n:null;
+const count=n=>{const value=typeof n==='string'&&/^\d{1,7}$/.test(n)?Number(n):n;return Number.isInteger(value)&&value>=0&&value<=1000000?value:null;};
 const allowedId=x=>typeof x==='string'&&/^(?:RU(?:[1-9]|[12][0-9])|RO[1-9]|DE[1-9]|PL[1-9]|MCL)$/i.test(x);
 const projects={majestic:'majestic','russia-online':'russia-online'};
 export function serverId(value){const id=clean(String(value),12).toUpperCase();if(!allowedId(id))throw Error('Неизвестный идентификатор сервера');return id;}
@@ -25,22 +27,24 @@ export function normalizeCatalog(payload){
 }
 /** Only accept online counts from a response containing explicit per-server numbers. */
 export function normalizeLive(payload,catalog){
- const raw=payload?.result?.servers??payload?.servers??payload?.result;
- const rows=Array.isArray(raw)?raw:Array.isArray(raw?.list)?raw.list:null;
- if(!rows)throw Error('Публичный источник не предоставил проверяемую статистику онлайна');
+ const sources=[payload?.result?.servers,payload?.servers,payload?.result?.list,payload?.result?.data,payload?.data?.servers,payload?.result,payload?.data,payload];
+ const raw=sources.find(value=>Array.isArray(value)||(obj(value)&&Object.entries(value).some(([key,row])=>allowedId(key)&&obj(row))));
+ let rows=Array.isArray(raw)?raw:obj(raw)?Object.entries(raw).filter(([key])=>allowedId(key)).map(([id,value])=>({id,...value})):null;
+ if(!rows)throw Error('Официальный API не предоставил список серверов с онлайном');
  const known=new Set(catalog.map(x=>x.id));const seen=new Set();const live=[];
  for(const s of rows){
    if(!obj(s))continue;
-   let id;try{id=serverId(s.id??s.serverId??s.code);}catch{continue;}
+   let id;try{id=serverId(s.id??s.serverId??s.server_id??s.code??s.server);}catch{continue;}
    if(!known.has(id)||seen.has(id))continue;
-   const online=count(s.online??s.players??s.playerCount??s.currentPlayers);
-   const queue=count(s.queue??s.queueCount??s.waiting);
-   const status=typeof s.status==='string'?s.status.toLowerCase():null;
+   const players=obj(s.players)?s.players:{};
+   const online=count(s.online??s.onlineCount??s.onlinePlayers??s.playersOnline??s.players_count??s.playerCount??s.currentPlayers??players.online??players.count??(typeof s.players==='number'?s.players:null));
+   const queue=count(s.queue??s.queueCount??s.waiting??s.playersQueue??players.queue);
+   const status=typeof s.status==='string'?s.status.toLowerCase():typeof s.state==='string'?s.state.toLowerCase():null;
    if(online===null&&queue===null&&status===null)continue;
    seen.add(id);
    live.push({id,online,queue,availability:['online','up','running','active'].includes(status)?'online':['offline','down','stopped'].includes(status)?'offline':'unknown'});
  }
- if(!live.length)throw Error('Источник не содержит подтверждённых числовых данных для известных серверов');
+ if(!live.length||!live.some(x=>x.online!==null))throw Error('Ответ API не содержит подтверждённых чисел игроков по серверам');
  return live;
 }
 export function validatePublicCard(input){

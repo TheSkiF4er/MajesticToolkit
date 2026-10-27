@@ -1,6 +1,6 @@
 # Установка MajesticToolkit из ZIP: Chromium и Safari
 
-Инструкция для **MajesticToolkit 1.5.3** и более ранних опубликованных ZIP-файлов. **Вместе с архивом не нужно устанавливать Node.js**, если вы распаковываете расширение вручную. Node.js 22 нужен только для сборки проекта и необязательного скрипта подготовки.
+Инструкция для **MajesticToolkit 1.5.4** и более ранних опубликованных ZIP-файлов. **Вместе с архивом не нужно устанавливать Node.js**, если вы распаковываете расширение вручную. Node.js 22 нужен только для сборки проекта и необязательного скрипта подготовки.
 
 > **Важно:** скачанный ZIP не равен установщику. Chromium на ПК принимает *распакованную папку* с `manifest.json`; Safari на macOS умеет временно подключить ZIP или папку, но для постоянной установки и распространения нужен Safari Web Extension в приложении-контейнере (или упаковка через App Store Connect). На iPhone нельзя установить этот ZIP напрямую.
 
@@ -18,7 +18,7 @@
 - [MajesticToolkit-1.5.0-safari.zip](https://github.com/TheSkiF4er/MajesticToolkit/releases/download/v1.5.0/MajesticToolkit-1.5.0-safari.zip)
 - [SHA256SUMS 1.5.0](https://github.com/TheSkiF4er/MajesticToolkit/releases/download/v1.5.0/SHA256SUMS)
 
-**Это ссылки на 1.5.0, а не на 1.5.3.** Для 1.5.3 понадобятся пакеты из её отдельного опубликованного Release. Не переименовывайте ZIP старой версии, чтобы выдать его за новую.
+**Это ссылки на 1.5.0, а не на 1.5.4.** Для 1.5.4 понадобятся пакеты из её отдельного опубликованного Release. Не переименовывайте ZIP старой версии, чтобы выдать его за новую.
 
 Проверка SHA-256 при наличии утилиты:
 
@@ -111,8 +111,8 @@ npm run prepare:safari
 Для уже скачанного ZIP укажите явный путь:
 
 ```sh
-node scripts/prepare-install.mjs chromium "/path/to/MajesticToolkit-1.5.3-chromium.zip" "/path/to/unpacked-chromium"
-node scripts/prepare-install.mjs safari "/path/to/MajesticToolkit-1.5.3-safari.zip" "/path/to/unpacked-safari"
+node scripts/prepare-install.mjs chromium "/path/to/MajesticToolkit-1.5.4-chromium.zip" "/path/to/unpacked-chromium"
+node scripts/prepare-install.mjs safari "/path/to/MajesticToolkit-1.5.4-safari.zip" "/path/to/unpacked-safari"
 ```
 
 Скрипт не перезаписывает существующую папку установки. Он принимает только версию, соответствующую `package.json` исходного проекта. Для ZIP 1.5.0 используйте **исходники и инструмент версии 1.5.0** либо ручное распаковывание — не подменяйте номер версии в пакете.

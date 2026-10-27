@@ -89,3 +89,15 @@ test('v13 backup round-trips full journal and accepts v12 with workflow migratio
  const legacy=JSON.parse(old);delete legacy.complaints[0].workflow;
  assert.equal(parseBackupV13(JSON.stringify(legacy),validateState,F.cleanTemplate).cases[0].workflow.stage,'intake');
 });
+
+test('v14 backup preserves user-imported forum texts, rejects forged origins, and keeps old backups readable', async()=>{
+ const {makeBackupV14,parseBackupV14}=await import('../src/lib/source-backup.mjs');
+ const source={id:'saved-article-123',profileId:id,kind:'fletcher',url:'https://fletcher-wiki.com/majestic/cars',title:'Каталог транспорта',body:'Опубликованный справочник транспорта с названиями, характеристиками, моделями и игровыми ценами.',capturedAt:'2026-10-27T00:00:00Z'};
+ const args=[profile,[],[],[],[],[],[],[],defaultProductivity(),[],emptyMonitor(),emptyKnowledge(),F.cleanTemplate];
+ const backup=makeBackupV14(...args,[source]);
+ assert.equal(JSON.parse(backup).schemaVersion,14);
+ assert.equal(parseBackupV14(backup,validateState,F.cleanTemplate).sourceLibrary[0].title,source.title);
+ assert.throws(()=>makeBackupV14(...args,[{...source,url:'https://evil.test/'}]));
+ assert.equal(parseBackupV14(makeBackupV13(...args),validateState,F.cleanTemplate).sourceLibrary,null);
+ assert.equal(parseBackupV14(makeBackupV13(...args),validateState,F.cleanTemplate).schemaVersion,13);
+});
