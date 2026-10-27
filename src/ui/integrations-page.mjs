@@ -76,15 +76,15 @@ export async function handleIntegrationAction(button,state,render,feedback,creat
 }
 export async function handleIntegrationSubmit(form,state,render,feedback){
   const data=Object.fromEntries(new FormData(form).entries());
-  if(form.id==='google-config-form'){await setClientId(data.clientId);await refreshIntegrations();render();feedback('Client ID сохранён; при необходимости подключите аккаунт снова');return;}
-  if(form.id==='site-link-form'){await addLink(data);await refreshIntegrations();render();feedback('Закладка сохранена');return;}
-  if(form.id==='google-import-doc-form'){
+  if(form.getAttribute('id')==='google-config-form'){await setClientId(data.clientId);await refreshIntegrations();render();feedback('Client ID сохранён; при необходимости подключите аккаунт снова');return;}
+  if(form.getAttribute('id')==='site-link-form'){await addLink(data);await refreshIntegrations();render();feedback('Закладка сохранена');return;}
+  if(form.getAttribute('id')==='google-import-doc-form'){
     const doc=await readGoogleDoc(googleFileId(data.id));const body=docsPlainText(doc);if(!body)throw Error('Документ пуст или имеет неподдерживаемую структуру');
     const title=String(doc.title||'Документ Google').slice(0,180);
     await addStudioDocument(state.activeProfileId,{title,body,fields:[],values:{},departmentId:'',templateId:''},state.profiles.map(p=>p.id),governmentRecords());
     await refreshDocuments();render();feedback('Документ импортирован в Document Studio');return;
   }
-  if(form.id==='google-read-sheet-form'){
+  if(form.getAttribute('id')==='google-read-sheet-form'){
     const response=await readGoogleSheet(data.id,data.range);
     tablePreview=Array.isArray(response.values)?response.values.slice(0,1000).map(row=>row.map(x=>String(x))):[];
     previewTitle=response.range||'Google Sheets';render();feedback(`Прочитано строк: ${tablePreview.length}`);return;

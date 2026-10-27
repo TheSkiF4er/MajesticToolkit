@@ -117,14 +117,51 @@ async def exercise(browser):
     block=source.split("document.addEventListener('submit', event => {",1)[1].split("document.addEventListener('keydown', event => {",1)[0]
     context=await browser.new_context()
     page=await context.new_page()
-    await page.set_content('''<!doctype html><form id="xf-navigation-form"><input name="title" required value="Правила"><input name="url" type="url" required value="https://example.com"><button type="submit">Сохранить ссылку</button></form>''')
+    await page.set_content('''<!doctype html><form id="xf-navigation-form"><input name="id" type="hidden"><input name="title" required value="Правила"><input name="url" type="url" required value="https://example.com"><button type="submit">Сохранить ссылку</button></form>''')
     await page.add_script_tag(content='''globalThis.__calls=0;
        globalThis.state={profiles:[]};globalThis.render=()=>{};globalThis.feedback=()=>{};
        globalThis.handleForumSubmit=async event=>{globalThis.__calls++;globalThis.__prevented=event.defaultPrevented;};''')
     await page.add_script_tag(content="document.addEventListener('submit', event => {"+block)
+    assert await page.locator('form').evaluate('(f) => f.id !== f.getAttribute("id")')
     await page.locator('button[type=submit]').click()
     await page.wait_for_function('globalThis.__calls === 1')
     assert await page.evaluate('globalThis.__prevented') is True
+    count+=1
+    await context.close()
+
+    # Regression: hidden name=id used to shadow HTMLFormElement.id, allowing a
+    # native GET navigation instead of persisting the binder's new template.
+    context=await browser.new_context()
+    page=await context.new_page()
+    await page.set_content('''<!doctype html><form id="forum-template-form"><input name="id" type="hidden"><input name="label" required value="Test reply"><textarea name="text" required>Hello</textarea><button type="submit">Сохранить шаблон</button></form>''')
+    await page.add_script_tag(content='''globalThis.__calls=0;
+       globalThis.state={profiles:[]};globalThis.render=()=>{};globalThis.feedback=()=>{};
+       globalThis.handleForumSubmit=async event=>{globalThis.__calls++;globalThis.__prevented=event.defaultPrevented;};''')
+    await page.add_script_tag(content="document.addEventListener('submit', event => {"+block)
+    assert await page.locator('form').evaluate('(f) => f.id !== f.getAttribute("id")')
+    await page.locator('button[type=submit]').click()
+    await page.wait_for_function('globalThis.__calls === 1')
+    assert await page.evaluate('globalThis.__prevented') is True
+    count+=1
+    await context.close()
+
+    # Regression for other named `id` controls in the complaint and Google
+    # import forms: they must dispatch without triggering a default GET request.
+    context=await browser.new_context()
+    page=await context.new_page()
+    await page.set_content('''<!doctype html><form id="complaint-form"><input type="hidden" name="id"><input name="title" required value="Case"><button type="submit">Сохранить жалобу</button></form><form id="google-import-doc-form"><input name="id" required value="abcdefghi12345"><button type="submit">Импорт</button></form>''')
+    await page.add_script_tag(content='''globalThis.__complaint=0;globalThis.__google=0;
+       globalThis.state={};globalThis.render=()=>{};globalThis.feedback=()=>{};
+       globalThis.lawRecords=()=>[];
+       globalThis.handleComplaintSubmit=async e=>{globalThis.__complaint++;globalThis.__complaintPrevented=e.defaultPrevented;};
+       globalThis.handleIntegrationSubmit=async form=>{globalThis.__google++;};''')
+    await page.add_script_tag(content="document.addEventListener('submit', event => {"+block+"document.addEventListener('submit',e=>{if(e.target.getAttribute('id')==='google-import-doc-form')globalThis.__googlePrevented=e.defaultPrevented;});")
+    assert await page.locator('#complaint-form').evaluate('(f)=>f.id !== f.getAttribute("id")')
+    assert await page.locator('#google-import-doc-form').evaluate('(f)=>f.id !== f.getAttribute("id")')
+    await page.locator('#complaint-form button[type=submit]').click()
+    await page.locator('#google-import-doc-form button[type=submit]').click()
+    await page.wait_for_function('globalThis.__complaint === 1 && globalThis.__google === 1')
+    assert await page.evaluate('globalThis.__complaintPrevented && globalThis.__googlePrevented')
     count+=1
     await context.close()
 

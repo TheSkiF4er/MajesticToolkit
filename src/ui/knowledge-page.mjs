@@ -30,9 +30,9 @@ export function knowledgeSection(state){const profile=state.profiles.find(p=>p.i
 export function setKnowledgeQuery(text){query=String(text).slice(0,180);}
 export function setKnowledgeKind(next){if(next==='all'||Object.hasOwn(KNOWLEDGE_LABELS,next))kind=next;}
 export async function handleKnowledgeSubmit(form,state,render,feedback){const input=Object.fromEntries(new FormData(form).entries()),profileId=state.activeProfileId,ids=profiles(state);
- if(form.id==='knowledge-bookmark-form'){await addLink(input);await refreshKnowledge(ids);render();feedback('Ссылка сохранена в интеграциях и Центре знаний');return;}
- if(form.id==='knowledge-google-form'){knowledge=await saveKnowledgeResource(profileId,input,ids);render();feedback('Шаблон Google сохранён локально');return;}
- if(form.id==='knowledge-relation-form'){const nodes=knowledgeNodes(profileId),map=new Map(nodes.map(n=>[nodeKey(n),n])),a=map.get(input.from),b=map.get(input.to);if(!a||!b)throw Error('Выбрана удалённая или недоступная запись');if(a.profileId!=='*'&&a.profileId!==profileId||b.profileId!=='*'&&b.profileId!==profileId)throw Error('Нельзя связывать разные профили');knowledge=await saveKnowledgeRelation(profileId,{from:{kind:a.kind,id:a.id},to:{kind:b.kind,id:b.id},label:input.label,notes:input.notes},ids);selected='';render();feedback('Связь сохранена');return;}
+ if(form.getAttribute('id')==='knowledge-bookmark-form'){await addLink(input);await refreshKnowledge(ids);render();feedback('Ссылка сохранена в интеграциях и Центре знаний');return;}
+ if(form.getAttribute('id')==='knowledge-google-form'){knowledge=await saveKnowledgeResource(profileId,input,ids);render();feedback('Шаблон Google сохранён локально');return;}
+ if(form.getAttribute('id')==='knowledge-relation-form'){const nodes=knowledgeNodes(profileId),map=new Map(nodes.map(n=>[nodeKey(n),n])),a=map.get(input.from),b=map.get(input.to);if(!a||!b)throw Error('Выбрана удалённая или недоступная запись');if(a.profileId!=='*'&&a.profileId!==profileId||b.profileId!=='*'&&b.profileId!==profileId)throw Error('Нельзя связывать разные профили');knowledge=await saveKnowledgeRelation(profileId,{from:{kind:a.kind,id:a.id},to:{kind:b.kind,id:b.id},label:input.label,notes:input.notes},ids);selected='';render();feedback('Связь сохранена');return;}
  throw Error('Неизвестная форма Центра знаний');
 }
 export async function handleKnowledgeAction(button,state,render,feedback,navigate){const a=button.dataset.knowledgeAction,profilesIds=profiles(state),id=button.dataset.id;

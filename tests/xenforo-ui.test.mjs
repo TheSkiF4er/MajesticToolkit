@@ -20,7 +20,7 @@ test('Forum Toolkit exposes real XenForo navigation edit UI',async()=>{
 test('submitted navigation is persisted and appears in Forum Toolkit list',async()=>{
  const values={id:'',title:'Тестовая ссылка',url:'https://forum.majestic-rp.ru/pages/rules/',profileId:state.activeProfileId};
  const fields={namedItem:key=>({value:values[key]})};
- const event={target:{id:'xf-navigation-form',elements:fields},preventDefault(){}};
+ const event={target:{id:{name:'id'},getAttribute:name=>name==='id'?'xf-navigation-form':null,elements:fields},preventDefault(){}};
  let rendered=0,message='';
  assert.equal(await page.handleForumSubmit(event,state,()=>rendered++,text=>message=text),true);
  assert.equal(rendered,1);

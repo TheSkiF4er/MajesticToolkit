@@ -89,7 +89,7 @@ export async function handleEconomyAction(button,state,render,feedback){const ac
 }
 export async function handleEconomySubmit(event,state,render,feedback){const form=event.target;
   const values=Object.fromEntries(new FormData(form).entries());
-  if(form.id==='economy-form'){
+  if(form.getAttribute('id')==='economy-form'){
     const id=values.recordId,type=values.recordType;delete values.recordId;delete values.recordType;
     if(id){const original=await getEconomy(id);if(original.profileId!==state.activeProfileId || original.type!==type)throw Error('Профиль или тип записи изменился');await updateEconomy(id,values);}
     else await addEconomy(type,state.activeProfileId,values);

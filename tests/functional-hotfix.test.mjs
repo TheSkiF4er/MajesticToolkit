@@ -34,15 +34,32 @@ const insert=id=>page.handleForumAction({dataset:{forumAction:'insert',id}},stat
 test('workspace dispatch actually routes XenForo navigation submits (not just template form)',async()=>{
  const main=await readFile(new URL('../src/ui/main.mjs',import.meta.url),'utf8');
  assert.match(main,/document\.addEventListener\('submit', event => \{/);
- assert.match(main,/\['forum-template-form', 'xf-navigation-form'\]\.includes\(event\.target\.id\)/);
+ assert.match(main,/const formId = event\.target\.getAttribute\('id'\)/);
+ assert.match(main,/\['forum-template-form', 'xf-navigation-form'\]\.includes\(formId\)/);
  await page.refreshForum();
  const values={id:'',title:'Правила сервера',url:'https://forum.majestic-rp.ru/pages/rules/',profileId:majestic.id};
- const form={id:'xf-navigation-form',elements:{namedItem:n=>({value:values[n]})}};
+ const form={id:{name:'id'},getAttribute:n=>n==='id'?'xf-navigation-form':null,elements:{namedItem:n=>({value:values[n]})}};
  let prevented=0,rendered=0;
  assert.equal(await page.handleForumSubmit({target:form,preventDefault(){prevented++;}},state,()=>rendered++,feedback),true);
  assert.equal(prevented,1);assert.equal(rendered,1);
  const list=page.xenforoLinks();
  assert.ok(list.some(x=>x.title==='Правила сервера'&&x.profileId===majestic.id));
+});
+
+
+test('binder template persists despite a hidden input named id that shadows form.id',async()=>{
+ await page.refreshForum();
+ const input={id:'',label:'Regression: save',category:'RP',profileId:majestic.id,format:'bbcode',shortcut:'0',text:'Здравствуйте, {{nickname}}!'};
+ const form={id:{name:'id'},getAttribute:name=>name==='id'?'forum-template-form':null,elements:{namedItem:name=>({value:input[name]})}};
+ const prior=globalThis.document;
+ let closed=0,prevented=0,rendered=0;
+ globalThis.document={getElementById:id=>id==='forum-template-dialog'?{close(){closed++;}}:null};
+ try {
+  assert.equal(await page.handleForumSubmit({target:form,preventDefault(){prevented++;}},state,()=>rendered++,feedback),true);
+  assert.equal(prevented,1);assert.equal(rendered,1);assert.equal(closed,1);
+  const rows=await listTemplates();
+  assert.ok(rows.some(x=>x.label===input.label&&x.text===input.text&&x.profileId===input.profileId));
+ } finally {globalThis.document=prior;}
 });
 
 test('insertion finds an inactive forum tab while the workspace is active',async()=>{

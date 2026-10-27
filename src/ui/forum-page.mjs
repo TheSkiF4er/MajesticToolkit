@@ -145,7 +145,7 @@ export async function handleForumAction(button, state, rerender, feedback) {
   return true;
 }
 export async function handleForumSubmit(event, state, rerender, feedback) {
-  if (event.target.id==='xf-navigation-form') {
+  if (event.target.getAttribute('id')==='xf-navigation-form') {
     event.preventDefault();const elements=event.target.elements;
     const profileId=elements.namedItem('profileId').value;
     if(profileId!=='*'&&!state.profiles.some(x=>x.id===profileId))throw Error('Профиль не найден');
@@ -153,7 +153,7 @@ export async function handleForumSubmit(event, state, rerender, feedback) {
     await saveXenForoLink({title:elements.namedItem('title').value,url:elements.namedItem('url').value,profileId},id||null);
     await refreshForum();rerender();feedback('Ссылка сохранена для XenForo');return true;
   }
-  if (event.target.id !== 'forum-template-form') return false;
+  if (event.target.getAttribute('id') !== 'forum-template-form') return false;
   event.preventDefault();
   const form = event.target.elements;
   const id = form.namedItem('id').value;

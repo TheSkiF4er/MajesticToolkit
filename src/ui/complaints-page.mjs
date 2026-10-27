@@ -176,8 +176,8 @@ export function scheduleDraftSave(textarea, feedback) {
 export async function handleComplaintSubmit(event, state, render, feedback) {
   event.preventDefault();
   const form = event.target.elements;
-  if (event.target.id === 'complaint-form') {
-    const id = form.id.value;
+  if (event.target.getAttribute('id') === 'complaint-form') {
+    const id = form.namedItem('id').value;
     const input = {title:form.title.value, url:form.url.value, status:form.status.value, note:form.note.value,
       deadline:form.deadline.value ? new Date(form.deadline.value).toISOString() : null, watching:form.watching.checked};
     if (id) await request('update',{id,patch:input});
@@ -185,7 +185,7 @@ export async function handleComplaintSubmit(event, state, render, feedback) {
     document.getElementById('complaint-dialog')?.close();
     await refreshComplaints(); render(); feedback(id ? 'Жалоба обновлена':'Жалоба добавлена'); return;
   }
-  if (event.target.id === 'complaint-evidence-form') {
+  if (event.target.getAttribute('id') === 'complaint-evidence-form') {
     const caseId = form.caseId.value;
     const input = {url:form.url.value,title:form.title.value,seconds:form.seconds.value === '' ? null : Number(form.seconds.value),note:form.note.value};
     await request('addEvidence',{id:caseId,input});

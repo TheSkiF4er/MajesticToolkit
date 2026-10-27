@@ -398,22 +398,25 @@ document.addEventListener('change', event => {
   }
 });
 document.addEventListener('submit', event => {
-  if(['knowledge-google-form','knowledge-relation-form','knowledge-bookmark-form'].includes(event.target.id)){event.preventDefault();void handleKnowledgeSubmit(event.target,state,render,feedback).catch(err=>feedback(err.message,true));return;}
-  if(event.target.id==='productivity-assistant-form'){
+  // A form input named `id` shadows HTMLFormElement.id in Chromium/Firefox.
+  // Read the DOM attribute to prevent native form navigation and data loss.
+  const formId = event.target.getAttribute('id');
+  if(['knowledge-google-form','knowledge-relation-form','knowledge-bookmark-form'].includes(formId)){event.preventDefault();void handleKnowledgeSubmit(event.target,state,render,feedback).catch(err=>feedback(err.message,true));return;}
+  if(formId==='productivity-assistant-form'){
     event.preventDefault();void answerProductivity(event.target.elements.namedItem('question').value,state).catch(err=>feedback(err.message,true));return;
   }
-  if(['google-config-form','site-link-form','google-import-doc-form','google-read-sheet-form'].includes(event.target.id)){event.preventDefault();void handleIntegrationSubmit(event.target,state,render,feedback).catch(err=>feedback(err.message,true));return;}
-  if(event.target.id==='document-form'){event.preventDefault();void handleDocumentSubmit(event,state,render,feedback).catch(err=>feedback(err.message,true));return;}
-  if (event.target.id === 'government-form') {event.preventDefault();void handleGovernmentSubmit(event,state,render,feedback,lawRecords()).catch(err=>feedback(err.message,true));return;}
-  if (event.target.id === 'law-form') {event.preventDefault();void handleLawSubmit(event,state,render,feedback).catch(err=>feedback(err.message,true));return;}
-  if (event.target.id === 'economy-form' || event.target.matches('form[data-economy-calc]')) {event.preventDefault();void handleEconomySubmit(event,state,render,feedback).catch(err=>feedback(err.message,true));return;}
-  if (['complaint-form','complaint-evidence-form'].includes(event.target.id)) {event.preventDefault();void handleComplaintSubmit(event,state,render,feedback).catch(err=>feedback(err.message,true));return;}
-  if (['forum-template-form', 'xf-navigation-form'].includes(event.target.id)) {
+  if(['google-config-form','site-link-form','google-import-doc-form','google-read-sheet-form'].includes(formId)){event.preventDefault();void handleIntegrationSubmit(event.target,state,render,feedback).catch(err=>feedback(err.message,true));return;}
+  if(formId==='document-form'){event.preventDefault();void handleDocumentSubmit(event,state,render,feedback).catch(err=>feedback(err.message,true));return;}
+  if (formId === 'government-form') {event.preventDefault();void handleGovernmentSubmit(event,state,render,feedback,lawRecords()).catch(err=>feedback(err.message,true));return;}
+  if (formId === 'law-form') {event.preventDefault();void handleLawSubmit(event,state,render,feedback).catch(err=>feedback(err.message,true));return;}
+  if (formId === 'economy-form' || event.target.matches('form[data-economy-calc]')) {event.preventDefault();void handleEconomySubmit(event,state,render,feedback).catch(err=>feedback(err.message,true));return;}
+  if (['complaint-form','complaint-evidence-form'].includes(formId)) {event.preventDefault();void handleComplaintSubmit(event,state,render,feedback).catch(err=>feedback(err.message,true));return;}
+  if (['forum-template-form', 'xf-navigation-form'].includes(formId)) {
     event.preventDefault();
     void handleForumSubmit(event, state, render, feedback).catch(err => feedback(err.message, true));
     return;
   }
-  if (event.target.id !== 'profile-form') return;
+  if (formId !== 'profile-form') return;
   event.preventDefault();
   const f = event.target.elements;
   const id = f.namedItem('profileId').value;

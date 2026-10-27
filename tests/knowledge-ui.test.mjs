@@ -16,7 +16,7 @@ test('knowledge UI renders the correct official project portal and escaped bookm
  assert.match(html,/Создать связь/);
 });
 test('Google resource can be stored and viewed through the actual submit handler',async()=>{
- const form={id:'knowledge-google-form'};
+ const form={id:'knowledge-google-form',getAttribute:name=>name==='id'?'knowledge-google-form':null};
  const original=globalThis.FormData;
  globalThis.FormData=class {constructor(){this.entries=()=>[['kind','google-doc'],['title','Google шаблон'],['googleUrl','Google_file_id_01234'],['notes','Моя ссылка']][Symbol.iterator]();}};
  try{await UI.handleKnowledgeSubmit(form,state,()=>{},()=>{});}
