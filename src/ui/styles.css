@@ -142,3 +142,18 @@ textarea{width:100%;resize:vertical;background:var(--panel);color:var(--ink);bor
 .workflow-locked{opacity:.58}.workflow-panel textarea{min-height:66px}.workflow-panel details{border-top:1px solid var(--stroke);padding-top:10px}
 .workflow-panel summary{cursor:pointer;font-weight:650}.workflow-history{max-height:230px;overflow-y:auto;overflow-wrap:anywhere;padding-left:22px;line-height:1.7}
 .workflow-draft{display:grid;gap:7px;border-top:1px solid var(--stroke);padding-top:13px}
+
+/* MajesticToolkit 1.5.5: owner branding and timer dashboard */
+.logo{background:transparent url('../assets/icon-64.png') center/contain no-repeat;flex:none;overflow:hidden;font-size:0;letter-spacing:0;border-radius:11px}
+.copyright{font-size:11px;color:var(--muted);line-height:1.5}
+.copyright a{color:inherit;text-decoration:underline;text-underline-offset:2px}
+.popup-shell>.copyright{padding:6px 4px;text-align:center}
+.side-footer .copyright{margin-top:8px}
+.timer-form{display:grid;grid-template-columns:minmax(170px,2fr) minmax(105px,1fr) auto;align-items:end;gap:12px;margin-top:17px}
+.timer-form .field{min-width:0}
+.timer-item{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;padding:14px 0;border-top:1px solid var(--stroke)}
+.timer-item strong{font-size:14px;overflow-wrap:anywhere}
+.timer-item .subtle{margin:6px 0 0}
+.timer-remaining{font-size:20px;font-weight:800;font-variant-numeric:tabular-nums;min-width:75px;text-align:right}
+.timer-done{font-size:12px;font-weight:700;color:var(--success)}
+@media(max-width:650px){.timer-form{grid-template-columns:minmax(0,1fr)}.timer-item>.row{justify-content:space-between;width:100%}}

@@ -3,6 +3,8 @@ import * as importedStore from '../lib/complaints-store.mjs';
 import * as importedForum from '../lib/forum-store.mjs';
 import * as importedMonitor from '../lib/monitor-store.mjs';
 import * as importedXenForo from '../lib/xenforo-store.mjs';
+import {listTimers,addTimer,completeTimer,removeTimer} from '../lib/timers-store.mjs';
+import {ALARM_PREFIX,NOTIFICATION_PREFIX,timerAlarm,timerNotification} from '../lib/timers-core.mjs';
 import '../lib/xenforo-core.js';
 import '../lib/complaints-core.js';
 import {contentSender,extensionPageSender,matchingForumProfile,validatePayloadSize} from '../lib/message-security.mjs';
@@ -59,7 +61,30 @@ async function openCaseFromNotification(notificationId) {
   catch (error) { console.warn('MajesticToolkit: переход из уведомления',error); }
   await api.notifications.clear(notificationId).catch(() => {});
 }
-api.notifications.onClicked.addListener(id => {void openCaseFromNotification(id);});
+async function handleTimerAlarm(id) {
+  const timer=await completeTimer(id);
+  if(!timer)return;
+  try {
+    await api.notifications.create(timerNotification(timer.id),{type:'basic',iconUrl:'assets/icon-128.png',title:'MajesticToolkit · Таймер завершён',message:timer.title});
+  } catch(error) { console.warn('MajesticToolkit: уведомление таймера недоступно',error); }
+}
+async function restoreTimerAlarms() {
+  const now=Date.now();
+  const timers=await listTimers();
+  for(const timer of timers) {
+    if(timer.status!=='active')continue;
+    if(timer.expiresAt<=now)await handleTimerAlarm(timer.id);
+    else await api.alarms.create(timerAlarm(timer.id),{when:timer.expiresAt});
+  }
+}
+api.notifications.onClicked.addListener(id => {
+  if(id.startsWith(NOTIFICATION_PREFIX)) {
+    void api.tabs.create({url:api.runtime.getURL('ui/workspace.html#timers')}).catch(error=>console.warn('MajesticToolkit: таймеры',error));
+    void api.notifications.clear(id).catch(()=>{});
+    return;
+  }
+  void openCaseFromNotification(id);
+});
 async function notifyChange(c) {
   try { await api.notifications.create(`rpn_reply_${c.id}`,{type:'basic',iconUrl:'assets/icon-128.png',title:'MajesticToolkit · Новые сообщения',message:`${c.title.slice(0,100)}: найдены новые ответы. Откройте тему для проверки.`}); }
   catch (error) {console.warn('MajesticToolkit: уведомление не показано',error);}
@@ -111,6 +136,7 @@ function start() {
     await scheduleSyncScripts();
   })();
   void api.alarms.create('rp-nexus-open-tabs-v3',{periodInMinutes:5}).catch(err => console.warn('MajesticToolkit: alarms',err));
+  void restoreTimerAlarms().catch(error=>console.warn('MajesticToolkit: восстановление таймеров',error));
 }
 api.runtime.onInstalled.addListener(start);
 api.runtime.onStartup?.addListener(start);
@@ -120,7 +146,9 @@ api.storage.onChanged.addListener((changes,area) => {
 });
 api.permissions.onAdded.addListener(() => {void scheduleSyncScripts();});
 api.permissions.onRemoved.addListener(() => {void scheduleSyncScripts();});
-api.alarms.onAlarm.addListener(alarm => {if (alarm.name === 'rp-nexus-open-tabs-v3') void tick();});
+api.alarms.onAlarm.addListener(alarm => {if (alarm.name === 'rp-nexus-open-tabs-v3') void tick();
+  if(alarm.name.startsWith(ALARM_PREFIX))void handleTimerAlarm(alarm.name.slice(ALARM_PREFIX.length)).catch(error=>console.warn('MajesticToolkit: завершение таймера',error));
+});
 api.runtime.onMessage.addListener((message,sender,sendResponse) => {
   if (!message || typeof message !== 'object') return;
   const isTrustedExtension=extensionPageSender(sender,api.runtime);
@@ -132,6 +160,24 @@ api.runtime.onMessage.addListener((message,sender,sendResponse) => {
       if (!isForum && !isVideo && !isTrustedExtension) throw Error('Недоверенный источник');
       await api.tabs.create({url:api.runtime.getURL('ui/workspace.html' + (['forum','complaints'].includes(message.view) ? '#'+message.view : ''))});
       return true;
+    }
+    if(message.type === 'MAJESTIC_TIMER') {
+      if(!isTrustedExtension)throw Error('Недоверенный источник');
+      if(message.action==='create') {
+        const timer=await addTimer(message.input);
+        try{await api.alarms.create(timerAlarm(timer.id),{when:timer.expiresAt});}
+        catch(error){await removeTimer(timer.id);throw error;}
+        return timer;
+      }
+      if(message.action==='remove') {
+        const id=message.id;
+        if(typeof id!=='string'||!/^[a-z0-9-]{8,100}$/i.test(id))throw Error('Неверный ID таймера');
+        await removeTimer(id);
+        await api.alarms.clear(timerAlarm(id));
+        await api.notifications.clear(timerNotification(id)).catch(()=>{});
+        return true;
+      }
+      throw Error('Неизвестная операция таймера');
     }
     if (message.type === 'RP_NEXUS_SCAN_OPEN_TABS') {
       if (!isTrustedExtension) throw Error('Недоверенный источник');
@@ -211,7 +257,7 @@ api.runtime.onMessage.addListener((message,sender,sendResponse) => {
     }
     throw Error('Неизвестный запрос');
   }
-  if (!['RP_NEXUS_OPEN_WORKSPACE','RP_NEXUS_SCAN_OPEN_TABS','RP_NEXUS_TRACK_CURRENT_THREAD','RP_NEXUS_THREAD_OBSERVED','RP_NEXUS_VIDEO_ADD','RP_NEXUS_CASE_MUTATE','RP_NEXUS_FORUM_DATA','RP_NEXUS_VIDEO_CASES','MAJESTIC_SAVE_PUBLIC_PLAYER'].includes(message.type)) return;
+  if (!['RP_NEXUS_OPEN_WORKSPACE','RP_NEXUS_SCAN_OPEN_TABS','RP_NEXUS_TRACK_CURRENT_THREAD','RP_NEXUS_THREAD_OBSERVED','RP_NEXUS_VIDEO_ADD','RP_NEXUS_CASE_MUTATE','RP_NEXUS_FORUM_DATA','RP_NEXUS_VIDEO_CASES','MAJESTIC_SAVE_PUBLIC_PLAYER','MAJESTIC_TIMER'].includes(message.type)) return;
   void task().then(value => sendResponse({ok:true,value})).catch(error => sendResponse({ok:false,error:error?.message || 'Ошибка'}));
   return true;
 });

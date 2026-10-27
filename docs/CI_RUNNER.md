@@ -1,4 +1,4 @@
-# GitHub Actions: browser-e2e runner (MajesticToolkit 1.5.4)
+# GitHub Actions: browser-e2e runner (MajesticToolkit 1.5.5)
 
 ## Исправленная ошибка
 
@@ -28,4 +28,4 @@ Error: ERROR: Playwright does not support chromium on ubuntu26.04-x64
 
 **Ограничение:** локальные тесты YAML и `npm run verify` не доказывают успех удалённой установки браузеров. Окончательное подтверждение — только новый завершённый GitHub Actions run на `ubuntu-24.04`.
 
-**Исторический workflow:** `.github/workflows/publish-1.5.0.yml` обслуживает уже опубликованный релиз 1.5.0. Этот файл не менялся, чтобы не запускать устаревший workflow на новых исходниках 1.5.4 при событии `push` в `main`.
+**Исторический workflow:** `.github/workflows/publish-1.5.0.yml` обслуживает уже опубликованный релиз 1.5.0. Этот файл не менялся, чтобы не запускать устаревший workflow на новых исходниках 1.5.5 при событии `push` в `main`.
