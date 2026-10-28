@@ -1,0 +1,287 @@
+{
+  "format": "majestictoolkit-backup",
+  "schemaVersion": 14,
+  "exportedAt": "2026-10-28T09:01:50.662Z",
+  "payload": {
+    "schemaVersion": 1,
+    "activeProfileId": "da52b4a2-9742-4da1-898b-9eca476a5ed2",
+    "profiles": [
+      {
+        "id": "9dfb93a0-a805-4cc3-92ec-03b9a6961d32",
+        "name": "Верховный суд",
+        "project": "majestic",
+        "server": "SkiF4er",
+        "forumUrl": "https://forum.majestic-rp.ru/",
+        "createdAt": "2026-10-27T17:30:44.590Z",
+        "updatedAt": "2026-10-28T07:44:36.665Z"
+      },
+      {
+        "id": "5b635076-fd26-4383-b414-fe86455f7acd",
+        "name": "Окружной суд",
+        "project": "majestic",
+        "server": "SkiF4er",
+        "forumUrl": "https://forum.majestic-rp.ru/",
+        "createdAt": "2026-10-28T07:43:09.606Z",
+        "updatedAt": "2026-10-28T07:44:34.867Z"
+      },
+      {
+        "id": "da52b4a2-9742-4da1-898b-9eca476a5ed2",
+        "name": "Апелляционный суд",
+        "project": "majestic",
+        "server": "SkiF4er",
+        "forumUrl": "https://forum.majestic-rp.ru/",
+        "createdAt": "2026-10-28T07:43:46.842Z",
+        "updatedAt": "2026-10-28T07:44:33.304Z"
+      },
+      {
+        "id": "5e3831bf-79cd-4993-afb3-b07f7091ed80",
+        "name": "Федеральный суд",
+        "project": "majestic",
+        "server": "SkiF4er",
+        "forumUrl": "https://forum.majestic-rp.ru/",
+        "createdAt": "2026-10-28T07:48:21.251Z",
+        "updatedAt": "2026-10-28T07:48:21.251Z"
+      }
+    ],
+    "preferences": {
+      "theme": "system",
+      "compact": false,
+      "startPage": "home"
+    },
+    "updatedAt": "2026-10-28T09:01:03.289Z"
+  },
+  "forumTemplates": [
+    {
+      "id": "tpl_6c95b9f0eb4940408f36185f587138a4",
+      "profileId": "9dfb93a0-a805-4cc3-92ec-03b9a6961d32",
+      "label": "Унифицированный шаблон",
+      "category": "Суд",
+      "text": "[CENTER][IMG size=\"256x256\"]https://github.com/TheSkiF4er/MajesticToolkit/blob/main/config/img/Supreme%20Court%20Logo.png[/IMG]\n\n[B][SIZE=5]ВЕРХОВНЫЙ СУД ШТАТА САН-АНДРЕАС[/SIZE][/B]\nСОЕДИНЁННЫЕ ШТАТЫ АМЕРИКИ\n\n[SIZE=5][B]О П Р Е Д Е Л Е Н И Е[/B][/SIZE]\n[B]О ...[/B]\n\n... года\nг. Лос-Сантос\n\nИсковое заявление №SC-...[/CENTER]\n\n[JUSTIFY]Верховный суд штата Сан-Андреас в лице Верховного судьи ..., рассмотрев исковое заявление гражданина ... в отношении ..., а также поступившие ходатайства ...,[/JUSTIFY]\n\n[CENTER][B][SIZE=4]У С Т А Н О В И Л:[/SIZE][/B][/CENTER]\n\n[JUSTIFY]...[/JUSTIFY]\n\n[CENTER][B][SIZE=4]О П Р Е Д Е Л И Л:[/SIZE][/B][/CENTER]\n\n[JUSTIFY]...[/JUSTIFY]\n\n[RIGHT][B]Верховный судья штата Сан-Андреас[/B]\n...\n[I]...[/I]\n\n[IMG width=\"200px\" size=\"200x200\"]https://github.com/TheSkiF4er/MajesticToolkit/blob/main/config/img/Supreme%20Court%20Seal.png[/IMG][/RIGHT]",
+      "shortcut": 0,
+      "format": "bbcode",
+      "createdAt": "2026-10-28T08:41:39.229Z",
+      "updatedAt": "2026-10-28T08:56:54.894Z"
+    },
+    {
+      "id": "tpl_73bde235a432492f844adea0fe5f0dfc",
+      "profileId": "5b635076-fd26-4383-b414-fe86455f7acd",
+      "label": "Унифицированный шаблон",
+      "category": "Суд",
+      "text": "[CENTER][IMG size=\"256x256\"]https://github.com/TheSkiF4er/MajesticToolkit/blob/main/config/img/District%20Court%20Logo.png[/IMG]\n\n[B][SIZE=5]ОКРУЖНОЙ СУД ШТАТА САН-АНДРЕАС[/SIZE][/B]\nСОЕДИНЁННЫЕ ШТАТЫ АМЕРИКИ\n\n[SIZE=5][B]О П Р Е Д Е Л Е Н И Е[/B][/SIZE]\n[B]О ...[/B]\n\n... года\nг. Лос-Сантос\n\nИсковое заявление №DC-...[/CENTER]\n\n[JUSTIFY]Окружной суд штата Сан-Андреас в лице Окружного судьи ..., рассмотрев исковое заявление гражданина ... в отношении ..., а также поступившие ходатайства ...,[/JUSTIFY]\n\n[CENTER][B][SIZE=4]У С Т А Н О В И Л:[/SIZE][/B][/CENTER]\n\n[JUSTIFY]...[/JUSTIFY]\n\n[CENTER][B][SIZE=4]О П Р Е Д Е Л И Л:[/SIZE][/B][/CENTER]\n\n[JUSTIFY]...[/JUSTIFY]\n\n[RIGHT][B]Окружной судья штата Сан-Андреас[/B]\n...\n[I]...[/I]\n\n[IMG width=\"200px\" size=\"200x200\"]https://github.com/TheSkiF4er/MajesticToolkit/blob/main/config/img/District%20Court%20Seal.png[/IMG][/RIGHT]",
+      "shortcut": 0,
+      "format": "bbcode",
+      "createdAt": "2026-10-28T08:41:50.374Z",
+      "updatedAt": "2026-10-28T08:58:07.845Z"
+    },
+    {
+      "id": "tpl_74ae8c184b9b47e389363966922840b3",
+      "profileId": "da52b4a2-9742-4da1-898b-9eca476a5ed2",
+      "label": "Унифицированный шаблон",
+      "category": "Суд",
+      "text": "[CENTER][IMG size=\"256x256\"]https://github.com/TheSkiF4er/MajesticToolkit/blob/main/config/img/Appeals%20Court%20Logo.png[/IMG]\n\n[B][SIZE=5]АПЕЛЛЯЦИОННЫЙ СУД ШТАТА САН-АНДРЕАС[/SIZE][/B]\nСОЕДИНЁННЫЕ ШТАТЫ АМЕРИКИ\n\n[SIZE=5][B]О П Р Е Д Е Л Е Н И Е[/B][/SIZE]\n[B]О ...[/B]\n\n... года\nг. Лос-Сантос\n\nИсковое заявление №AC-...[/CENTER]\n\n[JUSTIFY]Апелляционный суд штата Сан-Андреас в лице Апелляционного судьи ..., рассмотрев исковое заявление гражданина ... в отношении ..., а также поступившие ходатайства ...,[/JUSTIFY]\n\n[CENTER][B][SIZE=4]У С Т А Н О В И Л:[/SIZE][/B][/CENTER]\n\n[JUSTIFY]...[/JUSTIFY]\n\n[CENTER][B][SIZE=4]О П Р Е Д Е Л И Л:[/SIZE][/B][/CENTER]\n\n[JUSTIFY]...[/JUSTIFY]\n\n[RIGHT][B]Апелляционный судья штата Сан-Андреас[/B]\n...\n[I]...[/I]\n\n[IMG width=\"200px\" size=\"200x200\"]https://github.com/TheSkiF4er/MajesticToolkit/blob/main/config/img/Appeals%20Court%20Seal.png[/IMG][/RIGHT]",
+      "shortcut": 0,
+      "format": "bbcode",
+      "createdAt": "2026-10-28T08:42:05.622Z",
+      "updatedAt": "2026-10-28T09:01:19.811Z"
+    },
+    {
+      "id": "tpl_c775e4c27df94a7f873c2836a0915679",
+      "profileId": "5e3831bf-79cd-4993-afb3-b07f7091ed80",
+      "label": "Унифицированный шаблон",
+      "category": "Суд",
+      "text": "[CENTER][IMG size=\"256x256\"]https://github.com/TheSkiF4er/MajesticToolkit/blob/main/config/img/Federal%20Court%20Logo.png[/IMG]\n\n[B][SIZE=5]ФЕДЕРАЛЬНЫЙ СУД ШТАТА САН-АНДРЕАС[/SIZE][/B]\nСОЕДИНЁННЫЕ ШТАТЫ АМЕРИКИ\n\n[SIZE=5][B]О П Р Е Д Е Л Е Н И Е[/B][/SIZE]\n[B]О ...[/B]\n\n... года\nг. Лос-Сантос\n\nИсковое заявление №FC-...[/CENTER]\n\n[JUSTIFY]Федеральный суд штата Сан-Андреас в лице Федерального судьи ..., рассмотрев исковое заявление гражданина ... в отношении ..., а также поступившие ходатайства ...,[/JUSTIFY]\n\n[CENTER][B][SIZE=4]У С Т А Н О В И Л:[/SIZE][/B][/CENTER]\n\n[JUSTIFY]...[/JUSTIFY]\n\n[CENTER][B][SIZE=4]О П Р Е Д Е Л И Л:[/SIZE][/B][/CENTER]\n\n[JUSTIFY]...[/JUSTIFY]\n\n[RIGHT][B]Федеральный судья штата Сан-Андреас[/B]\n...\n[I]...[/I]\n\n[IMG width=\"200px\" size=\"200x200\"]https://github.com/TheSkiF4er/MajesticToolkit/blob/main/config/img/Federal%20Court%20Seal.png[/IMG][/RIGHT]",
+      "shortcut": 0,
+      "format": "bbcode",
+      "createdAt": "2026-10-28T08:42:15.527Z",
+      "updatedAt": "2026-10-28T09:01:00.781Z"
+    }
+  ],
+  "complaints": [],
+  "economy": [],
+  "lawRecords": [],
+  "government": [],
+  "documents": [],
+  "siteLinks": [],
+  "productivity": {
+    "accent": "blue",
+    "shortcutsEnabled": true,
+    "shortcuts": [
+      "home",
+      "search",
+      "forum",
+      "complaints",
+      "economy",
+      "law",
+      "government",
+      "documents"
+    ]
+  },
+  "xenforoNavigation": [],
+  "serverMonitor": {
+    "version": 1,
+    "favorites": [],
+    "catalog": [
+      {
+        "id": "RU1",
+        "name": "New York",
+        "region": "RU",
+        "project": "majestic"
+      },
+      {
+        "id": "RU2",
+        "name": "Detroit",
+        "region": "RU",
+        "project": "majestic"
+      },
+      {
+        "id": "RU3",
+        "name": "Chicago",
+        "region": "RU",
+        "project": "majestic"
+      },
+      {
+        "id": "RU4",
+        "name": "San Francisco",
+        "region": "RU",
+        "project": "majestic"
+      },
+      {
+        "id": "RU5",
+        "name": "Atlanta",
+        "region": "RU",
+        "project": "majestic"
+      },
+      {
+        "id": "RU6",
+        "name": "San Diego",
+        "region": "RU",
+        "project": "majestic"
+      },
+      {
+        "id": "RU7",
+        "name": "Los Angeles",
+        "region": "RU",
+        "project": "majestic"
+      },
+      {
+        "id": "RU8",
+        "name": "Miami",
+        "region": "RU",
+        "project": "majestic"
+      },
+      {
+        "id": "RU9",
+        "name": "Las Vegas",
+        "region": "RU",
+        "project": "majestic"
+      },
+      {
+        "id": "RU10",
+        "name": "Washington",
+        "region": "RU",
+        "project": "majestic"
+      },
+      {
+        "id": "RU11",
+        "name": "Dallas",
+        "region": "RU",
+        "project": "majestic"
+      },
+      {
+        "id": "RU12",
+        "name": "Boston",
+        "region": "RU",
+        "project": "majestic"
+      },
+      {
+        "id": "RU13",
+        "name": "Houston",
+        "region": "RU",
+        "project": "majestic"
+      },
+      {
+        "id": "RU14",
+        "name": "Seattle",
+        "region": "RU",
+        "project": "majestic"
+      },
+      {
+        "id": "RU15",
+        "name": "Phoenix",
+        "region": "RU",
+        "project": "majestic"
+      },
+      {
+        "id": "RU16",
+        "name": "Denver",
+        "region": "RU",
+        "project": "majestic"
+      },
+      {
+        "id": "RU17",
+        "name": "Portland",
+        "region": "RU",
+        "project": "majestic"
+      },
+      {
+        "id": "RU18",
+        "name": "Orlando",
+        "region": "RU",
+        "project": "majestic"
+      },
+      {
+        "id": "RU19",
+        "name": "Memphis",
+        "region": "RU",
+        "project": "majestic"
+      },
+      {
+        "id": "DE1",
+        "name": "Berlin",
+        "region": "DE",
+        "project": "majestic"
+      },
+      {
+        "id": "MCL",
+        "name": "Majestic Cyber League",
+        "region": "RU",
+        "project": "majestic"
+      },
+      {
+        "id": "PL1",
+        "name": "Warsaw",
+        "region": "PL",
+        "project": "majestic"
+      },
+      {
+        "id": "RO1",
+        "name": "Arbatsky",
+        "region": "RU",
+        "project": "russia-online"
+      },
+      {
+        "id": "RO2",
+        "name": "Tverskoy",
+        "region": "RU",
+        "project": "russia-online"
+      },
+      {
+        "id": "RO3",
+        "name": "Kutuzovsky",
+        "region": "RU",
+        "project": "russia-online"
+      }
+    ],
+    "observedAt": "2026-10-27T17:37:31.947Z",
+    "live": [],
+    "liveAt": null,
+    "players": [],
+    "autoRefresh": true
+  },
+  "knowledgeWorkspace": {
+    "version": 1,
+    "resources": [],
+    "relations": []
+  },
+  "sourceLibrary": []
+}
