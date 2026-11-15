@@ -126,9 +126,9 @@ export function importBinderPack(text,profileId,mode='skip'){return serialize(as
   if(out.size>C.MAX_TEMPLATES)throw Error('Превышен лимит шаблонов');
   const XF=globalThis.MTXenForo,links=await listXenForoLinks(),linkRows=[...links];let linksImported=0;
   for(const l of pack.links){
-    const same=linkRows.find(x=>x.profileId===profileId&&x.url===l.url);
+    const same=linkRows.find(x=>x.kind!=='bookmark'&&x.profileId===profileId&&x.url===l.url);
     if(same&&mode==='skip')continue;
-    const item=XF.validateLink({...l,profileId,id:mode==='replace'&&same?same.id:'xf_'+crypto.randomUUID().replaceAll('-',''),createdAt:mode==='replace'&&same?same.createdAt:new Date().toISOString()});
+    const item=XF.validateLink({...((mode==='replace'&&same)?same:{}),...l,profileId,id:mode==='replace'&&same?same.id:XF.newLinkId(),createdAt:mode==='replace'&&same?same.createdAt:new Date().toISOString()});
     if(mode==='replace'&&same)linkRows.splice(linkRows.indexOf(same),1,item);else linkRows.push(item);
     writes[XF.PREFIX+item.id]=item;linksImported++;
   }

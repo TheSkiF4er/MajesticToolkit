@@ -1,6 +1,6 @@
 // Productivity 0.9.0: deterministic, local-only index. No browser globals or remote calls.
-export const CATEGORIES = Object.freeze({forum:'Шаблоны форума',complaints:'Жалобы',economy:'Экономика',law:'Законодательство',government:'Ведомства',documents:'Документы',integrations:'Закладки',sources:'Форум и Fletcher Wiki'});
-export const SECTION_FOR = Object.freeze({forum:'forum',complaints:'complaints',economy:'economy',law:'law',government:'government',documents:'documents',integrations:'integrations',sources:'knowledge'});
+export const CATEGORIES = Object.freeze({forum:'Шаблоны форума',navigation:'Навигация форума',complaints:'Жалобы',economy:'Экономика',law:'Законодательство',government:'Ведомства',documents:'Документы',integrations:'Закладки',sources:'Форум и Fletcher Wiki'});
+export const SECTION_FOR = Object.freeze({forum:'forum',navigation:'forum',complaints:'complaints',economy:'economy',law:'law',government:'government',documents:'documents',integrations:'integrations',sources:'knowledge'});
 export const DEFAULT_SHORTCUTS = Object.freeze(['home','search','forum','complaints','economy','law','government','documents']);
 export const PRODUCTIVITY_KEY = 'majesticToolkitProductivityV9';
 export const ACCENTS = Object.freeze(['blue','teal','violet','amber']);
@@ -16,7 +16,7 @@ export function validateProductivity(value){
   if(!Array.isArray(value.shortcuts)||value.shortcuts.length!==8||value.shortcuts.some(x=>typeof x!=='string'||!['home','search',...Object.values(SECTION_FOR),'integrations','profiles','sites','settings','backup'].includes(x)))throw Error('Некорректная раскладка горячих клавиш');
   return {accent:value.accent,shortcutsEnabled:value.shortcutsEnabled,shortcuts:[...value.shortcuts]};
 }
-export function buildSearchRecords({templates=[],cases=[],economy=[],laws=[],government=[],documents=[],links=[],sources=[]}={}){
+export function buildSearchRecords({templates=[],cases=[],economy=[],laws=[],government=[],documents=[],links=[],sources=[],navigation=[]}={}){
   const out=[]; const add=(type,id,profileId,title,description,body,extra={})=>{
     if(!Object.hasOwn(CATEGORIES,type)||typeof id!=='string'||!id||typeof profileId!=='string')return;
     const item={key:`${type}:${id}`,id,type,profileId,title:flat(title,250),description:flat(description,550),body:flat(body),...extra};
@@ -44,6 +44,7 @@ export function buildSearchRecords({templates=[],cases=[],economy=[],laws=[],gov
     else {const snapshot=x.versions?.at(-1);if(snapshot)add('documents',x.id,x.profileId,snapshot.title,`Документ · версия ${x.currentVersion}`,`${snapshot.body||''} ${(snapshot.fields||[]).map(f=>f.label||'').join(' ')}`);}
   }
   for(const x of links)add('integrations',x.id,'*',x.title,'Закладка · '+(x.url||''),x.notes||'',{url:x.url||''});
+  for(const x of navigation)add('navigation',x.id,x.profileId,x.title,`${x.group||''} · ${x.url}`,`${x.note||''} ${(x.tags||[]).join(' ')}`,{url:x.url,host:x.host||'*'});
   for(const x of sources)add('sources',x.id,x.profileId,x.title,(x.kind==='forum'?'Форум XenForo':'Fletcher Wiki')+' · '+x.url,x.body,{url:x.url||''});
   return out;
 }
@@ -67,26 +68,27 @@ export function excerpt(row,query,max=230){
   const start=Math.max(0,pos>70?pos-65:0);
   return (start?'…':'')+body.slice(start,start+max)+(start+max<body.length?'…':'');
 }
-export function searchRecords(rows,query,{profileId='',type='all',limit=40}={}){
+export function searchRecords(rows,query,{profileId='',type='all',limit=40,host=''}={}){
   if(!TYPES.includes(type))throw Error('Неизвестный фильтр поиска');
   const q=clean(query);const tokens=tokenize(q);
   if(!tokens.length)return [];
   const found=[];
   for(const row of rows){
+    if(host&&row.type==='navigation'&&row.host&&row.host!=='*'&&row.host!==host)continue;
     if(profileId&&row.profileId!=='*'&&row.profileId!==profileId)continue;
     if(type!=='all'&&row.type!==type)continue;
     const score=rank(row,q,tokens);if(score)found.push({...row,score,snippet:excerpt(row,q)});
   }
   return found.sort((a,b)=>b.score-a.score||a.title.localeCompare(b.title,'ru')).slice(0,Math.min(100,Math.max(1,limit)));
 }
-export function answerLocal(question,rows,profileId=''){
+export function answerLocal(question,rows,profileId='',host=''){
   const q=clean(question);if(!q||q.length>500)throw Error('Введите вопрос длиной до 500 символов');
-  const own=rows.filter(r=>r.profileId===profileId||r.profileId==='*');
+  const own=rows.filter(r=>(r.profileId===profileId||r.profileId==='*')&&(!host||r.type!=='navigation'||!r.host||r.host==='*'||r.host===host));
   const counts=Object.fromEntries(Object.keys(CATEGORIES).map(type=>[type,own.filter(r=>r.type===type).length]));
   if(/^(сколько|статистика|обзор|количество|что есть|что сохранено)/u.test(q)){
-    return {answer:`В активном профиле: ${counts.forum} шаблонов форума, ${counts.complaints} жалоб, ${counts.economy} записей экономики, ${counts.law} документов и статей законодательства, ${counts.government} ведомственных записей, ${counts.documents} документов и шаблонов, ${counts.integrations} закладок, ${counts.sources} импортированных статей форума и Fletcher Wiki.`,refs:[]};
+    return {answer:`В активном профиле: ${counts.forum} шаблонов форума, ${counts.complaints} жалоб, ${counts.economy} записей экономики, ${counts.law} документов и статей законодательства, ${counts.government} ведомственных записей, ${counts.documents} документов и шаблонов, ${counts.integrations} внешних закладок, ${counts.navigation} записей навигации, ${counts.sources} импортированных статей форума и Fletcher Wiki.`,refs:[]};
   }
-  const results=searchRecords(rows,question,{profileId,limit:5});
+  const results=searchRecords(rows,question,{profileId,host,limit:5});
   if(!results.length)return {answer:'В локальных данных нет подходящих записей. Импортируйте законы или добавьте записи в соответствующем разделе. Откройте нужную страницу форума или Fletcher Wiki и импортируйте её текст в Центре знаний. Я не подменяю отсутствующие данные догадками.',refs:[]};
   const summary=results.slice(0,3).map(r=>`${r.title} (${CATEGORIES[r.type]}): ${excerpt(r,question,175)}`).join('\n\n');
   return {answer:`Найдено ${results.length} совпадений (максимум 5 показано). Ниже выдержки из сохранённых данных, а не юридическое заключение:\n\n${summary}`,refs:results.map(r=>({key:r.key,title:r.title,type:r.type,url:r.url||''}))};

@@ -19,12 +19,18 @@ MOCK_JS = r'''(host) => {{
   const a={{id:'tpl_majestic_01',profileId:p1.id,label:'Ответ Majestic',text:'[b]Привет[/b] {{{{nickname}}}}',category:'',shortcut:1,format:'bbcode',createdAt:date,updatedAt:date}};
   const b={{id:'tpl_russia_01',profileId:p2.id,label:'Ответ Russia',text:'Здравствуйте!',category:'',shortcut:1,format:'plain',createdAt:date,updatedAt:date}};
   const links=[{{id:'link_majestic_01',profileId:p1.id,title:'Наш справочник',url:'https://example.com/help',createdAt:date}},{{id:'link_russia_01',profileId:p2.id,title:'Russia Wiki',url:'https://example.com/wiki',createdAt:date}}];
-  window.__sent=[]; window.__listeners=[]; window.__settings={{}}; window.__allowed=true; window.__extraTemplates=[]; window.__usage={{}};
+  window.__sent=[]; window.__listeners=[]; window.__settings={{}}; window.__allowed=true; window.__extraTemplates=[]; window.__usage={{}}; window.__extraLinks=[]; window.__history=[];
   window.__deliver=message=>{{for(const listener of window.__listeners)listener(message,{{}},()=>{{}});}};
   window.browser={{
     runtime:{{id:'fixture-extension-id',getURL:path=>'chrome-extension://fixture-extension-id/'+path,
       onMessage:{{addListener:fn=>window.__listeners.push(fn)}},async sendMessage(message){{window.__sent.push(message);
-      if(message.type==='RP_NEXUS_FORUM_DATA'){{const profile=hostName.includes('russia')?p2:p1;return {{ok:true,value:{{profile,templates:[a,b,...window.__extraTemplates].filter(t=>t.profileId===profile.id),usage:window.__usage,links:links.filter(t=>t.profileId===profile.id),settings:window.__settings,allowed:window.__allowed}}}};}}
+      if(message.type==='RP_NEXUS_FORUM_DATA'){{const profile=hostName.includes('russia')?p2:p1;return {{ok:true,value:{{profile,templates:[a,b,...window.__extraTemplates].filter(t=>t.profileId===profile.id),usage:window.__usage,links:[...links,...window.__extraLinks].filter(t=>t.profileId===profile.id||t.profileId==='*'),navigationHistory:window.__history,settings:window.__settings,allowed:window.__allowed}}}};}}
+      if(message.type==='MT_NAVIGATION_ACTION'){{
+        if(message.action==='bookmark'){{const item={{id:'bookmark_fixture1',profileId:p1.id,title:'Сохранённая тема',url:'https://forum.majestic-rp.ru/threads/test.123/',kind:'bookmark',host:'forum.majestic-rp.ru',placement:'panel',createdAt:date}};if(!window.__extraLinks.some(x=>x.id===item.id))window.__extraLinks.push(item);return {{ok:true,value:item}};}}
+        if(message.action==='visit'){{window.__history=[{{url:'https://forum.majestic-rp.ru/threads/test.123/',title:'Тестовая тема',visitedAt:Date.now()}}];return {{ok:true,value:window.__history}};}}
+        if(message.action==='clear-history'){{window.__history=[];return {{ok:true,value:true}};}}
+        if(message.action==='search')return {{ok:true,value:[{{key:'forum:tpl_majestic_01',title:'Ответ Majestic',type:'forum',view:'forum',url:''}}]}};
+      }}
       if(message.type==='MT_BINDER_ACTION'&&message.action==='use')window.__usage[message.id]=Date.now();
       if(message.type==='MT_BINDER_ACTION'&&message.action==='favorite'){{const t=[a,b,...window.__extraTemplates].find(t=>t.id===message.id);t.favorite=message.favorite;return {{ok:true,value:t}};}}
       return {{ok:true,value:{{}}}};
@@ -292,6 +298,38 @@ async def exercise(browser):
     count+=1
     await context.close()
     # Exercise the real module and workspace dialog against in-memory WebExtension storage.
+    # Navigation 2.0: real DOM menu groups, panel, bookmark, history, local search and revoke.
+    context=await browser.new_context(ignore_https_errors=True)
+    page=await context.new_page()
+    await page.set_content(fixture(),wait_until='domcontentloaded')
+    await page.evaluate('('+MOCK_JS.format(host=repr('forum.majestic-rp.ru'))+')('+repr('forum.majestic-rp.ru')+')')
+    await page.evaluate("""()=>{window.__settings={navigationHistory:true};const base={profileId:'p_majestic_1234',createdAt:'2026-11-15T00:00:00Z',url:'https://example.org/rules'};window.__extraLinks=[{...base,id:'link_group_001',title:'Регламент',group:'Работа/Суд',target:'current',placement:'both',pinned:true},{...base,id:'link_panel_001',title:'Только панель',placement:'panel'},{...base,id:'link_other_001',title:'Чужой форум',host:'forum.russia.online'}];}""")
+    await inject(page)
+    await page.wait_for_function("document.querySelectorAll('[data-mt-xf-nav]').length===2")
+    assert await page.locator('[data-mt-xf-nav="group:Работа"] details summary').first.inner_text()=='Работа'
+    assert await page.locator('[data-mt-xf-nav="group:Работа"] a').get_attribute('target')=='_self'
+    assert 'Чужой форум' not in await page.locator('nav').inner_text()
+    root=page.locator('#rp-nexus-forum-020')
+    await page.keyboard.press('Alt+Shift+N')
+    await root.locator('#rpn-nav-panel').wait_for(state='visible')
+    assert await root.locator('#rpn-nav-panel').get_by_text('Только панель').count()==1
+    await root.locator('[data-nav-act=bookmark]').click()
+    await root.locator('#rpn-nav-panel').get_by_text('Сохранённая тема').wait_for()
+    await root.locator('#rpn-nav-search').fill('Ответ')
+    await root.locator('[data-nav-result="0"]').wait_for()
+    await root.locator('[data-nav-result="0"]').click()
+    await page.wait_for_function("document.querySelector('textarea[name=message]').value.includes('Привет')")
+    assert await root.locator('#rpn-binder-panel').is_visible()
+    await root.locator('[data-nav-act=navigation]').click()
+    await root.locator('#rpn-nav-search').fill('')
+    await root.locator('[data-nav-act=clear-history]').click()
+    await page.wait_for_function('window.__history.length===0')
+    await page.evaluate("window.__settings.navigationEnabled=false;window.__deliver({type:'RP_NEXUS_REFRESH_FORUM_DATA'})")
+    await page.wait_for_function("document.querySelectorAll('[data-mt-xf-nav]').length===0")
+    assert not await root.locator('#rpn-nav-panel').is_visible()
+    count+=1
+    await context.close()
+
     context=await browser.new_context()
     page=await context.new_page()
     # Data-module import map keeps the entire real module graph offline (no navigation).
@@ -315,7 +353,7 @@ async def exercise(browser):
       const model=await import('mt:lib/model.mjs'),ui=await import('mt:ui/forum-page.mjs');window.__state=model.defaultState();window.__ui=ui;
       await ui.refreshBinderProfile(window.__state.activeProfileId);await ui.refreshForum();
       window.__render=()=>MTSafeDOM.replaceHtml(document.querySelector('#app'),ui.forumSection(window.__state));window.__render();
-      document.addEventListener('submit',e=>{if(e.target.getAttribute('id')==='forum-template-form'){e.preventDefault();ui.handleForumSubmit(e,window.__state,window.__render,()=>{}).catch(err=>window.__error=err.message);}});
+      document.addEventListener('submit',e=>{if(['forum-template-form','xf-navigation-form'].includes(e.target.getAttribute('id'))){e.preventDefault();ui.handleForumSubmit(e,window.__state,window.__render,()=>{}).catch(err=>window.__error=err.message);}});
       document.addEventListener('click',e=>{const b=e.target.closest('[data-forum-action]');if(b)ui.handleForumAction(b,window.__state,window.__render,()=>{}).catch(err=>window.__error=err.message);});
     }""")
     await page.locator('[data-forum-action=create]').click()
@@ -333,6 +371,22 @@ async def exercise(browser):
     await page.locator('#forum-template-form button[type=submit]').click()
     await page.wait_for_function("Object.values(window.__data).some(x=>x.label==='Шаблон E2E v2'&&x.history?.length===1)")
     assert not await page.evaluate('Boolean(window.__error)')
+    await page.locator('#xf-navigation-form [name=title]').fill('Меню E2E')
+    await page.locator('#xf-navigation-form [name=url]').fill('https://example.org/rules')
+    await page.locator('#xf-navigation-form [name=group]').fill('Работа/Суд')
+    await page.locator('#xf-navigation-form [name=target]').select_option('current')
+    await page.locator('#xf-navigation-form [name=placement]').select_option('panel')
+    await page.locator('#xf-navigation-form [name=pinned]').check()
+    await page.locator('#xf-navigation-form button[type=submit]').click()
+    await page.wait_for_function("window.__error||Object.values(window.__data).some(x=>x.title==='Меню E2E')",timeout=5000)
+    assert not await page.evaluate('window.__error'),await page.evaluate('window.__error')
+    assert await page.evaluate("Object.values(window.__data).some(x=>x.title==='Меню E2E'&&x.group==='Работа/Суд'&&x.pinned&&x.target==='current'&&x.placement==='panel')"),await page.evaluate("Object.values(window.__data).find(x=>x.title==='Меню E2E')")
+    await page.locator('[data-nav-row] [data-forum-action=edit-link]').click()
+    await page.locator('#xf-navigation-form [name=title]').fill('Меню E2E v2')
+    await page.locator('#xf-navigation-form button[type=submit]').click()
+    await page.wait_for_function("Object.values(window.__data).some(x=>x.title==='Меню E2E v2'&&x.group==='Работа/Суд')")
+    assert not await page.evaluate('Boolean(window.__error)')
+    count+=1
     count+=1
     await context.close()
     return count

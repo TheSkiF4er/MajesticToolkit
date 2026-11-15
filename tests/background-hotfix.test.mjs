@@ -53,3 +53,20 @@ test('forum data is permission-checked and profile/site-scoped in the actual bac
  granted.delete(origin);response=await send(url,{type:'RP_NEXUS_FORUM_DATA'});assert.equal(response.value.allowed,false);assert.deepEqual(response.value.templates,[]);
  response=await send(url,{type:'RP_NEXUS_OPEN_WORKSPACE',view:'forum'});assert.equal(response.ok,false);
 });
+
+test('Navigation 2.0 authorizes current-page bookmark/history and rejects other profile or frame',async()=>{
+ const origin='https://forum.majestic-rp.ru/*',url='https://forum.majestic-rp.ru/threads/test.100/?token=secret';
+ granted.add(origin);const profileId='profile-majestic';
+ const action=(name,extra={})=>send(url,{type:'MT_NAVIGATION_ACTION',action:name,profileId,...extra});
+ let response=await action('bookmark',{title:'Тестовая тема',url:'https://forum.russia.online/threads/other.42/'});
+ assert.equal(response.ok,true);assert.equal(response.value.url,'https://forum.majestic-rp.ru/threads/test.100/');
+ assert.equal((await action('bookmark',{title:'Дубликат'})).value.id,response.value.id);
+ assert.equal((await action('bookmark',{profileId:'profile-russia'})).ok,false);
+ assert.equal((await action('switch-profile',{id:'profile-russia'})).ok,false);
+ assert.deepEqual((await action('visit',{title:'Тестовая тема'})).value,[]);
+ data.rpNexusStateV1.preferences.forum.global.navigationHistory=true;
+ response=await action('visit',{title:'Тестовая тема'});assert.equal(response.ok,true);assert.equal(response.value[0].url,'https://forum.majestic-rp.ru/threads/test.100/');
+ assert.equal((await action('clear-history')).ok,true);
+ assert.equal((await send(url,{type:'MT_NAVIGATION_ACTION',action:'bookmark',profileId,title:'evil'},1)).ok,false);
+ granted.delete(origin);assert.equal((await action('bookmark',{title:'No access'})).ok,false);
+});

@@ -1,3 +1,7 @@
+import {getLocalIndex,invalidateSearch} from '../lib/productivity-search.mjs';
+import {searchRecords,SECTION_FOR} from '../lib/productivity-core.mjs';
+import {modifyState} from '../lib/state.mjs';
+import {selectProfile} from '../lib/model.mjs';
 import {forumSettingsFor} from '../lib/forum-settings.mjs';
 /* MajesticToolkit background: static ES module dependencies for all browsers. */
 import * as importedStore from '../lib/complaints-store.mjs';
@@ -142,7 +146,8 @@ function start() {
 api.runtime.onInstalled.addListener(start);
 api.runtime.onStartup?.addListener(start);
 api.storage.onChanged.addListener((changes,area) => {
-  if (area !== 'local' || !Object.keys(changes).some(k=> k==='rpNexusStateV1'||k.startsWith('rpnForumTemplateV2:')||k.startsWith('majesticToolkitXfNavV11:'))) return;
+  if(area==='local'&&Object.keys(changes).some(k=>!k.startsWith('mtNavigationHistory:')))invalidateSearch();
+  if (area !== 'local' || !Object.keys(changes).some(k=> k==='rpNexusStateV1'||k.startsWith('rpnForumTemplateV2:')||k.startsWith('majesticToolkitXfNavV11:')||k.startsWith('mtNavigationHistory:'))) return;
   void api.tabs.query({}).then(tabs=>Promise.allSettled(tabs.filter(t=>t.id&&FORUMS.some(f=>t.url?.startsWith(f.origin.slice(0,-1)))).map(t=>api.tabs.sendMessage(t.id,{type:'RP_NEXUS_REFRESH_FORUM_DATA'})))).catch(()=>{});
 });
 api.permissions.onAdded.addListener(() => {void scheduleSyncScripts();});
@@ -164,7 +169,7 @@ api.runtime.onMessage.addListener((message,sender,sendResponse) => {
     if(isForum && message.type!=='RP_NEXUS_FORUM_DATA' && !await api.permissions.contains({origins:[`https://${new URL(sender.url).hostname}/*`]}))throw Error('Доступ к форуму отозван');
     if (message.type === 'RP_NEXUS_OPEN_WORKSPACE') {
       if (!isForum && !isVideo && !isTrustedExtension) throw Error('Недоверенный источник');
-      await api.tabs.create({url:api.runtime.getURL('ui/workspace.html' + (['forum','complaints'].includes(message.view) ? '#'+message.view : ''))});
+      await api.tabs.create({url:api.runtime.getURL('ui/workspace.html' + (['home','forum','complaints','search','knowledge','profiles','timers','monitor','economy','law','government','documents','integrations','settings'].includes(message.view) ? '#'+message.view : ''))});
       return true;
     }
     if(message.type === 'MAJESTIC_TIMER') {
@@ -200,8 +205,30 @@ api.runtime.onMessage.addListener((message,sender,sendResponse) => {
       const {listTemplates,binderUsage} = await forumStorePromise;
       // Select only a profile belonging to the sender's forum, not an unrelated active project.
       const templates = (await listTemplates()).filter(t=>t.profileId==='*'||t.profileId===profile.id);
-      const links = (await importedXenForo.listXenForoLinks()).filter(x=>x.profileId==='*'||x.profileId===profile.id);
-      return {profile:{id:profile.id,name:profile.name,project:profile.project,server:profile.server},templates,links,settings,usage:await binderUsage(profile.id)};
+      const links = globalThis.MTXenForo.selectNavigation(await importedXenForo.listXenForoLinks(),profile.id,host);
+      const navigationHistory=settings.navigationEnabled&&settings.navigationHistory?await importedXenForo.navigationHistory(profile.id):[];
+      const forumProfiles=state.profiles.filter(p=>globalThis.MTXenForo.domain(p.forumUrl)===host).map(({id,name,server})=>({id,name,server}));
+      return {profile:{id:profile.id,name:profile.name,project:profile.project,server:profile.server},templates,links,settings,navigationHistory,forumProfiles,usage:await binderUsage(profile.id)};
+    }
+    if(message.type==='MT_NAVIGATION_ACTION'){
+      if(!isForum)throw Error('Недоверенный источник');
+      const state=(await api.storage.local.get('rpNexusStateV1')).rpNexusStateV1;
+      const XF=globalThis.MTXenForo,host=XF.domain(sender.url),profile=XF.matchingProfile(state?.profiles,state?.activeProfileId,sender.url);
+      const settings=forumSettingsFor(state?.preferences?.forum,host,profile?.id);
+      if(!profile||!settings.enabled||!settings.navigationEnabled||message.profileId!==profile.id)throw Error('Навигация отключена или профиль изменился');
+      if(message.action==='opened')return importedXenForo.markNavigationOpened(message.id,profile.id,host);
+      if(message.action==='bookmark')return importedXenForo.saveCurrentBookmark(profile.id,sender.url,message.title);
+      if(message.action==='visit'){if(!settings.navigationHistory)return [];return importedXenForo.recordNavigationVisit(profile.id,sender.url,message.title);}
+      if(message.action==='clear-history')return importedXenForo.clearNavigationHistory(profile.id);
+      if(message.action==='switch-profile'){
+        await modifyState(current=>{const p=current.profiles.find(p=>p.id===message.id);if(!p||XF.domain(p.forumUrl)!==host)throw Error('Профиль другого форума');return selectProfile(current,p.id);});return true;
+      }
+      if(message.action==='search'){
+        if(typeof message.query!=='string'||message.query.length>200)throw Error('Некорректный запрос');
+        const rows=searchRecords(await getLocalIndex(),message.query,{profileId:profile.id,host,limit:15});
+        return rows.filter(r=>r.type!=='navigation'||!r.host||r.host==='*'||r.host===host).map(r=>{let url='';try{if(r.url)url=XF.safeLink(r.url);}catch{}return {key:r.key,title:r.title,type:r.type,view:SECTION_FOR[r.type],url};});
+      }
+      throw Error('Неизвестное действие навигации');
     }
     if(message.type==='MT_BINDER_ACTION'){
       if(!isForum)throw Error('Недоверенный источник');
@@ -277,7 +304,7 @@ api.runtime.onMessage.addListener((message,sender,sendResponse) => {
     }
     throw Error('Неизвестный запрос');
   }
-  if (!['RP_NEXUS_OPEN_WORKSPACE','RP_NEXUS_SCAN_OPEN_TABS','RP_NEXUS_TRACK_CURRENT_THREAD','RP_NEXUS_THREAD_OBSERVED','RP_NEXUS_VIDEO_ADD','RP_NEXUS_CASE_MUTATE','RP_NEXUS_FORUM_DATA','RP_NEXUS_VIDEO_CASES','MAJESTIC_SAVE_PUBLIC_PLAYER','MAJESTIC_TIMER','MT_BINDER_ACTION'].includes(message.type)) return;
+  if (!['RP_NEXUS_OPEN_WORKSPACE','RP_NEXUS_SCAN_OPEN_TABS','RP_NEXUS_TRACK_CURRENT_THREAD','RP_NEXUS_THREAD_OBSERVED','RP_NEXUS_VIDEO_ADD','RP_NEXUS_CASE_MUTATE','RP_NEXUS_FORUM_DATA','RP_NEXUS_VIDEO_CASES','MAJESTIC_SAVE_PUBLIC_PLAYER','MAJESTIC_TIMER','MT_BINDER_ACTION','MT_NAVIGATION_ACTION'].includes(message.type)) return;
   void task().then(value => sendResponse({ok:true,value})).catch(error => sendResponse({ok:false,error:error?.message || 'Ошибка'}));
   return true;
 });

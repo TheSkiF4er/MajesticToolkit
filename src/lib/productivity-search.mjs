@@ -1,3 +1,4 @@
+import {listXenForoLinks} from './xenforo-store.mjs';
 import './forum-core.js';
 import './complaints-core.js';
 import {listTemplates} from './forum-store.mjs';
@@ -13,13 +14,13 @@ let index=null;let inflight=null;let epoch=0;
 export function invalidateSearch(){index=null;epoch++;}
 export async function getLocalIndex(){
   if(index)return index;
-  if(inflight)return inflight;
+  if(inflight){await inflight;return getLocalIndex();}
   const version=epoch;
   const task=(async()=>{
-    const [templates,cases,economy,laws,government,documents,links,sources]=await Promise.all([
-      listTemplates(),listCases(),listEconomy(),listLawRecords(),listGovernment(),listDocumentRecords(),listLinks(),listSources()
+    const [templates,cases,economy,laws,government,documents,links,sources,navigation]=await Promise.all([
+      listTemplates(),listCases(),listEconomy(),listLawRecords(),listGovernment(),listDocumentRecords(),listLinks(),listSources(),listXenForoLinks()
     ]);
-    return buildSearchRecords({templates,cases,economy,laws,government,documents,links,sources});
+    return buildSearchRecords({templates,cases,economy,laws,government,documents,links,sources,navigation});
   })();
   inflight=task;
   let rows;

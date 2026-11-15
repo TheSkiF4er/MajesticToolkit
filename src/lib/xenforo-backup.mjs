@@ -14,6 +14,6 @@ export function parseBackupV10(text,validateState,cleanTemplate){
   const navigation=validate(obj.xenforoNavigation);
   const legacy={...obj,schemaVersion:9};delete legacy.xenforoNavigation;
   const parsed=parseBackupV9(JSON.stringify(legacy),validateState,cleanTemplate);
-  if(navigation.some(x=>x.profileId!=='*'&&!parsed.state.profiles.some(p=>p.id===x.profileId)))throw Error('Ссылка связана с отсутствующим профилем');
+  if(navigation.some(x=>x.profileId!=='*'&&!parsed.state.profiles.some(p=>p.id===x.profileId&&(x.kind!=='bookmark'||globalThis.MTXenForo.domain(p.forumUrl)===x.host))))throw Error('Ссылка связана с отсутствующим профилем');
   return {...parsed,schemaVersion:10,xenforoNavigation:navigation};
 }

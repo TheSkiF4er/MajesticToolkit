@@ -1,6 +1,6 @@
 /** Local forum preferences. Included in the existing state/backup envelope. */
 export const FORUM_HOSTS = Object.freeze(['forum.majestic-rp.ru','forum.russia.online']);
-export const FORUM_DEFAULTS = Object.freeze({enabled:true,binderEnabled:true,navigationEnabled:true,panelPosition:'right',appearance:'dark',density:'comfortable'});
+export const FORUM_DEFAULTS = Object.freeze({enabled:true,binderEnabled:true,navigationEnabled:true,navigationHistory:false,panelPosition:'right',appearance:'dark',density:'comfortable'});
 const choices = {panelPosition:['left','right'],appearance:['dark','light','system'],density:['comfortable','compact']};
 function cleanOptions(value, partial=false) {
   const out = partial ? {} : {...FORUM_DEFAULTS};
