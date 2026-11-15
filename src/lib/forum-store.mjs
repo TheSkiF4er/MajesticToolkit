@@ -1,4 +1,7 @@
 import './forum-core.js';
+import './xenforo-core.js';
+import {listXenForoLinks} from './xenforo-store.mjs';
+import {createRestorePoint,completeRestorePoint} from './recovery.mjs';
 import { api } from './browser.mjs';
 const C = globalThis.RPNForumCore;
 const prefix = C.KEY_PREFIX;
@@ -24,7 +27,12 @@ export async function upsertTemplate(input, id = null) {
     const old = id ? records.find(x => x.id === id) : null;
     if (id && !old) throw new Error('Шаблон не найден или повреждён');
     if (!old && records.length >= C.MAX_TEMPLATES) throw new Error('Достигнут лимит шаблонов');
-    const item = C.createTemplate(input, old);
+    let item = C.createTemplate(input, old);
+    if(item.shortcut&&records.some(t=>t.id!==item.id&&t.profileId===item.profileId&&t.shortcut===item.shortcut))throw Error('Сочетание клавиш уже занято в этом профиле');
+    if(old&&['label','category','text','format','shortcut','variables','tags'].some(k=>JSON.stringify(old[k])!==JSON.stringify(item[k]))){
+      const {id,profileId,createdAt,history,...snapshot}=old;
+      item=C.cleanTemplate({...item,history:[snapshot,...(history??[])].slice(0,10)});
+    }
     await api.storage.local.set({ [prefix + item.id]: item });
     return item;
   });
@@ -83,3 +91,56 @@ export function parseFullBackup(text, validateState) {
   });
   return { state: profiles, templates: validTemplates, legacy: obj.schemaVersion === 1 };
 }
+
+// Usage is isolated by profile even when a template is shared across profiles.
+const usageKey=id=>'mtBinderUsage:'+encodeURIComponent(id);
+export async function binderUsage(profileId){
+  if(typeof profileId!=='string'||!profileId||profileId.length>128)throw Error('Неверный профиль');
+  const key=usageKey(profileId),raw=(await api.storage.local.get(key))[key];
+  return Object.fromEntries(Object.entries(raw??{}).filter(([id,time])=>/^[a-zA-Z0-9_-]{8,100}$/.test(id)&&Number.isFinite(time)&&time>0).sort((a,b)=>b[1]-a[1]).slice(0,C.MAX_TEMPLATES));
+}
+export function recordBinderUsage(profileId,id){return serialize(async()=>{
+  const t=(await listTemplates()).find(t=>t.id===id&&(t.profileId==='*'||t.profileId===profileId));
+  if(!t)throw Error('Шаблон недоступен');
+  const usage=await binderUsage(profileId);usage[id]=Date.now();
+  await api.storage.local.set({[usageKey(profileId)]:Object.fromEntries(Object.entries(usage).sort((a,b)=>b[1]-a[1]).slice(0,C.MAX_TEMPLATES))});return true;
+});}
+export function setBinderFavorite(id,profileId,favorite){return serialize(async()=>{
+  const old=(await listTemplates()).find(t=>t.id===id&&(t.profileId==='*'||t.profileId===profileId));
+  if(!old)throw Error('Шаблон недоступен');
+  const item=C.cleanTemplate({...old,favorite:favorite===true});await api.storage.local.set({[prefix+id]:item});return item;
+});}
+// Import is additive and writes the entire validated batch in one storage operation.
+export function importBinderPack(text,profileId,mode='skip'){return serialize(async()=>{
+  if(!['skip','replace','add'].includes(mode))throw Error('Неверный режим импорта');
+  const pack=C.parseImport(text,profileId),rows=pack.templates,existing=await listTemplates(),out=new Map(existing.map(t=>[t.id,t])),writes={};let imported=0,skipped=0,unassigned=0;
+  for(const row of rows){
+    const same=[...out.values()].find(t=>t.profileId===profileId&&(t.id===row.id||(t.label===row.label&&t.category===row.category&&(mode==='replace'||t.text===row.text))));
+    if(same&&mode==='skip'){skipped++;continue;}
+    let item=C.createTemplate({...row,variables:row.variables??[],tags:row.tags??[],favorite:row.favorite??false,order:row.order??1000000},mode==='replace'&&same?same:null);
+    if(mode!=='add'&&!same&&!out.has(row.id))item={...item,id:row.id};
+    if(mode==='replace'&&same){const {id,profileId,createdAt,history,...snapshot}=same;item={...item,history:[snapshot,...(history??[])].slice(0,10)};}else if(row.history)item={...item,history:row.history};
+    if(item.shortcut&&[...out.values()].some(t=>t.id!==item.id&&t.profileId===profileId&&t.shortcut===item.shortcut)){item={...item,shortcut:0};unassigned++;}
+    item=C.cleanTemplate(item);out.set(item.id,item);writes[prefix+item.id]=item;imported++;
+  }
+  if(out.size>C.MAX_TEMPLATES)throw Error('Превышен лимит шаблонов');
+  const XF=globalThis.MTXenForo,links=await listXenForoLinks(),linkRows=[...links];let linksImported=0;
+  for(const l of pack.links){
+    const same=linkRows.find(x=>x.profileId===profileId&&x.url===l.url);
+    if(same&&mode==='skip')continue;
+    const item=XF.validateLink({...l,profileId,id:mode==='replace'&&same?same.id:'xf_'+crypto.randomUUID().replaceAll('-',''),createdAt:mode==='replace'&&same?same.createdAt:new Date().toISOString()});
+    if(mode==='replace'&&same)linkRows.splice(linkRows.indexOf(same),1,item);else linkRows.push(item);
+    writes[XF.PREFIX+item.id]=item;linksImported++;
+  }
+  XF.validateLinks(linkRows);
+  if(imported||linksImported){await createRestorePoint(api.storage.local);await api.storage.local.set(writes);await completeRestorePoint(api.storage.local);}
+  return {imported,skipped,unassigned,linksImported};
+});}
+
+export function bulkBinderTemplates(ids,profileId,action,folder=''){return serialize(async()=>{
+  if(!Array.isArray(ids)||!ids.length||ids.length>C.MAX_TEMPLATES||new Set(ids).size!==ids.length||!['move','delete'].includes(action))throw Error('Некорректная массовая операция');
+  const all=await listTemplates(),rows=ids.map(id=>all.find(t=>t.id===id&&(t.profileId==='*'||t.profileId===profileId)));
+  if(rows.some(t=>!t))throw Error('Шаблон недоступен');
+  const writes=action==='move'?Object.fromEntries(rows.map(t=>{const {id,profileId,createdAt,history,...snapshot}=t;const item=C.cleanTemplate({...t,category:folder,updatedAt:new Date().toISOString(),history:[snapshot,...(history??[])].slice(0,10)});return [prefix+t.id,item];})):null;
+  await createRestorePoint(api.storage.local);if(writes)await api.storage.local.set(writes);else await api.storage.local.remove(ids.map(id=>prefix+id));await completeRestorePoint(api.storage.local);return rows.length;
+});}

@@ -197,11 +197,23 @@ api.runtime.onMessage.addListener((message,sender,sendResponse) => {
       const profile = globalThis.MTXenForo.matchingProfile(state?.profiles,state?.activeProfileId,sender.url);
       const settings=forumSettingsFor(state?.preferences?.forum,host,profile?.id);
       if (!profile || !settings.enabled) return {profile:null,templates:[],links:[],settings};
-      const {listTemplates} = await forumStorePromise;
+      const {listTemplates,binderUsage} = await forumStorePromise;
       // Select only a profile belonging to the sender's forum, not an unrelated active project.
       const templates = (await listTemplates()).filter(t=>t.profileId==='*'||t.profileId===profile.id);
       const links = (await importedXenForo.listXenForoLinks()).filter(x=>x.profileId==='*'||x.profileId===profile.id);
-      return {profile:{id:profile.id,name:profile.name,project:profile.project,server:profile.server},templates,links,settings};
+      return {profile:{id:profile.id,name:profile.name,project:profile.project,server:profile.server},templates,links,settings,usage:await binderUsage(profile.id)};
+    }
+    if(message.type==='MT_BINDER_ACTION'){
+      if(!isForum)throw Error('Недоверенный источник');
+      const state=(await api.storage.local.get('rpNexusStateV1')).rpNexusStateV1;
+      const profile=globalThis.MTXenForo.matchingProfile(state?.profiles,state?.activeProfileId,sender.url);
+      const settings=forumSettingsFor(state?.preferences?.forum,globalThis.MTXenForo.domain(sender.url),profile?.id);
+      if(!profile||!settings.enabled||!settings.binderEnabled)throw Error('Биндер отключён');
+      if(message.profileId!==profile.id)throw Error('Профиль форума изменился');
+      const store=await forumStorePromise;
+      if(message.action==='use')return store.recordBinderUsage(profile.id,message.id);
+      if(message.action==='favorite')return store.setBinderFavorite(message.id,profile.id,message.favorite);
+      throw Error('Неизвестное действие биндера');
     }
     if (message.type === 'MAJESTIC_SAVE_PUBLIC_PLAYER') {
       if(!isForum||!sender.url)throw Error('Запрос принят только с поддерживаемого форума');
@@ -265,7 +277,7 @@ api.runtime.onMessage.addListener((message,sender,sendResponse) => {
     }
     throw Error('Неизвестный запрос');
   }
-  if (!['RP_NEXUS_OPEN_WORKSPACE','RP_NEXUS_SCAN_OPEN_TABS','RP_NEXUS_TRACK_CURRENT_THREAD','RP_NEXUS_THREAD_OBSERVED','RP_NEXUS_VIDEO_ADD','RP_NEXUS_CASE_MUTATE','RP_NEXUS_FORUM_DATA','RP_NEXUS_VIDEO_CASES','MAJESTIC_SAVE_PUBLIC_PLAYER','MAJESTIC_TIMER'].includes(message.type)) return;
+  if (!['RP_NEXUS_OPEN_WORKSPACE','RP_NEXUS_SCAN_OPEN_TABS','RP_NEXUS_TRACK_CURRENT_THREAD','RP_NEXUS_THREAD_OBSERVED','RP_NEXUS_VIDEO_ADD','RP_NEXUS_CASE_MUTATE','RP_NEXUS_FORUM_DATA','RP_NEXUS_VIDEO_CASES','MAJESTIC_SAVE_PUBLIC_PLAYER','MAJESTIC_TIMER','MT_BINDER_ACTION'].includes(message.type)) return;
   void task().then(value => sendResponse({ok:true,value})).catch(error => sendResponse({ok:false,error:error?.message || 'Ошибка'}));
   return true;
 });

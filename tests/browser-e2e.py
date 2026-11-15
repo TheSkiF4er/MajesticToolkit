@@ -19,12 +19,14 @@ MOCK_JS = r'''(host) => {{
   const a={{id:'tpl_majestic_01',profileId:p1.id,label:'Ответ Majestic',text:'[b]Привет[/b] {{{{nickname}}}}',category:'',shortcut:1,format:'bbcode',createdAt:date,updatedAt:date}};
   const b={{id:'tpl_russia_01',profileId:p2.id,label:'Ответ Russia',text:'Здравствуйте!',category:'',shortcut:1,format:'plain',createdAt:date,updatedAt:date}};
   const links=[{{id:'link_majestic_01',profileId:p1.id,title:'Наш справочник',url:'https://example.com/help',createdAt:date}},{{id:'link_russia_01',profileId:p2.id,title:'Russia Wiki',url:'https://example.com/wiki',createdAt:date}}];
-  window.__sent=[]; window.__listeners=[]; window.__settings={{}}; window.__allowed=true;
+  window.__sent=[]; window.__listeners=[]; window.__settings={{}}; window.__allowed=true; window.__extraTemplates=[]; window.__usage={{}};
   window.__deliver=message=>{{for(const listener of window.__listeners)listener(message,{{}},()=>{{}});}};
   window.browser={{
     runtime:{{id:'fixture-extension-id',getURL:path=>'chrome-extension://fixture-extension-id/'+path,
       onMessage:{{addListener:fn=>window.__listeners.push(fn)}},async sendMessage(message){{window.__sent.push(message);
-      if(message.type==='RP_NEXUS_FORUM_DATA'){{const profile=hostName.includes('russia')?p2:p1;return {{ok:true,value:{{profile,templates:[a,b].filter(t=>t.profileId===profile.id),links:links.filter(t=>t.profileId===profile.id),settings:window.__settings,allowed:window.__allowed}}}};}}
+      if(message.type==='RP_NEXUS_FORUM_DATA'){{const profile=hostName.includes('russia')?p2:p1;return {{ok:true,value:{{profile,templates:[a,b,...window.__extraTemplates].filter(t=>t.profileId===profile.id),usage:window.__usage,links:links.filter(t=>t.profileId===profile.id),settings:window.__settings,allowed:window.__allowed}}}};}}
+      if(message.type==='MT_BINDER_ACTION'&&message.action==='use')window.__usage[message.id]=Date.now();
+      if(message.type==='MT_BINDER_ACTION'&&message.action==='favorite'){{const t=[a,b,...window.__extraTemplates].find(t=>t.id===message.id);t.favorite=message.favorite;return {{ok:true,value:t}};}}
       return {{ok:true,value:{{}}}};
     }}}},
     storage:{{onChanged:{{addListener:()=>{{}}}}}}
@@ -259,6 +261,78 @@ async def exercise(browser):
     await page.evaluate("window.dispatchEvent(new PageTransitionEvent('pageshow',{persisted:true}))")
     await root.wait_for()
     assert await root.count()==1
+    count+=1
+    await context.close()
+    # Binder 2.0: actual dynamic fields, preview, insertion, favorite and recent filter.
+    context=await browser.new_context(ignore_https_errors=True)
+    page=await context.new_page()
+    await page.set_content(fixture(),wait_until='domcontentloaded')
+    await page.evaluate('('+MOCK_JS.format(host=repr('forum.majestic-rp.ru'))+')('+repr('forum.majestic-rp.ru')+')')
+    await page.evaluate("""() => {window.__extraTemplates=[{id:'tpl_binder_157',profileId:'p_majestic_1234',label:'Решение',category:'Жалобы/Суд',tags:['проверено'],text:'[b]{{decision}}[/b] {{comment}}',format:'bbcode',shortcut:2,createdAt:'2026-11-15T00:00:00Z',updatedAt:'2026-11-15T00:00:00Z',variables:[{key:'decision',label:'Решение',type:'select',required:true,options:['Да','Нет']},{key:'comment',label:'Комментарий',type:'multiline',required:true}]}];}""")
+    await inject(page)
+    root=page.locator('#rp-nexus-forum-020')
+    await root.locator('.launcher').click()
+    await root.locator('[data-insert="tpl_binder_157"]').click()
+    await root.locator('#rpn-fill button[type=submit]').click()
+    assert await page.locator('textarea[name=message]').input_value()==''
+    await root.locator('#rpn-fill select[name=decision]').select_option('Да')
+    await root.locator('#rpn-fill textarea[name=comment]').fill('Проверка [b]текста[/b]')
+    await root.locator('[data-act=preview]').click()
+    assert await root.locator('#rpn-filled-preview strong').inner_text()=='Да'
+    await page.evaluate("window.__deliver({type:'RP_NEXUS_REFRESH_FORUM_DATA'})")
+    await page.wait_for_timeout(150)
+    assert await root.locator('#rpn-fill textarea[name=comment]').input_value()=='Проверка [b]текста[/b]'
+    await root.locator('#rpn-fill button[type=submit]').click()
+    assert await page.locator('textarea[name=message]').input_value()=='[b]Да[/b] Проверка ［b］текста［/b］'
+    await root.locator('[data-favorite="tpl_binder_157"]').click()
+    await root.locator('[data-filter=favorite]').click()
+    assert await root.locator('[data-insert]').count()==1
+    await root.locator('[data-filter=recent]').click()
+    assert await root.locator('[data-insert="tpl_binder_157"]').count()==1
+    count+=1
+    await context.close()
+    # Exercise the real module and workspace dialog against in-memory WebExtension storage.
+    context=await browser.new_context()
+    page=await context.new_page()
+    # Data-module import map keeps the entire real module graph offline (no navigation).
+    import base64, json, re
+    modules={}
+    def add_module(path):
+        path=path.resolve();key='mt:'+path.relative_to(ROOT/'src').as_posix()
+        if key in modules:return key
+        modules[key]=''
+        source=path.read_text()
+        def rewrite(match):
+            target=(path.parent/match.group(2)).resolve()
+            return match.group(1)+add_module(target)+match.group(1)
+        source=re.sub(r"(['\"])(\.{1,2}/[^'\"\n]+\.m?js)\1",rewrite,source)
+        modules[key]='data:text/javascript;base64,'+base64.b64encode(source.encode()).decode()
+        return key
+    add_module(ROOT/'src/lib/model.mjs');add_module(ROOT/'src/ui/forum-page.mjs')
+    await page.set_content('<html><head><script type="importmap">'+json.dumps({'imports':modules})+'</script></head><body><div id="app"></div></body></html>')
+    await page.evaluate("""async()=>{
+      const data={};window.__data=data;window.browser={storage:{local:{async get(k){return k===null?{...data}:{[k]:data[k]};},async set(x){Object.assign(data,structuredClone(x));},async remove(k){for(const id of Array.isArray(k)?k:[k])delete data[id];}}}};
+      const model=await import('mt:lib/model.mjs'),ui=await import('mt:ui/forum-page.mjs');window.__state=model.defaultState();window.__ui=ui;
+      await ui.refreshBinderProfile(window.__state.activeProfileId);await ui.refreshForum();
+      window.__render=()=>MTSafeDOM.replaceHtml(document.querySelector('#app'),ui.forumSection(window.__state));window.__render();
+      document.addEventListener('submit',e=>{if(e.target.getAttribute('id')==='forum-template-form'){e.preventDefault();ui.handleForumSubmit(e,window.__state,window.__render,()=>{}).catch(err=>window.__error=err.message);}});
+      document.addEventListener('click',e=>{const b=e.target.closest('[data-forum-action]');if(b)ui.handleForumAction(b,window.__state,window.__render,()=>{}).catch(err=>window.__error=err.message);});
+    }""")
+    await page.locator('[data-forum-action=create]').click()
+    await page.locator('#forum-template-form [name=label]').fill('Шаблон E2E')
+    await page.locator('#forum-template-form [name=category]').fill('Жалобы/Суд')
+    await page.locator('#forum-template-form [name=tags]').fill('QA, E2E')
+    await page.locator('#forum-template-form [name=text]').fill('[b]{{decision}}[/b]')
+    await page.locator('[data-variable-key=decision] [data-type]').select_option('select')
+    await page.locator('[data-variable-key=decision] [data-options]').fill('Да\nНет')
+    await page.locator('#forum-template-form button[type=submit]').click()
+    await page.wait_for_function("Object.values(window.__data).some(x=>x.label==='Шаблон E2E')")
+    assert await page.evaluate("Object.values(window.__data).find(x=>x.label==='Шаблон E2E').variables[0].options.join(',')")=='Да,Нет'
+    await page.locator('[data-template-card] [data-forum-action=edit]').click()
+    await page.locator('#forum-template-form [name=label]').fill('Шаблон E2E v2')
+    await page.locator('#forum-template-form button[type=submit]').click()
+    await page.wait_for_function("Object.values(window.__data).some(x=>x.label==='Шаблон E2E v2'&&x.history?.length===1)")
+    assert not await page.evaluate('Boolean(window.__error)')
     count+=1
     await context.close()
     return count
