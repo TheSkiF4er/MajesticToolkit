@@ -1,3 +1,4 @@
+import {forumSettingsFor} from '../lib/forum-settings.mjs';
 /* MajesticToolkit background: static ES module dependencies for all browsers. */
 import * as importedStore from '../lib/complaints-store.mjs';
 import * as importedForum from '../lib/forum-store.mjs';
@@ -32,7 +33,7 @@ async function syncScripts() {
       try {
         const granted = await api.permissions.contains({origins:[site.origin]});
         const isForum = FORUMS.includes(site);
-        const wanted={id:site.id,matches:[site.origin],js:isForum ? ['lib/safe-dom.js','lib/forum-core.js','lib/xenforo-core.js','lib/complaints-core.js','content/forum.js'] : ['lib/safe-dom.js','lib/complaints-core.js','content/evidence.js'],runAt:'document_idle',allFrames:false,persistAcrossSessions:true};
+        const wanted={id:site.id,matches:[site.origin],js:isForum ? ['lib/safe-dom.js','lib/forum-core.js','lib/xenforo-core.js','lib/complaints-core.js','content/forum/context.js','content/forum/editors.js','content/forum/navigation.js','content/forum/lifecycle.js','content/forum.js'] : ['lib/safe-dom.js','lib/complaints-core.js','content/evidence.js'],runAt:'document_idle',allFrames:false,persistAcrossSessions:true};
         const current=byId.get(site.id);
         const obsolete=current&&(JSON.stringify(current.js)!==JSON.stringify(wanted.js) || JSON.stringify(current.matches)!==JSON.stringify(wanted.matches) || current.runAt!==wanted.runAt || current.allFrames!==false);
         // Persisted registrations from a previous version must be replaced on upgrade.
@@ -44,7 +45,7 @@ async function syncScripts() {
           try {
             const tabs = await api.tabs.query({url:[site.origin]});
             await Promise.allSettled(tabs.filter(tab=>Number.isInteger(tab.id)&&tab.id>=0).map(tab=>
-              api.scripting.executeScript({target:{tabId:tab.id},files:wanted.js})
+              api.scripting.executeScript({target:{tabId:tab.id},files:wanted.js}).then(()=>isForum?api.tabs.sendMessage(tab.id,{type:'RP_NEXUS_REFRESH_FORUM_DATA'}).catch(()=>{}):undefined)
             ));
           } catch (error) {
             console.warn('MajesticToolkit: existing tabs will need refresh',site.origin,error);
@@ -145,7 +146,11 @@ api.storage.onChanged.addListener((changes,area) => {
   void api.tabs.query({}).then(tabs=>Promise.allSettled(tabs.filter(t=>t.id&&FORUMS.some(f=>t.url?.startsWith(f.origin.slice(0,-1)))).map(t=>api.tabs.sendMessage(t.id,{type:'RP_NEXUS_REFRESH_FORUM_DATA'})))).catch(()=>{});
 });
 api.permissions.onAdded.addListener(() => {void scheduleSyncScripts();});
-api.permissions.onRemoved.addListener(() => {void scheduleSyncScripts();});
+api.permissions.onRemoved.addListener(() => {
+  void scheduleSyncScripts();
+  // Revoked hosts may no longer expose tab URLs; notify existing content scripts by tab ID.
+  void (async()=>{const hosts=[];for(const site of FORUMS)if(!await api.permissions.contains({origins:[site.origin]}))hosts.push(new URL(site.origin).hostname);if(!hosts.length)return;const tabs=await api.tabs.query({});await Promise.allSettled(tabs.filter(t=>Number.isInteger(t.id)).map(t=>api.tabs.sendMessage(t.id,{type:'RP_NEXUS_FORUM_PERMISSION_REVOKED',hosts})));})().catch(()=>{});
+});
 api.alarms.onAlarm.addListener(alarm => {if (alarm.name === 'rp-nexus-open-tabs-v3') void tick();
   if(alarm.name.startsWith(ALARM_PREFIX))void handleTimerAlarm(alarm.name.slice(ALARM_PREFIX.length)).catch(error=>console.warn('MajesticToolkit: завершение таймера',error));
 });
@@ -156,6 +161,7 @@ api.runtime.onMessage.addListener((message,sender,sendResponse) => {
   const isVideo=contentSender(sender,api.runtime.id,'video');
   async function task() {
     validatePayloadSize(message);
+    if(isForum && message.type!=='RP_NEXUS_FORUM_DATA' && !await api.permissions.contains({origins:[`https://${new URL(sender.url).hostname}/*`]}))throw Error('Доступ к форуму отозван');
     if (message.type === 'RP_NEXUS_OPEN_WORKSPACE') {
       if (!isForum && !isVideo && !isTrustedExtension) throw Error('Недоверенный источник');
       await api.tabs.create({url:api.runtime.getURL('ui/workspace.html' + (['forum','complaints'].includes(message.view) ? '#'+message.view : ''))});
@@ -185,15 +191,17 @@ api.runtime.onMessage.addListener((message,sender,sendResponse) => {
     }
     if (message.type === 'RP_NEXUS_FORUM_DATA') {
       if (!isForum) throw Error('Недоверенный источник');
+      const host=globalThis.MTXenForo.domain(sender.url);
+      if(!await api.permissions.contains({origins:[`https://${host}/*`]}))return {allowed:false,profile:null,templates:[],links:[]};
       const state = (await api.storage.local.get('rpNexusStateV1')).rpNexusStateV1;
-      if (!state?.activeProfileId) return {profile:null, templates:[]};
+      const profile = globalThis.MTXenForo.matchingProfile(state?.profiles,state?.activeProfileId,sender.url);
+      const settings=forumSettingsFor(state?.preferences?.forum,host,profile?.id);
+      if (!profile || !settings.enabled) return {profile:null,templates:[],links:[],settings};
       const {listTemplates} = await forumStorePromise;
       // Select only a profile belonging to the sender's forum, not an unrelated active project.
-      const profile = globalThis.MTXenForo.matchingProfile(state.profiles,state.activeProfileId,sender.url);
-      if (!profile) return {profile:null,templates:[],links:[]};
       const templates = (await listTemplates()).filter(t=>t.profileId==='*'||t.profileId===profile.id);
       const links = (await importedXenForo.listXenForoLinks()).filter(x=>x.profileId==='*'||x.profileId===profile.id);
-      return {profile:{id:profile.id,name:profile.name,project:profile.project,server:profile.server},templates,links};
+      return {profile:{id:profile.id,name:profile.name,project:profile.project,server:profile.server},templates,links,settings};
     }
     if (message.type === 'MAJESTIC_SAVE_PUBLIC_PLAYER') {
       if(!isForum||!sender.url)throw Error('Запрос принят только с поддерживаемого форума');

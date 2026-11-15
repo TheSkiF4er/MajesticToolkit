@@ -3,7 +3,7 @@
  * Used by both extension UI modules and isolated content scripts. */
 (() => {
   'use strict';
-  const HTML_TAGS = new Set(('a abbr article aside b blockquote br button caption code dd details dialog div dl dt em fieldset figcaption figure footer form h1 h2 h3 h4 h5 h6 header hr i input kbd label legend li main mark nav ol option optgroup output p pre progress section select small span strong summary table tbody td textarea th thead time tr u ul').split(' '));
+  const HTML_TAGS = new Set(('a abbr article aside b blockquote br button caption code dd details dialog div dl dt em fieldset figcaption figure footer form h1 h2 h3 h4 h5 h6 header hr i input kbd label legend li main mark nav ol option optgroup output p pre progress section select small s span strong summary table tbody td textarea th thead time tr u ul').split(' '));
   const SVG_TAGS = new Set(('svg circle line polyline path rect text title g').split(' '));
   const ATTRS = new Set(('id class name type value title role for href target rel placeholder required checked selected disabled hidden readonly readOnly tabindex max min step maxlength minlength rows cols size pattern autocomplete spellcheck autofocus multiple download action method aria-label viewBox x y x1 x2 y1 y2 cx cy r d points fill stroke stroke-width stroke-opacity fill-opacity stroke-dasharray stroke-linecap stroke-linejoin text-anchor font-size width height xmlns preserveAspectRatio').split(' '));
   const URL_ATTRS = new Set(['href', 'action']);

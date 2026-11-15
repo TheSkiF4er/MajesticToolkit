@@ -1,3 +1,4 @@
+import {FORUM_HOSTS,validateForumSettings,forumSettingsFor} from '../lib/forum-settings.mjs';
 import '../lib/safe-dom.js';
 const { replaceHtml, insertHtml } = globalThis.MTSafeDOM;
 import { api } from '../lib/browser.mjs';
@@ -13,10 +14,24 @@ export const xenforoLinks=()=>forumLinks;
 let search = '';
 const e = C.esc;
 export async function refreshForum() { [templates,forumLinks] = await Promise.all([listTemplates(),listXenForoLinks()]); }
+function settingsCard(state){
+  const prefs=validateForumSettings(state.preferences.forum);
+  const current=state.profiles.find(p=>p.id===state.activeProfileId);
+  const host=globalThis.MTXenForo.domain(current?.forumUrl);
+  const form=(scope,title)=>{
+    const profileScope=scope.startsWith('profile:');
+    const inherited=profileScope?!Object.hasOwn(prefs.profiles,scope.slice(8)):!Object.hasOwn(prefs.sites,scope);
+    const values=scope==='global'?prefs.global:profileScope?forumSettingsFor(prefs,host,current.id):forumSettingsFor(prefs,scope);
+    const fields=[['enabled','Интеграция с форумом'],['binderEnabled','Биндер и горячие клавиши'],['navigationEnabled','Ссылки в меню XenForo']];
+    const select=(key,label,options)=>`<label>${label}<select name="${key}">${options.map(([v,t])=>`<option value="${v}" ${values[key]===v?'selected':''}>${t}</option>`).join('')}</select></label>`;
+    return `<form data-forum-settings="${e(scope)}" class="stack"><h4>${e(title)}</h4>${scope==='global'?'':`<label><input type="checkbox" name="inherit" ${inherited?'checked':''}> Использовать настройки ${profileScope?'форума':'по умолчанию'}</label>`}${fields.map(([key,label])=>`<label><input type="checkbox" name="${key}" ${values[key]?'checked':''}> ${label}</label>`).join('')}${select('panelPosition','Положение панели',[['right','Справа'],['left','Слева']])}${select('appearance','Тема панели',[['dark','Тёмная'],['light','Светлая'],['system','Системная']])}${select('density','Плотность',[['comfortable','Обычная'],['compact','Компактная']])}<div class="row"><button class="button primary" type="submit">Сохранить</button><button class="button secondary" type="button" data-forum-action="reset-settings" data-id="${e(scope)}">Сбросить</button></div></form>`;
+  };
+  return `<section class="card stack"><h3>Forum Core · Настройки</h3><p class="subtle">Настройки применяются к открытым вкладкам сразу. Разрешения сайтов остаются независимыми. Для отдельного форума или профиля снимите флажок наследования и сохраните настройки.</p>${form('global','Общие настройки')}${form(FORUM_HOSTS[0],'Majestic RP')}${form(FORUM_HOSTS[1],'Russia Online')}${host?form('profile:'+current.id,'Активный профиль: '+current.name):''}</section>`;
+}
 export function forumSection(state) {
   const current = state.profiles.find(x => x.id === state.activeProfileId);
   const matching = C.selectTemplates(templates, current.id);
-  return `<div class="stack"><section class="card"><div class="row spread"><div><h3>Биндер ответов</h3><p class="subtle">BBCode, переменные, категории, горячие клавиши Alt+Shift+1…9. Шаблоны привязываются к профилю или доступны глобально.</p></div><button class="button primary" data-forum-action="create">+ Новый шаблон</button></div><div class="row"><input id="forum-search" type="search" placeholder="Поиск по названию, категории или тексту" value="${e(search)}" aria-label="Поиск шаблонов" style="flex:1;min-width:220px"><span class="tag">${matching.length} доступно · ${templates.length} всего</span></div></section>
+  return `<div class="stack">${settingsCard(state)}<section class="card"><div class="row spread"><div><h3>Биндер ответов</h3><p class="subtle">BBCode, переменные, категории, горячие клавиши Alt+Shift+1…9. Шаблоны привязываются к профилю или доступны глобально.</p></div><button class="button primary" data-forum-action="create">+ Новый шаблон</button></div><div class="row"><input id="forum-search" type="search" placeholder="Поиск по названию, категории или тексту" value="${e(search)}" aria-label="Поиск шаблонов" style="flex:1;min-width:220px"><span class="tag">${matching.length} доступно · ${templates.length} всего</span></div></section>
   <div id="forum-items" class="stack">${matching.length ? matching.map(t => `<article class="card" data-template-card data-filter="${e([t.label,t.category,t.text].join(' ').toLocaleLowerCase('ru'))}"><div class="row spread"><div><strong>${e(t.label)}</strong><p class="subtle">${e(t.category || 'Без категории')} · ${t.profileId === '*' ? 'Все профили' : (current.id === t.profileId ? 'Активный профиль' : 'Другой профиль')} · ${e(t.format.toUpperCase())}</p></div>${t.shortcut ? `<span class="tag">Alt+Shift+${t.shortcut}</span>` : ''}</div><pre class="template-text">${e(t.text)}</pre><div class="row"><button class="button secondary" data-forum-action="copy" data-id="${e(t.id)}">Копировать</button><button class="button secondary" data-forum-action="insert" data-id="${e(t.id)}">Вставить в форум</button><button class="button secondary" data-forum-action="edit" data-id="${e(t.id)}">Редактировать</button><button class="button danger" data-forum-action="delete" data-id="${e(t.id)}">Удалить</button></div></article>`).join('') : '<section class="card empty">Пока нет шаблонов для текущего профиля. Создайте шаблон, выбрав этот профиль или «Все профили».</section>'}</div>
   <section class="card stack"><h3>Пользовательская навигация XenForo</h3><p class="subtle">Ссылки появятся в шапке форума выбранного проекта после разрешения доступа. Используются только HTTPS-адреса, открываются в новой вкладке. Ограничение: 60 записей.</p>
     <form id="xf-navigation-form" class="stack"><input type="hidden" name="id" value=""><div class="grid"><label>Название ссылки<input name="title" maxlength="70" placeholder="Правила сервера" required></label><label>Адрес HTTPS<input name="url" type="url" maxlength="2048" placeholder="https://example.com/rules" required></label></div><label>Профиль<select name="profileId"><option value="*">Все профили</option>${state.profiles.map(p=>`<option value="${e(p.id)}" ${p.id===state.activeProfileId?'selected':''}>${e(p.name)} · ${e(p.server)}</option>`).join('')}</select></label><div class="row"><button class="button primary" type="submit">Сохранить ссылку</button><button class="button secondary" type="button" data-forum-action="clear-link-form">Отмена редактирования</button></div></form>
@@ -137,7 +152,7 @@ export async function handleForumAction(button, state, rerender, feedback) {
       return true;
     }
     let response;
-    try { response = await api.tabs.sendMessage(candidates[0].id,{type:'RP_NEXUS_APPLY_TEMPLATE',id}); }
+    try { response = await api.tabs.sendMessage(candidates[0].id,{type:'RP_NEXUS_APPLY_TEMPLATE',id,profileId}); }
     catch (error) { throw Error('Нет связи с панелью форума. Проверьте разрешение на сайт и обновите вкладку, затем повторите.'); }
     if (!response?.ok) throw new Error(response?.error || 'Вставка не подтверждена страницей форума');
     feedback('Шаблон вставлен в редактор форума'); return true;

@@ -19,11 +19,12 @@ MOCK_JS = r'''(host) => {{
   const a={{id:'tpl_majestic_01',profileId:p1.id,label:'Ответ Majestic',text:'[b]Привет[/b] {{{{nickname}}}}',category:'',shortcut:1,format:'bbcode',createdAt:date,updatedAt:date}};
   const b={{id:'tpl_russia_01',profileId:p2.id,label:'Ответ Russia',text:'Здравствуйте!',category:'',shortcut:1,format:'plain',createdAt:date,updatedAt:date}};
   const links=[{{id:'link_majestic_01',profileId:p1.id,title:'Наш справочник',url:'https://example.com/help',createdAt:date}},{{id:'link_russia_01',profileId:p2.id,title:'Russia Wiki',url:'https://example.com/wiki',createdAt:date}}];
-  window.__sent=[];
+  window.__sent=[]; window.__listeners=[]; window.__settings={{}}; window.__allowed=true;
+  window.__deliver=message=>{{for(const listener of window.__listeners)listener(message,{{}},()=>{{}});}};
   window.browser={{
     runtime:{{id:'fixture-extension-id',getURL:path=>'chrome-extension://fixture-extension-id/'+path,
-      onMessage:{{addListener:()=>{{}}}},async sendMessage(message){{window.__sent.push(message);
-      if(message.type==='RP_NEXUS_FORUM_DATA'){{const profile=hostName.includes('russia')?p2:p1;return {{ok:true,value:{{profile,templates:[a,b].filter(t=>t.profileId===profile.id),links:links.filter(t=>t.profileId===profile.id)}}}};}}
+      onMessage:{{addListener:fn=>window.__listeners.push(fn)}},async sendMessage(message){{window.__sent.push(message);
+      if(message.type==='RP_NEXUS_FORUM_DATA'){{const profile=hostName.includes('russia')?p2:p1;return {{ok:true,value:{{profile,templates:[a,b].filter(t=>t.profileId===profile.id),links:links.filter(t=>t.profileId===profile.id),settings:window.__settings,allowed:window.__allowed}}}};}}
       return {{ok:true,value:{{}}}};
     }}}},
     storage:{{onChanged:{{addListener:()=>{{}}}}}}
@@ -42,9 +43,9 @@ def fixture(host='majestic',editor='textarea',member=False,moderation=False):
         if moderation:body+='<div class="block-outer"><button data-xf-click="menu" id="tools">Инструменты темы</button><div class="menu"><button id="close">Закрыть тему</button><button id="move">Переместить тему</button></div></div>'
     return f'<!doctype html><html><head><meta charset="utf-8"><meta name="generator" content="XenForo 2.2"></head><body><nav class="p-nav"><ul class="p-nav-list"><li>Форум</li></ul></nav>{body}</body></html>'
 
-async def inject(page, member=False):
-    for part in ['lib/safe-dom.js','lib/forum-core.js','lib/xenforo-core.js','lib/complaints-core.js','content/forum.js']:
-        if part=='content/forum.js':
+async def inject(page, member=False, canonical_override=True):
+    for part in ['lib/safe-dom.js','lib/forum-core.js','lib/xenforo-core.js','lib/complaints-core.js','content/forum/context.js','content/forum/editors.js','content/forum/navigation.js','content/forum/lifecycle.js','content/forum.js']:
+        if part=='content/forum.js' and canonical_override:
             await page.evaluate("""member => { const xf=globalThis.MTXenForo; const path = member ? '/members/test.42/' : '/threads/test.123/'; const canonical='https://forum.majestic-rp.ru'+path; globalThis.MTXenForo=Object.freeze({...xf, identify:(href,doc)=>xf.identify(canonical,doc), memberProfile:(doc,href)=>xf.memberProfile(doc,canonical), moderationAction:(doc,href,action)=>xf.moderationAction(doc,canonical,action)}); }""", member)
         await page.add_script_tag(content=(ROOT/'src'/part).read_text())
     await page.locator('#rp-nexus-forum-020').wait_for(timeout=4000)
@@ -194,6 +195,70 @@ async def exercise(browser):
     await page.locator('#revoke').click()
     await page.wait_for_function("document.getElementById('status').textContent === 'revoked'")
     assert await page.evaluate('globalThis.__events')==['request','remove']
+    count+=1
+    await context.close()
+    # Offline XenForo fixture with the supported canonical context.
+    context=await browser.new_context(ignore_https_errors=True)
+    page=await context.new_page()
+    await page.set_content(fixture(),wait_until='domcontentloaded')
+    await page.evaluate('('+MOCK_JS.format(host=repr('forum.majestic-rp.ru'))+')('+repr('forum.majestic-rp.ru')+')')
+    await page.evaluate("""() => {const form=document.querySelector('form');form.insertAdjacentHTML('beforeend','<textarea id="unrelated" name="bio"></textarea><textarea id="second" name="message"></textarea>');} """)
+    await inject(page)
+    root=page.locator('#rp-nexus-forum-020')
+    await root.evaluate("x=>x.shadowRoot.querySelector('.launcher').click()")
+    await root.evaluate("x=>x.shadowRoot.querySelector('[data-insert]').click()")
+    assert await page.locator('textarea[name=message]').first.input_value()==''
+    assert await page.locator('#second').input_value()==''
+    await page.locator('#unrelated').focus()
+    await page.keyboard.press('Alt+Shift+1')
+    assert await page.locator('#unrelated').input_value()==''
+    await page.locator('#second').fill('left RIGHT end')
+    await page.locator('#second').evaluate("x=>{x.focus();x.setSelectionRange(5,10)}")
+    await root.evaluate("x=>x.shadowRoot.querySelector('[data-insert]').click()")
+    assert (await page.locator('#second').input_value()).startswith('left [b]Привет[/b]')
+    assert 'RIGHT' not in await page.locator('#second').input_value()
+    assert await page.locator('textarea[name=message]').first.input_value()==''
+    # Picker and start/end insertion modes work on the actual panel.
+    await root.evaluate("x=>{const s=x.shadowRoot.querySelector('#rpn-editor');s.value='0';s.dispatchEvent(new Event('change',{bubbles:true}));const m=x.shadowRoot.querySelector('#rpn-mode');m.value='start';m.dispatchEvent(new Event('change',{bubbles:true}));}")
+    await page.locator('textarea[name=message]').first.fill('tail')
+    await root.evaluate("x=>x.shadowRoot.querySelector('[data-insert]').click()")
+    assert (await page.locator('textarea[name=message]').first.input_value()).endswith('tail'), await page.locator('textarea[name=message]').first.input_value()
+    count+=1
+    # AJAX editor and navigation replacement; desktop/mobile duplicate-free reconciliation.
+    await page.evaluate("""() => {document.querySelector('nav').outerHTML='<nav class="p-nav"><ul class="p-nav-list"><li>New</li></ul></nav>';const mobile=document.createElement('div');mobile.className='offCanvasMenu-list';document.body.append(mobile);}""")
+    await page.wait_for_function("document.querySelectorAll('[data-mt-xf-nav]').length===2")
+    await page.evaluate("document.querySelector('nav ul [data-mt-xf-nav]').remove()")
+    await page.wait_for_function("document.querySelectorAll('[data-mt-xf-nav]').length===2")
+    await page.evaluate("document.querySelector('#second').remove();document.querySelector('textarea[name=message]').remove();const form=document.querySelector('form');const n=document.createElement('textarea');n.name='message';n.id='replacement';form.append(n)")
+    await page.wait_for_timeout(200)
+    await root.evaluate("x=>x.shadowRoot.querySelector('[data-insert]').click()")
+    assert await page.locator('#replacement').input_value()==''
+    await page.locator('#replacement').focus()
+    await root.evaluate("x=>x.shadowRoot.querySelector('[data-insert]').click()")
+    assert 'Привет' in await page.locator('#replacement').input_value()
+    count+=1
+    # Settings update, disable/enable, revoke, BFCache, and no duplicate launcher.
+    await page.evaluate("window.__settings={panelPosition:'left',appearance:'light',density:'compact',navigationEnabled:false,binderEnabled:false};window.__deliver({type:'RP_NEXUS_REFRESH_FORUM_DATA'})")
+    await page.wait_for_function("document.querySelectorAll('[data-mt-xf-nav]').length===0 && document.querySelector('#rp-nexus-forum-020').dataset.appearance==='light'")
+    assert await root.evaluate("x=>x.style.left")=='18px'
+    assert await root.evaluate("x=>x.shadowRoot.querySelectorAll('[data-insert]').length")==0
+    await page.evaluate("window.__settings={enabled:false};window.__deliver({type:'RP_NEXUS_REFRESH_FORUM_DATA'})")
+    await root.wait_for(state='detached')
+    await page.evaluate("window.__settings={};window.__deliver({type:'RP_NEXUS_REFRESH_FORUM_DATA'})")
+    await root.wait_for()
+    await page.wait_for_function("document.querySelectorAll('[data-mt-xf-nav]').length===2")
+    await page.evaluate("window.__deliver({type:'RP_NEXUS_FORUM_PERMISSION_REVOKED',hosts:['forum.russia.online']})")
+    assert await root.count()==1
+    await page.evaluate("window.__allowed=false;window.__deliver({type:'RP_NEXUS_FORUM_PERMISSION_REVOKED',hosts:['forum.majestic-rp.ru']})")
+    await root.wait_for(state='detached')
+    assert await page.locator('[data-mt-xf-nav]').count()==0
+    await page.evaluate("window.__allowed=true;window.__deliver({type:'RP_NEXUS_REFRESH_FORUM_DATA'})")
+    await root.wait_for()
+    await page.evaluate("window.dispatchEvent(new PageTransitionEvent('pagehide',{persisted:true}))")
+    await root.wait_for(state='detached')
+    await page.evaluate("window.dispatchEvent(new PageTransitionEvent('pageshow',{persisted:true}))")
+    await root.wait_for()
+    assert await root.count()==1
     count+=1
     await context.close()
     return count
