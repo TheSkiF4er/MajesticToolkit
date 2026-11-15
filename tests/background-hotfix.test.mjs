@@ -30,7 +30,7 @@ test('grant on an already open XenForo tab injects real binder scripts immediate
  listeners.added();
  await wait(()=>executions.some(x=>x.target.tabId===42));
  const installed=executions.find(x=>x.target.tabId===42);
- assert.deepEqual(installed.files,['lib/safe-dom.js','lib/forum-core.js','lib/xenforo-core.js','lib/complaints-core.js','content/forum/context.js','content/forum/editors.js','content/forum/navigation.js','content/forum/lifecycle.js','content/forum.js']);
+ assert.deepEqual(installed.files,['lib/safe-dom.js','lib/forum-core.js','lib/xenforo-core.js','lib/complaints-core.js','lib/forum-customization.js','content/forum/context.js','content/forum/editors.js','content/forum/navigation.js','content/forum/lifecycle.js','content/forum/customization.js','content/forum.js']);
  assert.ok(registrations.some(x=>x.matches[0]==='https://forum.majestic-rp.ru/*'));
 });
 test('revoking site permission unregisters the persistent content script',async()=>{
@@ -69,4 +69,19 @@ test('Navigation 2.0 authorizes current-page bookmark/history and rejects other 
  assert.equal((await action('clear-history')).ok,true);
  assert.equal((await send(url,{type:'MT_NAVIGATION_ACTION',action:'bookmark',profileId,title:'evil'},1)).ok,false);
  granted.delete(origin);assert.equal((await action('bookmark',{title:'No access'})).ok,false);
+});
+
+test('reading positions are private, opt-in, profile-scoped, and permission-checked',async()=>{
+ const {defaultState,savePreferences}=await import('../src/lib/model.mjs');
+ const {validateForumSettings}=await import('../src/lib/forum-settings.mjs');
+ const M=globalThis.MTForumCustomization,origin='https://forum.majestic-rp.ru/*',url='https://forum.majestic-rp.ru/threads/test.100/';
+ let state=defaultState(),id=state.activeProfileId;data.rpNexusStateV1=state;granted.add(origin);
+ const act=(action,extra={})=>send(url,{type:'MT_FORUM_READING',profileId:id,action,...extra});
+ assert.equal((await act('save',{postId:'js-post-123'})).ok,false);
+ const forum=validateForumSettings(undefined);forum.customization=M.update(undefined,'global',{rememberReading:true});data.rpNexusStateV1=savePreferences(state,{forum});
+ assert.equal((await act('save',{postId:'js-post-123'})).value,'js-post-123');assert.equal((await act('get')).value,'js-post-123');
+ assert.equal((await act('save',{postId:'<script>'})).ok,false);assert.equal((await act('get',{profileId:'another'})).ok,false);
+ assert.equal((await send(url+'?token=private',{type:'MT_FORUM_READING',profileId:id,action:'get'})).value,'js-post-123');
+ assert.equal((await act('clear')).value,'');assert.equal((await act('get')).value,'');
+ granted.delete(origin);assert.equal((await act('get')).ok,false);
 });

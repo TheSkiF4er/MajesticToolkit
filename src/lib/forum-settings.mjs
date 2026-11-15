@@ -1,3 +1,4 @@
+import './forum-customization.js';
 /** Local forum preferences. Included in the existing state/backup envelope. */
 export const FORUM_HOSTS = Object.freeze(['forum.majestic-rp.ru','forum.russia.online']);
 export const FORUM_DEFAULTS = Object.freeze({enabled:true,binderEnabled:true,navigationEnabled:true,navigationHistory:false,panelPosition:'right',appearance:'dark',density:'comfortable'});
@@ -22,7 +23,7 @@ export function validateForumSettings(value,allowedProfileIds=null) {
   const raw=value.profiles??{};
   if(!raw||typeof raw!=='object'||Array.isArray(raw)||Object.keys(raw).length>100)throw Error('Некорректные настройки профилей');
   const profiles=Object.fromEntries(Object.entries(raw).filter(([id])=>id.length>0&&id.length<=128&&(!allowedProfileIds||allowedProfileIds.includes(id))).map(([id,v])=>[id,cleanOptions(v,true)]));
-  return {schemaVersion:1,global:cleanOptions(value.global),sites,profiles};
+  return {schemaVersion:1,global:cleanOptions(value.global),sites,profiles,...(value.customization===undefined?{}:{customization:globalThis.MTForumCustomization.config(value.customization,allowedProfileIds)})};
 }
 export function forumSettingsFor(value,host,profileId=null) {
   const settings=validateForumSettings(value);

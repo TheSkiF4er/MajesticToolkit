@@ -1,4 +1,4 @@
-/* Forum Core 1.5.8: local binder + editor integration. No automated posting or moderation requests. */
+/* Forum Core 1.5.9: local binder + editor integration. No automated posting or moderation requests. */
 (() => {
   'use strict';
   if (globalThis.MTForumSession || document.getElementById('rp-nexus-forum-020')) return;
@@ -13,7 +13,7 @@
   let binderLimit=30;
   let navMode=false,navHistory=[],forumProfiles=[],navQuery='',navSearchTimer,navSearchEpoch=0,lastVisit='',navResults=[],navSearchDone=false;
   const navAction=(action,extra={})=>api.runtime.sendMessage({type:'MT_NAVIGATION_ACTION',action,profileId:activeProfile()?.id,...extra});
-  const commands=[['binder','Биндер','forum'],['complaints','Жалобы','complaints'],['search','Единый поиск','search'],['knowledge','Центр знаний','knowledge'],['profile','Профили','profiles'],['timer','Таймеры','timers'],['documents','Документы','documents'],['law','Законы','law'],['customize','Настройки','settings'],['monitor','Серверы и игроки','monitor']];
+  const commands=[['binder','Биндер','forum'],['complaints','Жалобы','complaints'],['search','Единый поиск','search'],['knowledge','Центр знаний','knowledge'],['profile','Профили','profiles'],['timer','Таймеры','timers'],['documents','Документы','documents'],['law','Законы','law'],['customize','Оформление форума','customization'],['monitor','Серверы и игроки','monitor']];
   function navError(r){if(!r?.ok)throw Error(r?.error||'Не удалось выполнить действие');return r.value;}
   function navLink(x){return `<a class="nav-link" data-nav-link="${C.esc(x.id||'')}" href="${C.esc(x.url)}" target="${x.target==='current'?'_self':'_blank'}" rel="noopener noreferrer" title="${C.esc(x.note||'')}">${x.pinned?'★ ':''}${C.esc(x.title)}</a>`;}
   function groupedLinks(rows){const tree={entries:[],groups:new Map()};for(const x of rows){let node=tree;for(const part of (x.group||'').split('/').filter(Boolean)){if(!node.groups.has(part)){const child={entries:[],groups:new Map()};node.groups.set(part,child);node.entries.push({name:part,child});}node=node.groups.get(part);}node.entries.push({link:x});}function render(node){return node.entries.map(entry=>entry.link?navLink(entry.link):`<details open><summary>${C.esc(entry.name)}</summary><div class="nav-group">${render(entry.child)}</div></details>`).join('');}return render(tree);}
@@ -171,13 +171,13 @@
       <div class="bar"><label class="sub" for="rpn-editor">Редактор</label><select class="field" id="rpn-editor" aria-label="Редактор ответа"></select></div><label class="sub" for="rpn-mode">Вставка</label><select class="field" id="rpn-mode"><option value="cursor">В курсор / вместо выделения</option><option value="start">В начало</option><option value="end">В конец</option></select>
       <div id="rpn-variable-form"></div><div id="rpn-template-list"></div>
       </div><div ${navMode?'hidden':''} class="section"><div class="bar"><b>Пользовательские ссылки</b><span class="sub">${customLinks.filter(x=>x.profileId==='*'||x.profileId===profile?.id).length}</span></div><div class="actions">${(settings.navigationEnabled?XF.selectNavigation(customLinks,profile?.id,context()?.host,'panel').filter(x=>x.kind!=='bookmark'):[]).slice(0,15).map(x=>`<button class="btn secondary" data-link="${C.esc(x.id)}">${C.esc(x.title)}</button>`).join('')||'<span class="sub">Добавьте ссылки в рабочем пространстве.</span>'}</div></div>
-      <div class="section"><div class="bar"><b>Публичный профиль XenForo</b></div>${publicMemberCard()}${XF.memberProfile(document,location.href)?'<button class="btn secondary" data-act="save-member">Сохранить карточку</button>':''}</div>
+      <div class="section"><div class="bar"><b>Оформление и чтение</b><button class="btn secondary" data-act="customization">Настроить ↗</button></div><div id="rpn-reading" class="actions"></div></div><div class="section"><div class="bar"><b>Публичный профиль XenForo</b></div>${publicMemberCard()}${XF.memberProfile(document,location.href)?'<button class="btn secondary" data-act="save-member">Сохранить карточку</button>':''}</div>
       <div class="section"><div class="bar"><b>Управление темой</b><span class="sub">Только штатные функции форума</span></div><div class="actions"><button class="btn secondary" data-act="close">Закрыть / открыть</button><button class="btn secondary" data-act="move">Переместить</button></div></div>
       <div class="section"><div class="bar"><b>Жалобы и доказательства</b></div><div class="actions"><button class="btn" data-act="track">Отслеживать текущую тему</button><button class="btn secondary" data-act="complaints">Все жалобы ↗</button></div></div><div class="actions"><button class="btn secondary" data-act="workspace">Все шаблоны ↗</button><button class="btn secondary" data-act="hide">Скрыть</button></div><div class="msg" role="status" aria-live="polite"></div>`);
     for(const key of ['search','nickname','reason'])panel.querySelector('#rpn-'+key).value=previous[key];
     panel.querySelector('#rpn-mode').value=insertionMode;panel.querySelector('#rpn-category').value=binderCategory;
     panel.querySelector('#rpn-nav-search').value=navQuery;if(settings.navigationEnabled)renderNavigationPanel();
-    renderEditorPicker();renderList(previous.search);
+    renderEditorPicker();renderList(previous.search);customization.renderControls(panel.querySelector('#rpn-reading'));
     if(!settings.binderEnabled){for(const node of panel.querySelectorAll('#rpn-search,#rpn-nickname,#rpn-reason,#rpn-editor,#rpn-mode'))node.disabled=true;}
   }
   function renderList(query) {
@@ -189,13 +189,14 @@
     for(const b of panel.querySelectorAll('[data-filter]'))b.setAttribute('aria-pressed',String(b.dataset.filter===binderFilter));
     replaceHtml(target, visible.length ? visible.slice(0, binderLimit).map(t => `<article class="item"><div class="item-head"><span class="item-title">${C.esc(t.label)}</span><span class="sub">${t.shortcut ? 'Alt+Shift+' + t.shortcut : C.esc(t.category || t.format)}</span></div><div class="item-body">${C.esc(t.text.slice(0, 200))}</div><div class="actions"><button class="btn secondary" data-favorite="${C.esc(t.id)}" aria-pressed="${!!t.favorite}">${t.favorite?'★':'☆'} Избранное</button><button class="btn" data-insert="${C.esc(t.id)}">Вставить</button><button class="btn secondary" data-copy="${C.esc(t.id)}">Копировать</button></div></article>`).join('')+(visible.length>binderLimit?'<button class="btn secondary" data-act="more">Показать ещё</button>':'') : '<div class="empty">Шаблонов нет. Создайте их в разделе «Форум» рабочего пространства.</div>');
   }
+  const customization=globalThis.MTForumStyle.create(document,async(action,postId)=>navError(await api.runtime.sendMessage({type:'MT_FORUM_READING',action,postId,profileId:activeProfile()?.id})));
   const lifecycle=globalThis.MTForumLifecycle.create(document,changed=>{
     if(changed){lastScan=0;lastObserved=null;clearTimeout(delayedScan);delayedScan=null;editors.stop();editors.start();if(expanded)draw();}
     if(!root.isConnected)(document.body??document.documentElement).append(root);
-    mountNavigation();if(expanded)renderEditorPicker();visit();scheduleScan();
+    mountNavigation();customization.refresh();if(expanded){renderEditorPicker();customization.renderControls(panel.querySelector('#rpn-reading'));}visit();scheduleScan();
   });
   function deactivate(){
-    enabled=false;closePending();clearTimeout(retryTimer);clearTimeout(navSearchTimer);++navSearchEpoch;navResults=[];navHistory=[];lastVisit='';editors.stop();lifecycle.stop();navigation.clear();root.remove();
+    enabled=false;closePending();clearTimeout(retryTimer);clearTimeout(navSearchTimer);++navSearchEpoch;navResults=[];navHistory=[];lastVisit='';editors.stop();lifecycle.stop();navigation.clear();customization.clear();root.remove();
     document.removeEventListener('keydown',shortcut,true);clearTimeout(delayedScan);delayedScan=null;clearTimeout(notificationTimer);
     expanded=false;panel.classList.remove('open');launcher.setAttribute('aria-expanded','false');
   }
@@ -204,7 +205,7 @@
     if(!root.isConnected)(document.body??document.documentElement).append(root);
     root.style.left=settings.panelPosition==='left'?'18px':'auto';root.style.right=settings.panelPosition==='left'?'auto':'18px';
     root.dataset.appearance=settings.appearance;root.dataset.density=settings.density;launcher.style.float=settings.panelPosition==='left'?'left':'right';
-    mountNavigation();visit();if(expanded){if(pending&&settings.binderEnabled&&pending.profile===activeProfile()?.id&&pending.url===location.href&&templates.some(t=>t.id===pending.item.id&&t.updatedAt===pending.item.updatedAt)){renderEditorPicker();renderList(panel.querySelector('#rpn-search')?.value||'');}else draw();}scheduleScan();
+    customization.update(settings.customization,activeProfile()?.id||'');mountNavigation();visit();if(expanded){if(pending&&settings.binderEnabled&&pending.profile===activeProfile()?.id&&pending.url===location.href&&templates.some(t=>t.id===pending.item.id&&t.updatedAt===pending.item.updatedAt)){renderEditorPicker();renderList(panel.querySelector('#rpn-search')?.value||'');}else draw();}if(expanded)customization.renderControls(panel.querySelector('#rpn-reading'));scheduleScan();
   }
   async function readStorage(retry=true) {
     if(suspended)return;clearTimeout(retryTimer);
@@ -262,6 +263,7 @@
       void api.runtime.sendMessage({type:'MAJESTIC_SAVE_PUBLIC_PLAYER',card}).then(result=>notify(result?.ok?'Публичная карточка сохранена в «Серверы и игроки».':(result?.error||'Не удалось сохранить карточку'))).catch(err=>notify(err.message));
       return;
     }
+    if(b.dataset.act==='customization'){void api.runtime.sendMessage({type:'RP_NEXUS_OPEN_WORKSPACE',view:'customization'}).then(navError).catch(err=>notify(err.message));return;}
     if (b.dataset.act === 'workspace') { try { api.runtime.sendMessage({ type: 'RP_NEXUS_OPEN_WORKSPACE', view: 'forum' }); } catch { notify('Не удалось открыть настройки'); } return; }
     if (b.dataset.act === 'track') {
       if (!threadPage()) { notify('Для добавления откройте страницу темы форума'); return; }

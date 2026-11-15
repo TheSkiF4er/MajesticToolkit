@@ -19,12 +19,13 @@ MOCK_JS = r'''(host) => {{
   const a={{id:'tpl_majestic_01',profileId:p1.id,label:'Ответ Majestic',text:'[b]Привет[/b] {{{{nickname}}}}',category:'',shortcut:1,format:'bbcode',createdAt:date,updatedAt:date}};
   const b={{id:'tpl_russia_01',profileId:p2.id,label:'Ответ Russia',text:'Здравствуйте!',category:'',shortcut:1,format:'plain',createdAt:date,updatedAt:date}};
   const links=[{{id:'link_majestic_01',profileId:p1.id,title:'Наш справочник',url:'https://example.com/help',createdAt:date}},{{id:'link_russia_01',profileId:p2.id,title:'Russia Wiki',url:'https://example.com/wiki',createdAt:date}}];
-  window.__sent=[]; window.__listeners=[]; window.__settings={{}}; window.__allowed=true; window.__extraTemplates=[]; window.__usage={{}}; window.__extraLinks=[]; window.__history=[];
+  window.__sent=[]; window.__listeners=[]; window.__settings={{}}; window.__allowed=true; window.__extraTemplates=[]; window.__usage={{}}; window.__extraLinks=[]; window.__history=[]; window.__reading='';
   window.__deliver=message=>{{for(const listener of window.__listeners)listener(message,{{}},()=>{{}});}};
   window.browser={{
     runtime:{{id:'fixture-extension-id',getURL:path=>'chrome-extension://fixture-extension-id/'+path,
       onMessage:{{addListener:fn=>window.__listeners.push(fn)}},async sendMessage(message){{window.__sent.push(message);
       if(message.type==='RP_NEXUS_FORUM_DATA'){{const profile=hostName.includes('russia')?p2:p1;return {{ok:true,value:{{profile,templates:[a,b,...window.__extraTemplates].filter(t=>t.profileId===profile.id),usage:window.__usage,links:[...links,...window.__extraLinks].filter(t=>t.profileId===profile.id||t.profileId==='*'),navigationHistory:window.__history,settings:window.__settings,allowed:window.__allowed}}}};}}
+      if(message.type==='MT_FORUM_READING'){{if(message.action==='save')window.__reading=message.postId;if(message.action==='clear')window.__reading='';return {{ok:true,value:window.__reading}};}}
       if(message.type==='MT_NAVIGATION_ACTION'){{
         if(message.action==='bookmark'){{const item={{id:'bookmark_fixture1',profileId:p1.id,title:'Сохранённая тема',url:'https://forum.majestic-rp.ru/threads/test.123/',kind:'bookmark',host:'forum.majestic-rp.ru',placement:'panel',createdAt:date}};if(!window.__extraLinks.some(x=>x.id===item.id))window.__extraLinks.push(item);return {{ok:true,value:item}};}}
         if(message.action==='visit'){{window.__history=[{{url:'https://forum.majestic-rp.ru/threads/test.123/',title:'Тестовая тема',visitedAt:Date.now()}}];return {{ok:true,value:window.__history}};}}
@@ -52,7 +53,7 @@ def fixture(host='majestic',editor='textarea',member=False,moderation=False):
     return f'<!doctype html><html><head><meta charset="utf-8"><meta name="generator" content="XenForo 2.2"></head><body><nav class="p-nav"><ul class="p-nav-list"><li>Форум</li></ul></nav>{body}</body></html>'
 
 async def inject(page, member=False, canonical_override=True):
-    for part in ['lib/safe-dom.js','lib/forum-core.js','lib/xenforo-core.js','lib/complaints-core.js','content/forum/context.js','content/forum/editors.js','content/forum/navigation.js','content/forum/lifecycle.js','content/forum.js']:
+    for part in ['lib/safe-dom.js','lib/forum-core.js','lib/xenforo-core.js','lib/complaints-core.js','lib/forum-customization.js','content/forum/context.js','content/forum/editors.js','content/forum/navigation.js','content/forum/lifecycle.js','content/forum/customization.js','content/forum.js']:
         if part=='content/forum.js' and canonical_override:
             await page.evaluate("""member => { const xf=globalThis.MTXenForo; const path = member ? '/members/test.42/' : '/threads/test.123/'; const canonical='https://forum.majestic-rp.ru'+path; globalThis.MTXenForo=Object.freeze({...xf, identify:(href,doc)=>xf.identify(canonical,doc), memberProfile:(doc,href)=>xf.memberProfile(doc,canonical), moderationAction:(doc,href,action)=>xf.moderationAction(doc,canonical,action)}); }""", member)
         await page.add_script_tag(content=(ROOT/'src'/part).read_text())
@@ -346,13 +347,13 @@ async def exercise(browser):
         source=re.sub(r"(['\"])(\.{1,2}/[^'\"\n]+\.m?js)\1",rewrite,source)
         modules[key]='data:text/javascript;base64,'+base64.b64encode(source.encode()).decode()
         return key
-    add_module(ROOT/'src/lib/model.mjs');add_module(ROOT/'src/ui/forum-page.mjs')
+    add_module(ROOT/'src/lib/model.mjs');add_module(ROOT/'src/ui/forum-page.mjs');add_module(ROOT/'src/ui/customization-page.mjs')
     await page.set_content('<html><head><script type="importmap">'+json.dumps({'imports':modules})+'</script></head><body><div id="app"></div></body></html>')
     await page.evaluate("""async()=>{
       const data={};window.__data=data;window.browser={storage:{local:{async get(k){return k===null?{...data}:{[k]:data[k]};},async set(x){Object.assign(data,structuredClone(x));},async remove(k){for(const id of Array.isArray(k)?k:[k])delete data[id];}}}};
-      const model=await import('mt:lib/model.mjs'),ui=await import('mt:ui/forum-page.mjs');window.__state=model.defaultState();window.__ui=ui;
+      const model=await import('mt:lib/model.mjs'),ui=await import('mt:ui/forum-page.mjs');window.__state=model.defaultState();window.__ui=ui;const custom=await import('mt:ui/customization-page.mjs');data.rpNexusStateV1=window.__state;
       await ui.refreshBinderProfile(window.__state.activeProfileId);await ui.refreshForum();
-      window.__render=()=>MTSafeDOM.replaceHtml(document.querySelector('#app'),ui.forumSection(window.__state));window.__render();
+      window.__render=()=>{MTSafeDOM.replaceHtml(document.querySelector('#app'),ui.forumSection(window.__state));custom.mountCustomization(document.querySelector('#forum-customization'),window.__state,next=>{window.__state=next;window.__render();},(msg,error)=>{if(error)window.__error=msg;});};window.__render();
       document.addEventListener('submit',e=>{if(['forum-template-form','xf-navigation-form'].includes(e.target.getAttribute('id'))){e.preventDefault();ui.handleForumSubmit(e,window.__state,window.__render,()=>{}).catch(err=>window.__error=err.message);}});
       document.addEventListener('click',e=>{const b=e.target.closest('[data-forum-action]');if(b)ui.handleForumAction(b,window.__state,window.__render,()=>{}).catch(err=>window.__error=err.message);});
     }""")
@@ -387,6 +388,57 @@ async def exercise(browser):
     await page.wait_for_function("Object.values(window.__data).some(x=>x.title==='Меню E2E v2'&&x.group==='Работа/Суд')")
     assert not await page.evaluate('Boolean(window.__error)')
     count+=1
+    count+=1
+    studio=page.locator('#forum-customization')
+    await studio.locator('[name=theme]').select_option('custom')
+    await studio.locator('[name=color-background]').fill('#223344')
+    await studio.locator('[name=sidebar]').select_option('left')
+    await studio.locator('[name=fontSize]').fill('18')
+    assert await studio.locator('[data-theme-preview]').evaluate("x=>x.style.getPropertyValue('--mt-preview-background')")=='#223344'
+    await studio.locator('button[type=submit]').click()
+    await page.wait_for_function("window.__data.rpNexusStateV1.preferences.forum?.customization?.global.theme==='custom'")
+    await studio.locator('[name=presetName]').fill('E2E theme')
+    await studio.locator('[data-theme-action=save-preset]').click()
+    await page.wait_for_function("window.__data.rpNexusStateV1.preferences.forum.customization.presets.length===1")
+    await studio.locator('[name=scope]').select_option('forum.majestic-rp.ru')
+    await studio.locator('[name=theme]').select_option('oled')
+    await studio.locator('button[type=submit]').click()
+    await page.wait_for_function("window.__data.rpNexusStateV1.preferences.forum.customization.sites['forum.majestic-rp.ru']?.theme==='oled'")
+    await studio.locator('[data-theme-action=undo]').click()
+    await page.wait_for_function("!window.__data.rpNexusStateV1.preferences.forum.customization.sites['forum.majestic-rp.ru']")
+    assert not await page.evaluate('Boolean(window.__error)'),await page.evaluate('window.__error')
+    count+=1
+    await context.close()
+    # Real theme studio and content engine in a browser, with dynamic XenForo fixtures.
+    context=await browser.new_context(ignore_https_errors=True,viewport={'width':1280,'height':900})
+    page=await context.new_page()
+    await page.evaluate('('+MOCK_JS.format(host=repr('forum.majestic-rp.ru'))+')('+repr('forum.majestic-rp.ru')+')')
+    await page.set_content(fixture()+'''<div class="p-body-main"><div class="p-body-content"><article class="message" id="js-post-100"><div class="message-body"><div class="bbWrapper">Example <blockquote class="bbCodeBlock--quote">Quoted text</blockquote></div></div><div class="message-signature">Signature</div></article><article class="message" id="js-post-200"><div class="message-body">Second</div></article><div class="blockMessage blockMessage--error" id="security-message">Important notice</div></div><aside class="p-body-sidebar">Sidebar</aside></div>''')
+    await inject(page)
+    await page.evaluate("window.__settings={customization:{theme:'midnight',sidebar:'left',signatures:'collapse',quotes:'collapse',reading:true,rememberReading:true}};window.__deliver({type:'RP_NEXUS_REFRESH_FORUM_DATA'})")
+    await page.wait_for_function("document.querySelector('[data-mt-forum-style]') && getComputedStyle(document.body).backgroundColor==='rgb(11, 21, 48)'")
+    assert await page.locator('[data-mt-fold-button]').count()==2
+    assert await page.locator('.p-body-sidebar').evaluate("x=>getComputedStyle(x).order")=='-1'
+    assert await page.locator('#security-message').is_visible()
+    await page.locator('[data-mt-fold-button]').first.click()
+    assert await page.locator('[data-mt-fold-button]').first.get_attribute('aria-expanded')=='true'
+    await page.locator('#rp-nexus-forum-020').evaluate("x=>x.shadowRoot.querySelector('.launcher').click()")
+    assert await page.locator('#rpn-reading select option').count()==3
+    await page.locator('#rpn-reading').get_by_text('Запомнить место',exact=True).click()
+    await page.wait_for_function("window.__reading==='js-post-100' || window.__reading==='js-post-200'")
+    await page.locator('#rpn-reading').get_by_text('Вернуться к сохранённому',exact=True).wait_for()
+    await page.locator('#rpn-reading').get_by_text('Очистить место',exact=True).click()
+    await page.wait_for_function("window.__reading===''")
+    await page.evaluate("document.querySelector('.p-body-content').insertAdjacentHTML('beforeend','<article class=\"message\" id=\"js-post-300\"><div class=\"message-signature\">New signature</div></article>')")
+    await page.wait_for_function("document.querySelectorAll('[data-mt-fold-button]').length===3")
+    await page.evaluate("window.__settings={customization:{theme:'original'}};window.__deliver({type:'RP_NEXUS_REFRESH_FORUM_DATA'})")
+    await page.wait_for_function("!document.querySelector('[data-mt-forum-style]') && !document.querySelector('[data-mt-fold-button]')")
+    assert await page.locator('.p-body-main').get_attribute('data-mt-layout') is None
+    assert await page.locator('#security-message').is_visible()
+    await page.evaluate("window.__settings={customization:{theme:'dark'}};window.__deliver({type:'RP_NEXUS_REFRESH_FORUM_DATA'})")
+    await page.wait_for_function("document.querySelector('[data-mt-forum-style]')")
+    await page.evaluate("window.__deliver({type:'RP_NEXUS_FORUM_PERMISSION_REVOKED',hosts:['forum.majestic-rp.ru']})")
+    await page.wait_for_function("!document.querySelector('[data-mt-forum-style]') && !document.querySelector('#rp-nexus-forum-020')")
     count+=1
     await context.close()
     return count

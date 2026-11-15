@@ -1,3 +1,4 @@
+import {readingPosition} from '../lib/forum-reading-store.mjs';
 import {getLocalIndex,invalidateSearch} from '../lib/productivity-search.mjs';
 import {searchRecords,SECTION_FOR} from '../lib/productivity-core.mjs';
 import {modifyState} from '../lib/state.mjs';
@@ -37,7 +38,7 @@ async function syncScripts() {
       try {
         const granted = await api.permissions.contains({origins:[site.origin]});
         const isForum = FORUMS.includes(site);
-        const wanted={id:site.id,matches:[site.origin],js:isForum ? ['lib/safe-dom.js','lib/forum-core.js','lib/xenforo-core.js','lib/complaints-core.js','content/forum/context.js','content/forum/editors.js','content/forum/navigation.js','content/forum/lifecycle.js','content/forum.js'] : ['lib/safe-dom.js','lib/complaints-core.js','content/evidence.js'],runAt:'document_idle',allFrames:false,persistAcrossSessions:true};
+        const wanted={id:site.id,matches:[site.origin],js:isForum ? ['lib/safe-dom.js','lib/forum-core.js','lib/xenforo-core.js','lib/complaints-core.js','lib/forum-customization.js','content/forum/context.js','content/forum/editors.js','content/forum/navigation.js','content/forum/lifecycle.js','content/forum/customization.js','content/forum.js'] : ['lib/safe-dom.js','lib/complaints-core.js','content/evidence.js'],runAt:'document_idle',allFrames:false,persistAcrossSessions:true};
         const current=byId.get(site.id);
         const obsolete=current&&(JSON.stringify(current.js)!==JSON.stringify(wanted.js) || JSON.stringify(current.matches)!==JSON.stringify(wanted.matches) || current.runAt!==wanted.runAt || current.allFrames!==false);
         // Persisted registrations from a previous version must be replaced on upgrade.
@@ -169,7 +170,7 @@ api.runtime.onMessage.addListener((message,sender,sendResponse) => {
     if(isForum && message.type!=='RP_NEXUS_FORUM_DATA' && !await api.permissions.contains({origins:[`https://${new URL(sender.url).hostname}/*`]}))throw Error('Доступ к форуму отозван');
     if (message.type === 'RP_NEXUS_OPEN_WORKSPACE') {
       if (!isForum && !isVideo && !isTrustedExtension) throw Error('Недоверенный источник');
-      await api.tabs.create({url:api.runtime.getURL('ui/workspace.html' + (['home','forum','complaints','search','knowledge','profiles','timers','monitor','economy','law','government','documents','integrations','settings'].includes(message.view) ? '#'+message.view : ''))});
+      await api.tabs.create({url:api.runtime.getURL('ui/workspace.html' + (message.view==='customization'?'?section=customization#forum':['home','forum','complaints','search','knowledge','profiles','timers','monitor','economy','law','government','documents','integrations','settings'].includes(message.view) ? '#'+message.view : ''))});
       return true;
     }
     if(message.type === 'MAJESTIC_TIMER') {
@@ -201,6 +202,7 @@ api.runtime.onMessage.addListener((message,sender,sendResponse) => {
       const state = (await api.storage.local.get('rpNexusStateV1')).rpNexusStateV1;
       const profile = globalThis.MTXenForo.matchingProfile(state?.profiles,state?.activeProfileId,sender.url);
       const settings=forumSettingsFor(state?.preferences?.forum,host,profile?.id);
+      settings.customization=globalThis.MTForumCustomization.resolve(state?.preferences?.forum?.customization,host,profile?.id);
       if (!profile || !settings.enabled) return {profile:null,templates:[],links:[],settings};
       const {listTemplates,binderUsage} = await forumStorePromise;
       // Select only a profile belonging to the sender's forum, not an unrelated active project.
@@ -209,6 +211,15 @@ api.runtime.onMessage.addListener((message,sender,sendResponse) => {
       const navigationHistory=settings.navigationEnabled&&settings.navigationHistory?await importedXenForo.navigationHistory(profile.id):[];
       const forumProfiles=state.profiles.filter(p=>globalThis.MTXenForo.domain(p.forumUrl)===host).map(({id,name,server})=>({id,name,server}));
       return {profile:{id:profile.id,name:profile.name,project:profile.project,server:profile.server},templates,links,settings,navigationHistory,forumProfiles,usage:await binderUsage(profile.id)};
+    }
+    if(message.type==='MT_FORUM_READING'){
+      if(!isForum)throw Error('Недоверенный источник');
+      const state=(await api.storage.local.get('rpNexusStateV1')).rpNexusStateV1;
+      const XF=globalThis.MTXenForo,host=XF.domain(sender.url),profile=XF.matchingProfile(state?.profiles,state?.activeProfileId,sender.url);
+      const settings=forumSettingsFor(state?.preferences?.forum,host,profile?.id);
+      const appearance=globalThis.MTForumCustomization.resolve(state?.preferences?.forum?.customization,host,profile?.id);
+      if(!profile||!settings.enabled||message.profileId!==profile.id||(!appearance.rememberReading&&message.action!=='clear'))throw Error('Запоминание места чтения отключено или профиль изменился');
+      return readingPosition(profile.id,sender.url,message.action,message.postId);
     }
     if(message.type==='MT_NAVIGATION_ACTION'){
       if(!isForum)throw Error('Недоверенный источник');
@@ -304,7 +315,7 @@ api.runtime.onMessage.addListener((message,sender,sendResponse) => {
     }
     throw Error('Неизвестный запрос');
   }
-  if (!['RP_NEXUS_OPEN_WORKSPACE','RP_NEXUS_SCAN_OPEN_TABS','RP_NEXUS_TRACK_CURRENT_THREAD','RP_NEXUS_THREAD_OBSERVED','RP_NEXUS_VIDEO_ADD','RP_NEXUS_CASE_MUTATE','RP_NEXUS_FORUM_DATA','RP_NEXUS_VIDEO_CASES','MAJESTIC_SAVE_PUBLIC_PLAYER','MAJESTIC_TIMER','MT_BINDER_ACTION','MT_NAVIGATION_ACTION'].includes(message.type)) return;
+  if (!['RP_NEXUS_OPEN_WORKSPACE','RP_NEXUS_SCAN_OPEN_TABS','RP_NEXUS_TRACK_CURRENT_THREAD','RP_NEXUS_THREAD_OBSERVED','RP_NEXUS_VIDEO_ADD','RP_NEXUS_CASE_MUTATE','RP_NEXUS_FORUM_DATA','RP_NEXUS_VIDEO_CASES','MAJESTIC_SAVE_PUBLIC_PLAYER','MAJESTIC_TIMER','MT_BINDER_ACTION','MT_NAVIGATION_ACTION','MT_FORUM_READING'].includes(message.type)) return;
   void task().then(value => sendResponse({ok:true,value})).catch(error => sendResponse({ok:false,error:error?.message || 'Ошибка'}));
   return true;
 });
