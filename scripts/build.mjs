@@ -1,6 +1,7 @@
 import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 const root = resolve(import.meta.dirname, '..');
+const version=JSON.parse(await readFile(resolve(root,'package.json'),'utf8')).version;
 const outputRoot = resolve(root, 'dist');
 await rm(outputRoot, { recursive: true, force: true });
 for (const browser of ['chromium', 'firefox', 'firefox-android', 'safari']) {
@@ -8,7 +9,7 @@ for (const browser of ['chromium', 'firefox', 'firefox-android', 'safari']) {
   await mkdir(dest, {recursive:true});
   for (const part of ['lib','ui','content','background','assets','_locales']) await cp(resolve(root,'src',part),resolve(dest,part),{recursive:true});
   const manifest = JSON.parse(await readFile(resolve(root,'manifests',`${browser}.json`),'utf8'));
-  if (manifest.version !== '1.6.5') throw Error('Manifest version is not 1.6.5');
+  if (manifest.version !== version) throw Error('Manifest version mismatch: '+version);
   if (browser === 'firefox-android') delete manifest.sidebar_action;
   if (browser === 'safari') {
     delete manifest.side_panel;

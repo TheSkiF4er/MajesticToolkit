@@ -1,8 +1,10 @@
-export const WIDGETS=Object.freeze(['binder','bookmarks','complaints','timers','documents','servers']);
+export const WIDGETS=Object.freeze(['binder','bookmarks','complaints','timers','documents','servers','rules','calculations','violations']);
+const LEGACY_WIDGETS=WIDGETS.slice(0,6);
 export function workspacePreferences(value){
   if(value===undefined)return {order:[...WIDGETS],hidden:[]};
   if(!value||typeof value!=='object'||Array.isArray(value)||!Array.isArray(value.order)||!Array.isArray(value.hidden))throw Error('Некорректные настройки рабочего пространства');
-  const {order,hidden}=value;
+  let {order,hidden}=value;
+  if(order.length===LEGACY_WIDGETS.length&&new Set(order).size===LEGACY_WIDGETS.length&&order.every(x=>LEGACY_WIDGETS.includes(x))&&hidden.every(x=>LEGACY_WIDGETS.includes(x))){order=[...order,...WIDGETS.slice(6)];hidden=[...hidden,...WIDGETS.slice(6)];}
   if(order.length!==WIDGETS.length||new Set(order).size!==WIDGETS.length||order.some(x=>!WIDGETS.includes(x))||hidden.length>WIDGETS.length||new Set(hidden).size!==hidden.length||hidden.some(x=>!WIDGETS.includes(x)))throw Error('Некорректный список виджетов');
   return {order:[...order],hidden:[...hidden]};
 }

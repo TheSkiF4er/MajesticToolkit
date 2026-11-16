@@ -556,7 +556,7 @@ async def experience_workspace(browser):
         await page.evaluate("import('mt:ui/main.mjs')")
     await boot(page)
     await page.locator('.ws-widgets').wait_for(timeout=8000)
-    assert await page.locator('.ws-widget').count()==6
+    assert await page.locator('.ws-widget').count()==9
     assert await page.locator('.ws-nav-group').count()==4
     # Actual stores, not mocked dashboard counts.
     await page.evaluate('''async()=>{const f=await import('mt:lib/forum-store.mjs'),x=await import('mt:lib/xenforo-store.mjs');await f.upsertTemplate({label:'QA Majestic binder',text:'Hello',format:'plain',category:'QA',profileId:'profile_majest',shortcut:0,favorite:true});await f.upsertTemplate({label:'QA Russia binder',text:'Other',format:'plain',category:'QA',profileId:'profile_russia',shortcut:0,favorite:true});await x.saveCurrentBookmark('profile_majest','https://forum.majestic-rp.ru/threads/test.42/','QA bookmark');}''')
@@ -568,7 +568,7 @@ async def experience_workspace(browser):
     await page.locator('.ws-dashboard details summary').click()
     await page.locator('[data-widget-toggle=timers]').uncheck()
     await page.wait_for_function("window.__data.rpNexusStateV1.preferences.workspace.hidden.includes('timers')")
-    await page.wait_for_function("document.querySelectorAll('.ws-widget').length===5")
+    await page.wait_for_function("document.querySelectorAll('.ws-widget').length===8")
     await page.locator('[data-action=widget-order][data-id=bookmarks][data-direction=up]').click()
     await page.wait_for_function("window.__data.rpNexusStateV1.preferences.workspace.order[0]==='bookmarks'")
     await page.locator('#workspace-profile').select_option('profile_russia')
@@ -589,11 +589,12 @@ async def experience_workspace(browser):
     await page.locator('[data-forum-settings=global]').wait_for(state='visible')
     assert await page.locator('#workspace-profile').input_value()=='profile_russia'
     await page.locator('.nav [data-view=home]').click()
-    await page.wait_for_function("document.querySelectorAll('.ws-widget').length===5")
+    await page.wait_for_function("document.querySelectorAll('.ws-widget').length===8")
     assert await page.locator('.ws-widget h3').first.inner_text()=='Закладки'
     # Rules Database: create from actual editor, revision, source candidates, search and isolation.
     await page.locator('#workspace-profile').select_option('profile_majest')
     await page.locator('.nav [data-view=rules]').click()
+    await page.locator('[data-rules-tab=library]').click()
     await page.locator('[data-rules-action=new]').click()
     form=page.locator('#rules-form')
     for name,value in {'code':'5.1','title':'QA DM','category':'Основные','text':'Тестовая формулировка','sourceUrl':'https://forum.majestic-rp.ru/threads/test.42/','aliases':'Deathmatch'}.items():
@@ -630,6 +631,7 @@ async def experience_workspace(browser):
     await page.locator('.productivity-hit').get_by_text('5.1 — QA DM',exact=True).wait_for()
     await page.locator('#workspace-profile').select_option('profile_russia')
     await page.locator('.nav [data-view=rules]').click()
+    await page.locator('[data-rules-tab=library]').click()
     await page.locator('#rules-list').wait_for()
     assert await page.locator('#rules-list article').count()==0
     await page.locator('#workspace-profile').select_option('profile_majest')
@@ -660,6 +662,7 @@ async def experience_workspace(browser):
     await page.wait_for_function("window.__data.majesticToolkitRecoveryV1.status==='ready'")
     assert await page.evaluate("window.__data.majesticToolkitRulesV1.length===2")
     await page.locator('.nav [data-view=rules]').click()
+    await page.locator('[data-rules-tab=library]').click()
     await page.locator('#rules-import-settings').wait_for()
     await page.locator('#rules-import-settings [name=limit]').fill('150')
     await page.locator('#rules-import-settings button[type=submit]').click()
@@ -669,9 +672,18 @@ async def experience_workspace(browser):
     await page.locator('#rules-list [data-rules-action=open]').click()
     await page.locator('#rules-detail').get_by_text('Связанный бинд: QA PG · bind_qa01',exact=True).wait_for()
     # Real calculator UI, rule-backed selections, policy, overlay draft, and history.
+    await page.locator('[data-rules-action=calculate]').click()
     calc=page.locator('#punishment-calculator')
+    await calc.get_by_label('Правило',exact=True).wait_for()
+    assert await calc.get_by_label('Правило',exact=True).input_value() != ''
+    await page.locator('[data-rules-tab=overview]').click()
+    await page.get_by_role('button',name='Правила · 2',exact=True).wait_for()
+    await page.locator('[data-rules-tab=calculator]').click()
     await calc.get_by_role('button',name='Рассчитать',exact=True).wait_for()
     await calc.get_by_label('ID игрока',exact=True).fill('12345')
+    await page.locator('[data-rules-tab=library]').click()
+    await page.locator('[data-rules-tab=calculator]').click()
+    assert await calc.get_by_label('ID игрока',exact=True).input_value()=='12345'
     await calc.get_by_label('Правило',exact=True).select_option(label='5.1 — QA DM')
     await calc.get_by_label('Срок',exact=True).fill('60')
     await calc.get_by_role('button',name='Добавить санкцию').click()
@@ -700,6 +712,7 @@ async def experience_workspace(browser):
     assert await page.evaluate("Object.values(window.__data).find(x=>x?.history?.[0]?.result)?.history[0].result.players.map(p=>p.totals[0].amount)")==[100,35]
     await page.locator('.nav [data-view=home]').click()
     await page.locator('.nav [data-view=rules]').click()
+    await page.locator('[data-rules-tab=calculator]').click()
     await calc.get_by_text('История расчётов · 1',exact=True).click()
     await calc.get_by_role('button',name='Просмотреть').click()
     await calc.locator('[data-calc-result]').get_by_text('Участник 67890',exact=False).wait_for()
@@ -709,6 +722,7 @@ async def experience_workspace(browser):
     await page.get_by_role('button',name='Нарушения и наказания ↗').click()
     assert await page.evaluate("id=>window.__tabs.at(-1).url.includes('caseId='+id)",case_id)
     await page.locator('.nav [data-view=rules]').click()
+    await page.locator('[data-rules-tab=calculator]').click()
     await calc.get_by_label('Жалоба для расчёта').select_option(case_id)
     await calc.get_by_label('ID игрока',exact=True).fill('98765')
     await calc.get_by_label('QA video').check()
@@ -724,6 +738,7 @@ async def experience_workspace(browser):
     assert await page.evaluate("id=>window.__data['rpnComplaintV3:'+id].draft.includes('QA video')",case_id)
     await page.locator('.nav [data-view=home]').click()
     await page.locator('.nav [data-view=rules]').click()
+    await page.locator('[data-rules-tab=calculator]').click()
     await calc.get_by_label('Жалоба для расчёта').select_option(case_id)
     assert await calc.get_by_label('ID игрока',exact=True).input_value()=='98765'
     assert await calc.get_by_label('QA video').is_checked()

@@ -192,3 +192,8 @@ body[data-mode=sidebar] .ws-layout .side{height:auto;position:static;overflow:vi
 #rules-root .card{min-width:0;overflow-wrap:anywhere}
 #rules-root textarea{width:100%;resize:vertical}
 #rules-root #rules-detail:empty{display:none}
+
+/* Rules & Punishments workspace: retain mounted editors when switching tabs. */
+#rules-experience [hidden]{display:none!important}
+.rules-hub-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr));gap:10px}
+.rules-hub-grid .button{white-space:normal;min-height:48px;text-align:left}
