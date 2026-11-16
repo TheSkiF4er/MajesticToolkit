@@ -172,13 +172,13 @@ api.runtime.onMessage.addListener((message,sender,sendResponse) => {
   const isForum=contentSender(sender,api.runtime.id,'forum');
   const isVideo=contentSender(sender,api.runtime.id,'video');
   async function task() {
-    validatePayloadSize(message);
+    validatePayloadSize(message,isTrustedExtension&&message.type==='RP_NEXUS_CASE_MUTATE'&&message.action==='moderation'?350000:65536);
     if(isForum && message.type!=='RP_NEXUS_FORUM_DATA' && !await api.permissions.contains({origins:[`https://${new URL(sender.url).hostname}/*`]}))throw Error('Доступ к форуму отозван');
     if (message.type === 'RP_NEXUS_OPEN_WORKSPACE') {
       if (!isForum && !isVideo && !isTrustedExtension) throw Error('Недоверенный источник');
       if(message.view==='calculator'){
         const params=new URLSearchParams({calculator:'1'});
-        if(isForum){const state=(await api.storage.local.get('rpNexusStateV1')).rpNexusStateV1;const profile=globalThis.MTXenForo.matchingProfile(state?.profiles,state?.activeProfileId,sender.url);const thread=overlayThread(sender.url);if(profile&&thread){params.set('thread',thread);params.set('calcProfile',profile.id);}}
+        if(isForum){const state=(await api.storage.local.get('rpNexusStateV1')).rpNexusStateV1;const profile=globalThis.MTXenForo.matchingProfile(state?.profiles,state?.activeProfileId,sender.url);const thread=overlayThread(sender.url);if(profile&&thread){params.set('thread',thread);params.set('calcProfile',profile.id);const c=(await importedStore.listCases()).find(c=>c.profileId===profile.id&&c.threadKey===thread);if(c)params.set('caseId',c.id);}}
         await api.tabs.create({url:api.runtime.getURL('ui/workspace.html?'+params+'#rules')});return true;
       }
       await api.tabs.create({url:api.runtime.getURL('ui/workspace.html' + (['customization','navigation','binder'].includes(message.view)?'?section='+message.view+'#forum':['home','forum','complaints','search','knowledge','profiles','timers','monitor','economy','rules','law','government','documents','integrations','settings'].includes(message.view) ? '#'+message.view : ''))});
@@ -221,7 +221,7 @@ api.runtime.onMessage.addListener((message,sender,sendResponse) => {
       const links = globalThis.MTXenForo.selectNavigation(await importedXenForo.listXenForoLinks(),profile.id,host);
       const navigationHistory=settings.navigationEnabled&&settings.navigationHistory?await importedXenForo.navigationHistory(profile.id):[];
       const forumProfiles=state.profiles.filter(p=>globalThis.MTXenForo.domain(p.forumUrl)===host).map(({id,name,server})=>({id,name,server}));
-      let currentCase=null;try{const key=globalThis.RPNComplaints.threadKey(sender.url),store=await storePromise;const match=(await store.listCases()).find(c=>c.profileId===profile.id&&c.threadKey===key);if(match)currentCase={id:match.id,title:match.title,status:match.status,deadline:match.deadline};}catch{}
+      let currentCase=null;try{const key=globalThis.RPNComplaints.threadKey(sender.url),store=await storePromise;const match=(await store.listCases()).find(c=>c.profileId===profile.id&&c.threadKey===key);if(match)currentCase={id:match.id,title:match.title,status:match.status,deadline:match.deadline,moderationStatus:match.moderation?.status??null,violations:match.moderation?.players.reduce((n,p)=>n+p.items.length,0)??0};}catch{}
       return {profile:{id:profile.id,name:profile.name,project:profile.project,server:profile.server},templates,links,settings,navigationHistory,forumProfiles,currentCase,usage:await binderUsage(profile.id)};
     }
     if(message.type==='MT_PUNISHMENT_OVERLAY'){
@@ -330,6 +330,7 @@ api.runtime.onMessage.addListener((message,sender,sendResponse) => {
         case 'removeEvidence': return store.removeComplaintEvidence(message.id,message.evidenceId);
         case 'replace': return store.replaceCases(message.cases);
         case 'workflow': return store.mutateCaseWorkflow(message.id,message.workflowAction,message.payload);
+        case 'moderation': return store.mutateModeration(message.id,message.operation,message.input);
         default: throw Error('Неизвестное действие');
       }
     }

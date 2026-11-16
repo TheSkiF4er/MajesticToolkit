@@ -1,5 +1,10 @@
 import './complaints-core.js';
 import { api } from './browser.mjs';
+import {loadState} from './state.mjs';
+import {getActiveProfile} from './model.mjs';
+import {listRules} from './rules-store.mjs';
+import {listTemplates} from './forum-store.mjs';
+import {assertCaseScope,saveModerationRecord,prepareDecision} from './moderation-core.mjs';
 const C = globalThis.RPNComplaints;
 export const CASE_PREFIX = C.PREFIX;
 let serial = Promise.resolve();
@@ -123,4 +128,26 @@ export function parseCompleteBackup(text, validateState, cleanTemplate) {
     ids.add(c.id); keys.add(key);
   }
   return { state, templates, cases, schemaVersion:src.schemaVersion };
+}
+
+// Serialize moderation changes with ordinary case/evidence mutations.
+export function mutateModeration(id,action,input={}){
+ return enqueue(async()=>{
+  const profile=getActiveProfile(await loadState()),c=await getCase(id);assertCaseScope(c,profile);
+  const rows=await listRules();let next;
+  if(action==='save'){
+   next=saveModerationRecord(c,profile,input,rows);
+   next=C.workflowAction(next,'note',{text:next.moderation.status==='draft'?'Сохранены участники и нарушения':next.moderation.status==='reviewed'?'Расчёт проверен пользователем (локально)':'Сохранён предварительный расчёт санкций'});
+  }else if(action==='decision'){
+   if(c.moderation?.revision!==input.expected||c.draft!==input.expectedDraft)throw Error('Жалоба или черновик изменились. Откройте заново.');
+   const template=input.templateId?(await listTemplates()).find(t=>t.id===input.templateId):null;
+   if(input.templateId&&!template)throw Error('Шаблон не найден');
+   const prepared=prepareDecision(c,profile,rows,template,input.fields??{});
+   next=C.updateCase(c,{draft:prepared.text});
+   next=C.cleanCase({...next,moderation:{...c.moderation,draftFormat:prepared.format,decisionSnapshotId:c.moderation.history[0].id,revision:crypto.randomUUID(),updatedAt:new Date().toISOString()}});
+  }else throw Error('Неизвестное действие рассмотрения');
+  const active=getActiveProfile(await loadState());assertCaseScope(next,active);
+  if(active.id!==profile.id||active.server!==profile.server||active.project!==profile.project)throw Error('Активный профиль изменился');
+  await api.storage.local.set({[CASE_PREFIX+id]:next});return next;
+ });
 }

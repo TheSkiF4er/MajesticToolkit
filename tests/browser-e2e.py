@@ -540,7 +540,7 @@ async def experience_workspace(browser):
       const data=seed||initial;window.__data=data;window.__tabs=[];const listeners=[];
       const notify=changes=>{queueMicrotask(()=>listeners.forEach(fn=>fn(changes,'local')));};
       const event={addListener(){},removeListener(){}};
-      window.browser={runtime:{id:'fixture',getURL:path=>'http://localhost:8765/'+path,onMessage:event,async sendMessage(){return {ok:true,value:[]};}},permissions:{async contains(){return false;},onAdded:event,onRemoved:event},tabs:{async create(x){window.__tabs.push(x);return x;},async query(){return[];}},storage:{onChanged:{addListener(fn){listeners.push(fn);}},local:{async get(k){if(k===null)return structuredClone(data);if(Array.isArray(k))return Object.fromEntries(k.map(x=>[x,data[x]]));if(typeof k==='object')return {...k,...Object.fromEntries(Object.keys(k).filter(x=>x in data).map(x=>[x,data[x]]))};return {[k]:data[k]};},async set(x){const changes={};for(const [k,v] of Object.entries(x)){changes[k]={oldValue:data[k],newValue:v};data[k]=structuredClone(v);}notify(changes);},async remove(keys){const changes={};for(const k of Array.isArray(keys)?keys:[keys]){changes[k]={oldValue:data[k]};delete data[k];}notify(changes);}}}};
+      window.browser={runtime:{id:'fixture',getURL:path=>'http://localhost:8765/'+path,onMessage:event,async sendMessage(m){if(m.type==='RP_NEXUS_CASE_MUTATE'&&m.action==='moderation'){try{const s=await import('mt:lib/complaints-store.mjs');return {ok:true,value:await s.mutateModeration(m.id,m.operation,m.input)};}catch(e){return {ok:false,error:e.message};}}return {ok:true,value:[]};}},permissions:{async contains(){return false;},onAdded:event,onRemoved:event},tabs:{async create(x){window.__tabs.push(x);return x;},async query(){return[];}},storage:{onChanged:{addListener(fn){listeners.push(fn);}},local:{async get(k){if(k===null)return structuredClone(data);if(Array.isArray(k))return Object.fromEntries(k.map(x=>[x,data[x]]));if(typeof k==='object')return {...k,...Object.fromEntries(Object.keys(k).filter(x=>x in data).map(x=>[x,data[x]]))};return {[k]:data[k]};},async set(x){const changes={};for(const [k,v] of Object.entries(x)){changes[k]={oldValue:data[k],newValue:v};data[k]=structuredClone(v);}notify(changes);},async remove(keys){const changes={};for(const k of Array.isArray(keys)?keys:[keys]){changes[k]={oldValue:data[k]};delete data[k];}notify(changes);}}}};
       window.confirm=()=>true;
       if(!crypto.randomUUID)crypto.randomUUID=()=>Array.from(crypto.getRandomValues(new Uint8Array(16)),x=>x.toString(16).padStart(2,'0')).join('');
       if(!crypto.subtle)Object.defineProperty(crypto,'subtle',{value:{async digest(algorithm,bytes){if(algorithm!=='SHA-256')throw Error('Unexpected algorithm');return Uint8Array.from(await window.__fixtureSha256(Array.from(new Uint8Array(bytes)))).buffer;}}});
@@ -703,11 +703,35 @@ async def experience_workspace(browser):
     await calc.get_by_text('История расчётов · 1',exact=True).click()
     await calc.get_by_role('button',name='Просмотреть').click()
     await calc.locator('[data-calc-result]').get_by_text('Участник 67890',exact=False).wait_for()
+    # Moderation Workspace: actual case store, calculator, evidence and Binder decision.
+    case_id=await page.evaluate("""async()=>{const s=await import('mt:lib/complaints-store.mjs'),f=await import('mt:lib/forum-store.mjs');const c=await s.createComplaint({profileId:'profile_majest',title:'QA complaint',url:'https://forum.majestic-rp.ru/threads/test.42/'});await s.addComplaintEvidence(c.id,{title:'QA video',url:'https://www.youtube.com/watch?v=test',seconds:42});await f.upsertTemplate({label:'QA decision',text:'Игрок {{player_id}}: {{rule_code}} — {{punishment}}. {{signature}}',format:'plain',category:'QA',profileId:'profile_majest',shortcut:0});return c.id;}""")
+    await page.locator('.nav [data-view=complaints]').click()
+    await page.get_by_role('button',name='Нарушения и наказания ↗').click()
+    assert await page.evaluate("id=>window.__tabs.at(-1).url.includes('caseId='+id)",case_id)
+    await page.locator('.nav [data-view=rules]').click()
+    await calc.get_by_label('Жалоба для расчёта').select_option(case_id)
+    await calc.get_by_label('ID игрока',exact=True).fill('98765')
+    await calc.get_by_label('QA video').check()
+    await calc.get_by_label('Комментарий нарушения').fill('Проверено на видео')
+    await calc.get_by_role('button',name='Сохранить черновик жалобы').click()
+    await page.wait_for_function("id=>window.__data['rpnComplaintV3:'+id]?.moderation?.status==='draft'",arg=case_id)
+    await calc.get_by_role('button',name='Рассчитать и сохранить в жалобе').click()
+    await page.wait_for_function("id=>window.__data['rpnComplaintV3:'+id]?.moderation?.status==='calculated'",arg=case_id)
+    await calc.get_by_label('Шаблон решения').select_option(label='QA decision')
+    await calc.get_by_label('signature',exact=True).fill('QA moderator')
+    await calc.get_by_role('button',name='Подготовить и сохранить решение').click()
+    await page.wait_for_function("id=>window.__data['rpnComplaintV3:'+id]?.draft.includes('QA moderator')",arg=case_id)
+    assert await page.evaluate("id=>window.__data['rpnComplaintV3:'+id].draft.includes('QA video')",case_id)
+    await page.locator('.nav [data-view=home]').click()
+    await page.locator('.nav [data-view=rules]').click()
+    await calc.get_by_label('Жалоба для расчёта').select_option(case_id)
+    assert await calc.get_by_label('ID игрока',exact=True).input_value()=='98765'
+    assert await calc.get_by_label('QA video').is_checked()
     await page.set_viewport_size({'width':375,'height':780})
     assert await page.evaluate('document.documentElement.scrollWidth<=window.innerWidth+1')
     assert not errors,errors
     await context.close()
-    return 4
+    return 5
 
 
 async def main():

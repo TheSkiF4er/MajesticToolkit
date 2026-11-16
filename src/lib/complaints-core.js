@@ -120,10 +120,38 @@
     };
     return result;
   }
+  // The moderation record is part of the case, so backup/restore and case deletion are atomic.
+  function cleanModeration(value,evidence) {
+    if(value==null)return undefined;
+    if(value.version!==1||!['majestic','russia-online'].includes(value.project)||!['draft','calculated','reviewed'].includes(value.status))throw Error('Некорректное рассмотрение санкций');
+    const identifier=v=>{if(typeof v!=='string'||!/^[-\w]{8,128}$/.test(v))throw Error('Некорректный идентификатор рассмотрения');return v;};
+    if(!Array.isArray(value.players)||value.players.length>20)throw Error('До 20 участников');
+    const ids=new Set();let total=0;
+    const players=value.players.map(p=>{
+      const id=str(p.id,'ID игрока',80,true),nickname=str(p.nickname??'','Никнейм',120,true);
+      if(id&&ids.has(id.toLowerCase()))throw Error('Повторный ID участника');if(id)ids.add(id.toLowerCase());
+      if(!Array.isArray(p.items)||p.items.length>40||(total+=p.items.length)>200)throw Error('Лимит нарушений');
+      const keys=new Set();const items=p.items.map(i=>{
+        const ruleId=identifier(i.ruleId),revisionId=identifier(i.revisionId),index=i.index;
+        if(!Number.isInteger(index)||index<0||index>=20||!(i.amount===null||Number.isSafeInteger(i.amount)&&i.amount>=1&&i.amount<=1000000))throw Error('Некорректная санкция');
+        const key=ruleId+':'+index;if(keys.has(key))throw Error('Повторная санкция');keys.add(key);
+        const refs=i.evidenceIds??[];if(!Array.isArray(refs)||refs.length>MAX_EVIDENCE||new Set(refs).size!==refs.length||refs.some(r=>!evidence.some(e=>e.id===r)))throw Error('Доказательство не принадлежит жалобе');
+        return {ruleId,revisionId,index,amount:i.amount,evidenceIds:[...refs],note:str(i.note??'','Комментарий нарушения',1000,true)};
+      });return {id,nickname,allowCombined:p.allowCombined===true,items};
+    });
+    const policy=str(value.policy,'Политика',12000);let parsed;try{parsed=JSON.parse(policy);}catch{throw Error('Некорректная политика');}if(!parsed||typeof parsed!=='object'||Array.isArray(parsed))throw Error('Некорректная политика');
+    if(!Array.isArray(value.history)||value.history.length>5)throw Error('Лимит истории расчётов');
+    const history=value.history.map(h=>({id:identifier(h.id),at:date(h.at,'Дата расчёта'),text:str(h.text,'Снимок расчёта',180000),status:['calculated','reviewed'].includes(h.status)?h.status:(()=>{throw Error('Некорректный статус расчёта');})()}));
+    if(new Set(history.map(h=>h.id)).size!==history.length)throw Error('Повторные расчёты');
+    if(value.status!=='draft'&&(!history.length||history[0].status!==value.status))throw Error('Нет актуального расчёта');
+    const out={version:1,revision:identifier(value.revision),project:value.project,server:str(value.server,'Сервер',90,true),players,policy,status:value.status,history,note:str(value.note??'','Комментарий',4000,true),draftFormat:value.draftFormat==='bbcode'?'bbcode':'plain',decisionSnapshotId:value.decisionSnapshotId==null?null:identifier(value.decisionSnapshotId),updatedAt:date(value.updatedAt,'Дата рассмотрения')};
+    if(JSON.stringify(out).length>300000)throw Error('Рассмотрение превышает допустимый размер');return out;
+  }
   function cleanCase(data) {
     if (!data || typeof data !== 'object' || Array.isArray(data)) throw Error('Некорректная жалоба');
     if (!/^[\w-]{8,120}$/.test(data.id)) throw Error('Некорректный ID жалобы');
     const thread = canonicalThreadUrl(data.url);
+    if(data.moderation&&data.moderation.project!==(new URL(thread.url).hostname==='forum.majestic-rp.ru'?'majestic':'russia-online'))throw Error('Проект рассмотрения не соответствует теме');
     if (!STATUS.includes(data.status)) throw Error('Неизвестный статус');
     if (!Array.isArray(data.evidence) || data.evidence.length > MAX_EVIDENCE) throw Error('Слишком много доказательств');
     const evidence = data.evidence.map(cleanEvidence);
@@ -138,7 +166,7 @@
       deadline: date(data.deadline, 'Срок', true), watching: data.watching,
       lastSeenPostId: data.lastSeenPostId,
       lastCheckedAt: date(data.lastCheckedAt, 'Дата проверки', true),
-      unread: data.unread, evidence, workflow:cleanWorkflow(data.workflow,data.status),
+      unread: data.unread, evidence, ...(data.moderation==null?{}:{moderation:cleanModeration(data.moderation,evidence)}), workflow:cleanWorkflow(data.workflow,data.status),
       createdAt: date(data.createdAt, 'Дата создания'), updatedAt: date(data.updatedAt, 'Дата изменения')
     };
   }
@@ -170,7 +198,8 @@
   function removeEvidence(old, id) {
     const item = cleanCase(old);
     if (!item.evidence.some(e => e.id === id)) throw Error('Доказательство не найдено');
-    return cleanCase({ ...item, evidence: item.evidence.filter(e => e.id !== id),workflow:event(item.workflow,'evidence','Удалено доказательство'), updatedAt: new Date().toISOString() });
+    const moderation=item.moderation?{...item.moderation,revision:uuid(),status:'draft',updatedAt:new Date().toISOString(),players:item.moderation.players.map(p=>({...p,items:p.items.map(i=>({...i,evidenceIds:i.evidenceIds.filter(e=>e!==id)}))}))}:undefined;
+    return cleanCase({ ...item, moderation, evidence: item.evidence.filter(e => e.id !== id),workflow:event(item.workflow,'evidence','Удалено доказательство'), updatedAt: new Date().toISOString() });
   }
   function observeCase(old, postId, checkedAt = new Date().toISOString()) {
     const item = cleanCase(old);
@@ -187,5 +216,5 @@
     if (!Number.isInteger(s) || s < 0) return '';
     return `${Math.floor(s/3600) ? Math.floor(s/3600) + ':' : ''}${String(Math.floor(s/60)%60).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
   }
-  root.RPNComplaints = Object.freeze({ PREFIX, MAX_CASES, MAX_EVIDENCE, STATUS, ALLOWED_HOSTS, VIDEO_HOSTS, cleanCase, createCase, updateCase, addEvidence, removeEvidence, observeCase, canonicalThreadUrl, threadKey, cleanEvidence, videoLink, timecode, WORKFLOW_STAGES, WORKFLOW_LABELS, WORKFLOW_CHECKS, DECISION_KINDS, initialWorkflow, cleanWorkflow, workflowAction, draftDecision, deadlineTier });
+  root.RPNComplaints = Object.freeze({ PREFIX, MAX_CASES, MAX_EVIDENCE, STATUS, ALLOWED_HOSTS, VIDEO_HOSTS, cleanCase, cleanModeration, createCase, updateCase, addEvidence, removeEvidence, observeCase, canonicalThreadUrl, threadKey, cleanEvidence, videoLink, timecode, WORKFLOW_STAGES, WORKFLOW_LABELS, WORKFLOW_CHECKS, DECISION_KINDS, initialWorkflow, cleanWorkflow, workflowAction, draftDecision, deadlineTier });
 })(globalThis);
