@@ -1,3 +1,9 @@
+# 1.6.3 — Punishment Overlay
+
+- Вкладка наказаний, поиск правил, фильтры, источники, связанный биндер и Alt+Shift+P.
+- Выбор санкций с проверкой срока и редакции, локальные черновики темы, предпросмотр и подтверждаемая вставка текста.
+- Изоляция профилей, настройки Forum Core, очистка панели при отзыве доступа.
+
 # 1.6.2 — Rules & Binds Import
 
 - Structured legacy import: bind IDs, original text, folders, sanctions, source URLs, calculator settings and linked rules.

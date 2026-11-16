@@ -25,6 +25,17 @@ MOCK_JS = r'''(host) => {{
     runtime:{{id:'fixture-extension-id',getURL:path=>'chrome-extension://fixture-extension-id/'+path,
       onMessage:{{addListener:fn=>window.__listeners.push(fn)}},async sendMessage(message){{window.__sent.push(message);
       if(message.type==='RP_NEXUS_FORUM_DATA'){{const profile=hostName.includes('russia')?p2:p1;return {{ok:true,value:{{profile,templates:[a,b,...window.__extraTemplates].filter(t=>t.profileId===profile.id),usage:window.__usage,links:[...links,...window.__extraLinks].filter(t=>t.profileId===profile.id||t.profileId==='*'),navigationHistory:window.__history,settings:window.__settings,allowed:window.__allowed}}}};}}
+      if(message.type==='MT_PUNISHMENT_OVERLAY'){{
+        const rules=window.__punishmentRules||[],entries=window.__punishmentEntries||[];
+        if(message.action==='list')return {{ok:true,value:{{thread:hostName+':123',rules,entries}}}};
+        const r=rules.find(x=>x.id===message.ruleId);
+        if(message.action==='opened'){{r.lastOpened=date;return {{ok:true,value:{{id:r.id,lastOpened:date,favorite:r.favorite}}}};}}
+        if(message.action==='favorite'){{r.favorite=message.favorite;return {{ok:true,value:{{id:r.id,favorite:r.favorite,lastOpened:r.lastOpened}}}};}}
+        if(message.action==='add'){{const s=r.revision.sanctions[message.index];window.__punishmentEntries=[{{ruleId:r.id,revisionId:r.revision.id,code:r.revision.code,title:r.revision.title,sanction:s.type==='warn'?'WARN':'Demorgan '+message.amount+' мин.',verification:r.revision.verification,stale:false}}];}}
+        if(message.action==='remove'||message.action==='clear')window.__punishmentEntries=[];
+        if(message.action==='preview')return {{ok:true,value:'Черновик санкций: '+entries.map(e=>e.sanction).join(', ')}};
+        return {{ok:true,value:{{thread:hostName+':123',entries:window.__punishmentEntries||[]}}}};
+      }}
       if(message.type==='MT_FORUM_READING'){{if(message.action==='save')window.__reading=message.postId;if(message.action==='clear')window.__reading='';return {{ok:true,value:window.__reading}};}}
       if(message.type==='MT_NAVIGATION_ACTION'){{
         if(message.action==='bookmark'){{const item={{id:'bookmark_fixture1',profileId:p1.id,title:'Сохранённая тема',url:'https://forum.majestic-rp.ru/threads/test.123/',kind:'bookmark',host:'forum.majestic-rp.ru',placement:'panel',createdAt:date}};if(!window.__extraLinks.some(x=>x.id===item.id))window.__extraLinks.push(item);return {{ok:true,value:item}};}}
@@ -53,7 +64,7 @@ def fixture(host='majestic',editor='textarea',member=False,moderation=False):
     return f'<!doctype html><html><head><meta charset="utf-8"><meta name="generator" content="XenForo 2.2"></head><body><nav class="p-nav"><ul class="p-nav-list"><li>Форум</li></ul></nav>{body}</body></html>'
 
 async def inject(page, member=False, canonical_override=True):
-    for part in ['lib/safe-dom.js','lib/forum-core.js','lib/xenforo-core.js','lib/complaints-core.js','lib/forum-customization.js','content/forum/context.js','content/forum/editors.js','content/forum/navigation.js','content/forum/lifecycle.js','content/forum/customization.js','content/forum.js']:
+    for part in ['lib/safe-dom.js','lib/forum-core.js','lib/xenforo-core.js','lib/complaints-core.js','lib/forum-customization.js','content/forum/context.js','content/forum/editors.js','content/forum/navigation.js','content/forum/lifecycle.js','content/forum/customization.js','content/forum/punishment-overlay.js','content/forum.js']:
         if part=='content/forum.js' and canonical_override:
             await page.evaluate("""member => { const xf=globalThis.MTXenForo; const path = member ? '/members/test.42/' : '/threads/test.123/'; const canonical='https://forum.majestic-rp.ru'+path; globalThis.MTXenForo=Object.freeze({...xf, identify:(href,doc)=>xf.identify(canonical,doc), memberProfile:(doc,href)=>xf.memberProfile(doc,canonical), moderationAction:(doc,href,action)=>xf.moderationAction(doc,canonical,action)}); }""", member)
         await page.add_script_tag(content=(ROOT/'src'/part).read_text())
@@ -440,6 +451,63 @@ async def exercise(browser):
     await page.wait_for_function("document.querySelector('[data-mt-forum-style]')")
     await page.evaluate("window.__deliver({type:'RP_NEXUS_FORUM_PERMISSION_REVOKED',hosts:['forum.majestic-rp.ru']})")
     await page.wait_for_function("!document.querySelector('[data-mt-forum-style]') && !document.querySelector('#rp-nexus-forum-020')")
+    count+=1
+    await context.close()
+    # Punishment Overlay: actual content script, isolated DOM and mocked background transport.
+    context=await browser.new_context(viewport={'width':390,'height':740})
+    page=await context.new_page()
+    errors=[]
+    page.on('pageerror',lambda err:errors.append(str(err)))
+    await page.evaluate('('+MOCK_JS.format(host=repr('forum.majestic-rp.ru'))+')('+repr('forum.majestic-rp.ru')+')')
+    await page.set_content(fixture())
+    await page.evaluate("""()=>{window.__punishmentRules=[{id:'rule_pg_123',favorite:false,lastOpened:null,server:'Alpha',revision:{id:'revision_pg_123',code:'5.5',title:'PG',category:'Основные',text:'Power Gaming <img src=x onerror=alert(1)>',aliases:['Power Gaming'],createdAt:'2026-11-15T00:00:00Z',sourceUrl:'https://forum.majestic-rp.ru/threads/rules.123/',verification:'unverified',conditions:'Проверить источник',sanctions:[{type:'demorgan',unit:'minutes',min:35,max:90,condition:''},{type:'warn',unit:'none',min:null,max:null,condition:''}]}},{id:'rule_dm_123',favorite:false,lastOpened:null,server:'Alpha',revision:{id:'revision_dm_123',code:'5.1',title:'DM',category:'Основные',text:'Death Match',aliases:['Death Match'],createdAt:'2026-11-15T00:00:00Z',sourceUrl:'https://forum.majestic-rp.ru/threads/rules.123/',verification:'unverified',conditions:'',sanctions:[{type:'demorgan',unit:'minutes',min:120,max:120,condition:''}]}}];}""")
+    await inject(page)
+    await page.keyboard.press('Alt+Shift+P')
+    overlay=page.locator('#rpn-punishment-panel')
+    await overlay.locator('#rpn-punishment-search').wait_for()
+    await overlay.locator('#rpn-punishment-search').fill('Power Gaming')
+    assert await overlay.locator('[data-punishment-rule]').count()==1
+    await overlay.locator('[data-punishment-rule=rule_pg_123]').click()
+    await overlay.locator('[data-punishment-add]').wait_for()
+    assert await overlay.locator('img').count()==0
+    assert 'Требует проверки' in await overlay.locator('[data-punishment-detail]').inner_text()
+    await overlay.locator('#rpn-punishment-amount').fill('91')
+    await overlay.locator('[data-punishment-add]').click()
+    assert 'Срок вне допустимого' in await overlay.locator('[data-punishment-status]').inner_text()
+    await overlay.locator('#rpn-punishment-amount').fill('60')
+    await overlay.locator('[data-punishment-add]').click()
+    await overlay.locator('[data-punishment-remove=rule_pg_123]').wait_for()
+    await overlay.locator('[data-punishment-preview-action=preview]').click()
+    await overlay.locator('[data-punishment-preview]').wait_for(state='visible')
+    assert '60 мин.' in await overlay.locator('[data-punishment-preview]').inner_text()
+    await overlay.locator('[data-punishment-preview-action=insert]').click()
+    await page.wait_for_function("document.querySelector('textarea[name=message]').value.includes('Demorgan 60')")
+    await overlay.get_by_label('Выбранная санкция').select_option('1')
+    assert await overlay.locator('#rpn-punishment-amount').count()==0
+    await overlay.locator('[data-punishment-add]').click()
+    await page.wait_for_function("window.__punishmentEntries[0]?.sanction==='WARN'")
+    await page.locator('[data-nav-act=binder]').click()
+    await page.locator('[data-nav-act=punishments]').click()
+    await overlay.locator('[data-punishment-remove=rule_pg_123]').wait_for()
+    assert 'WARN' in await overlay.inner_text()
+    await overlay.locator('[data-punishment-remove=rule_pg_123]').click()
+    await overlay.locator('[data-punishment-remove=rule_pg_123]').wait_for(state='detached')
+    await page.evaluate("window.__punishmentEntries=[{ruleId:'rule_dm_123',revisionId:'revision_dm_123',code:'5.1',title:'DM',sanction:'Demorgan 120 мин.',verification:'unverified',stale:false}];window.__deliver({type:'MT_PUNISHMENT_DRAFT_CHANGED',profileId:'p_majestic_1234'})")
+    await overlay.locator('[data-punishment-remove=rule_dm_123]').wait_for()
+    await overlay.locator('#rpn-punishment-search').fill('DM')
+    await overlay.locator('[data-punishment-rule=rule_dm_123]').click()
+    assert await overlay.locator('#rpn-punishment-amount').is_disabled()
+    await page.evaluate("document.body.insertAdjacentHTML('beforeend','<div class=\"fr-box\"><div class=\"fr-element\" contenteditable=\"true\" style=\"min-height:50px\"></div></div>')")
+    await overlay.get_by_role('button',name='Обновить',exact=True).click()
+    await overlay.get_by_label('Редактор черновика').wait_for()
+    await overlay.get_by_label('Редактор черновика').select_option('1')
+    await overlay.locator('[data-punishment-preview-action=insert]').click()
+    await page.wait_for_function("document.querySelector('.fr-element').textContent.includes('Demorgan 120')")
+    await page.evaluate("window.__settings={punishmentEnabled:false};window.__deliver({type:'RP_NEXUS_REFRESH_FORUM_DATA'})")
+    await page.locator('[data-nav-act=punishments]').wait_for(state='detached')
+    await page.evaluate("window.__deliver({type:'RP_NEXUS_FORUM_PERMISSION_REVOKED',hosts:['forum.majestic-rp.ru']})")
+    await page.locator('#rp-nexus-forum-020').wait_for(state='detached')
+    assert not errors,errors
     count+=1
     await context.close()
     return count

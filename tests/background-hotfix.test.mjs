@@ -30,7 +30,7 @@ test('grant on an already open XenForo tab injects real binder scripts immediate
  listeners.added();
  await wait(()=>executions.some(x=>x.target.tabId===42));
  const installed=executions.find(x=>x.target.tabId===42);
- assert.deepEqual(installed.files,['lib/safe-dom.js','lib/forum-core.js','lib/xenforo-core.js','lib/complaints-core.js','lib/forum-customization.js','content/forum/context.js','content/forum/editors.js','content/forum/navigation.js','content/forum/lifecycle.js','content/forum/customization.js','content/forum.js']);
+ assert.deepEqual(installed.files,['lib/safe-dom.js','lib/forum-core.js','lib/xenforo-core.js','lib/complaints-core.js','lib/forum-customization.js','content/forum/context.js','content/forum/editors.js','content/forum/navigation.js','content/forum/lifecycle.js','content/forum/customization.js','content/forum/punishment-overlay.js','content/forum.js']);
  assert.ok(registrations.some(x=>x.matches[0]==='https://forum.majestic-rp.ru/*'));
 });
 test('revoking site permission unregisters the persistent content script',async()=>{
@@ -84,4 +84,33 @@ test('reading positions are private, opt-in, profile-scoped, and permission-chec
  assert.equal((await send(url+'?token=private',{type:'MT_FORUM_READING',profileId:id,action:'get'})).value,'js-post-123');
  assert.equal((await act('clear')).value,'');assert.equal((await act('get')).value,'');
  granted.delete(origin);assert.equal((await act('get')).ok,false);
+});
+
+test('Punishment Overlay authorizes rules, validates selections and keeps drafts separate by thread and profile',async()=>{
+ const {createRule,reviseRule,RULES_KEY,currentRevision}=await import('../src/lib/rules-core.mjs');
+ const {defaultState}=await import('../src/lib/model.mjs');
+ const state=defaultState(),p=state.profiles[0],origin='https://forum.majestic-rp.ru/*',url='https://forum.majestic-rp.ru/threads/test.100/';
+ data.rpNexusStateV1=state;granted.add(origin);
+ const fields={code:'5.5',title:'PG',category:'Основные',text:'Правило',aliases:['Power Gaming'],sourceUrl:'https://forum.majestic-rp.ru/threads/rules.123/',verification:'unverified',sanctions:[{type:'demorgan',unit:'minutes',min:35,max:90},{type:'warn',unit:'none',min:null,max:null}]};
+ const r=createRule(p,fields),foreign=createRule({...p,id:'another-profile'},fields),otherServer=createRule(p,{...fields,server:'Another server'});
+ data[RULES_KEY]=[r,foreign,otherServer];
+ const act=(action,extra={},page=url,frame=0)=>send(page,{type:'MT_PUNISHMENT_OVERLAY',action,profileId:p.id,...extra},frame);
+ const select={ruleId:r.id,revisionId:r.activeRevisionId,index:0,amount:60};
+ let res=await act('list');assert.equal(res.ok,true);assert.deepEqual(res.value.rules.map(x=>x.id),[r.id]);
+ assert.equal((await act('list',{profileId:'another-profile'})).ok,false);assert.equal((await act('list',{},url,1)).ok,false);
+ assert.equal((await act('add',{...select,amount:91})).ok,false);assert.equal((await act('add',{...select,ruleId:foreign.id})).ok,false);
+ res=await act('add',select);assert.equal(res.ok,true);assert.equal(res.value.entries[0].sanction,'Demorgan 60 мин.');
+ assert.equal((await act('add',select)).value.entries.length,1);
+ assert.equal((await act('list',{},url+'page-2?token=ignored')).value.entries.length,1);
+ assert.equal((await act('list',{},'https://forum.majestic-rp.ru/threads/test.101/')).value.entries.length,0);
+ assert.match((await act('preview')).value,/Требует проверки/);
+ assert.equal((await act('add',{...select,index:1,amount:1})).ok,false);
+ assert.equal((await act('add',{...select,index:1,amount:null})).value.entries[0].sanction,'WARN');
+ assert.equal((await act('favorite',{ruleId:r.id,favorite:true})).value.favorite,true);
+ data[RULES_KEY]=[reviseRule(r,{...fields,title:'Updated'},r.activeRevisionId),foreign,otherServer];
+ assert.equal((await act('list')).value.entries[0].stale,true);assert.equal((await act('preview')).ok,false);
+ assert.equal((await act('remove',{ruleId:r.id})).value.entries.length,0);
+ assert.equal((await act('add',select)).ok,false);
+ state.preferences.forum={schemaVersion:1,global:{punishmentEnabled:false},sites:{},profiles:{}};
+ assert.equal((await act('list')).ok,false);granted.delete(origin);assert.equal((await act('list')).ok,false);
 });
