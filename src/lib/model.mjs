@@ -1,3 +1,4 @@
+import {cleanModerationBatch} from './moderation-batch.mjs';
 import {cleanSavedViews} from './complaint-queue.mjs';
 import {validateImportSettings} from './rules-import-settings.mjs';
 import {workspacePreferences} from './workspace-preferences.mjs';
@@ -60,7 +61,7 @@ export function validateState(data) {
     const updatedAt = string(p.updatedAt, 'Дата изменения', 40);
     if (!Number.isFinite(Date.parse(createdAt)) || !Number.isFinite(Date.parse(updatedAt))) throw new Error('Некорректная дата профиля');
     if(p.rulesImport!==undefined&&form.project!=='majestic')throw Error('Импорт правил относится к Majestic RP');
-    return { id, ...form, createdAt, updatedAt, ...(p.rulesImport===undefined?{}:{rulesImport:validateImportSettings(p.rulesImport)}), ...(p.complaintViews===undefined?{}:{complaintViews:cleanSavedViews(p.complaintViews)}) };
+    return { id, ...form, createdAt, updatedAt, ...(p.rulesImport===undefined?{}:{rulesImport:validateImportSettings(p.rulesImport)}), ...(p.complaintViews===undefined?{}:{complaintViews:cleanSavedViews(p.complaintViews)}), ...(p.moderationBatch===undefined?{}:{moderationBatch:cleanModerationBatch(p.moderationBatch)}) };
   });
   const activeProfileId = string(data.activeProfileId, 'Активный профиль', 128);
   if (!ids.has(activeProfileId)) throw new Error('Активный профиль отсутствует в списке');
@@ -80,7 +81,7 @@ export function addProfile(state, input) {
 }
 export function editProfile(state, id, input) {
   if (!state.profiles.some(p => p.id === id)) throw new Error('Профиль не найден');
-  return changed(state, { profiles: state.profiles.map(p => p.id === id ? { ...p, ...validateProfileForm(input), updatedAt: now() } : p) });
+  const form=validateProfileForm(input);return changed(state, { profiles: state.profiles.map(p => p.id === id ? { ...p, ...form, ...(p.project!==form.project||p.server!==form.server||p.forumUrl!==form.forumUrl?{moderationBatch:[]}:{}), updatedAt: now() } : p) });
 }
 export function deleteProfile(state, id) {
   if (state.profiles.length === 1) throw new Error('Нельзя удалить последний профиль');

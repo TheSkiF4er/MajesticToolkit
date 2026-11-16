@@ -78,24 +78,27 @@
     }
     return {name:title,subtitle,url:u.origin+u.pathname,stats,site:context.site};
   }
-  // Never manufacture moderation URLs or submit actions. Only interact with visible native controls.
+  // Only exact native thread routes, or legacy text-only controls inside thread menus.
+  const MODERATION_ACTIONS=Object.freeze({close:'Закрыть / открыть тему',move:'Переместить тему',stick:'Закрепить тему',unstick:'Открепить тему',edit:'Редактировать заголовок / префикс'});
+  const actionPaths={close:['lock','unlock','close','open'],move:['move','move-thread'],stick:['stick','sticky'],unstick:['unstick','unsticky'],edit:['edit']};
+  const legacyText={close:/^(?:закрыть|открыть|заблокировать|разблокировать)(?:\s+(?:тему|обсуждение))?$|^(?:lock|unlock|close|reopen)(?: thread)?$/i,move:/^(?:переместить|перенести)(?:\s+(?:тему|обсуждение))?$|^move(?: thread)?$/i};
+  function threadId(url){return url.pathname.match(/^\/threads\/(?:[^/]+\.)?(\d+)(?:\/|$)/i)?.[1]||null;}
   function moderationAction(doc,href,action) {
-    const ctx=identify(href,doc);if(!ctx?.thread || !['close','move'].includes(action))return null;
-    const patterns=action==='move' ? {path:/(?:^|\/)(?:move|move-thread)(?:[\/?#]|$)/i,text:/^(?:переместить|перенести)(?:\s+(?:тему|обсуждение))?$|^move(?: thread)?$/i} :
-      {path:/(?:^|\/)(?:lock|unlock|close|open)(?:[\/?#]|$)/i,text:/^(?:закрыть|открыть|заблокировать|разблокировать)(?:\s+(?:тему|обсуждение))?$|^(?:lock|unlock|close|reopen)(?: thread)?$/i};
-    const origin=new URL(href).origin;
+    const ctx=identify(href,doc);if(!ctx?.thread||!Object.hasOwn(actionPaths,action))return null;
+    const current=new URL(href),id=threadId(current);if(!id||!/^\/threads\/[^/]+(?:\/page-\d+)?\/?$/i.test(current.pathname))return null;
     for(const node of doc.querySelectorAll('a[href],button[data-xf-click],button[data-href],.menu button')) {
-      if(node.closest?.('#rp-nexus-forum-020'))continue;
-      if(node.matches?.('[hidden],[aria-disabled="true"],:disabled'))continue;
-      if(node.getClientRects && !node.getClientRects().length)continue;
-      const raw=node.getAttribute('href') || node.getAttribute('data-href') || '';
-      if(raw && raw!=='#') {
+      if(node.closest?.('#rp-nexus-forum-020,[hidden],[aria-hidden="true"]')||node.matches?.('[hidden],[aria-disabled="true"],:disabled')||node.getClientRects&&!node.getClientRects().length)continue;
+      if(!node.closest?.('.menu,.block-outer,.p-title-pageAction,.js-threadAction'))continue;
+      const style=doc.defaultView?.getComputedStyle?.(node);if(style&&(style.visibility==='hidden'||style.visibility==='collapse'||style.opacity==='0'||style.pointerEvents==='none'))continue;
+      const raw=node.getAttribute('href')||node.getAttribute('data-href')||'';
+      if(raw&&raw!=='#') {
         let u;try{u=new URL(raw,href)}catch{continue}
-        if(u.origin!==origin)continue;
-        if(patterns.path.test(u.pathname) && (/\/threads\//i.test(u.pathname) || node.closest?.('.menu,.block-outer,.p-title-pageAction')))return node;
+        if(u.origin!==current.origin||u.username||u.password||threadId(u)!==id)continue;
+        const route=u.pathname.match(/^\/threads\/[^/]+\/([^/]+)\/?$/i)?.[1]?.toLowerCase();
+        if(actionPaths[action].includes(route))return node;
+        continue;
       }
-      const visibleText=node.textContent?.replace(/\s+/g,' ').trim()||'';
-      if(node.closest?.('.menu,.block-outer,.p-title-pageAction,.js-threadAction') && patterns.text.test(visibleText))return node;
+      if(node.closest?.('.block-outer,.p-title-pageAction,.js-threadAction')&&!node.closest?.('form')&&legacyText[action]?.test(node.textContent?.replace(/\s+/g,' ').trim()||'')&&!node.getAttribute('formaction')&&!node.getAttribute('onclick'))return node;
     }
     return null;
   }
@@ -115,5 +118,5 @@
       }
     }catch{}return 'unknown';
   }
-  globalThis.MTXenForo = Object.freeze({FORUMS,PREFIX,LIMIT,BOOKMARK_LIMIT,newLinkId,selectNavigation,pageUrl,domain,safeLink,validateLink,validateLinks,matchingProfile,identify,memberProfile,moderationAction,threadState});
+  globalThis.MTXenForo = Object.freeze({FORUMS,PREFIX,LIMIT,BOOKMARK_LIMIT,newLinkId,selectNavigation,pageUrl,domain,safeLink,validateLink,validateLinks,matchingProfile,identify,memberProfile,MODERATION_ACTIONS,moderationAction,threadState});
 })();

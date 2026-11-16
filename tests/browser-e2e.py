@@ -105,6 +105,19 @@ async def exercise(browser):
     assert await page.locator('.fr-element strong').count()==1
     assert await page.evaluate("() => !!globalThis.MTXenForo.moderationAction(document,'https://forum.majestic-rp.ru/threads/test.123/','close')")
     assert await page.evaluate("() => !!globalThis.MTXenForo.moderationAction(document,'https://forum.majestic-rp.ru/threads/test.123/','move')")
+    # Advanced moderation: only matching thread routes, native click after confirmation.
+    await page.evaluate("""()=>{document.querySelector('.menu').insertAdjacentHTML('beforeend','<a id="native-edit" href="/threads/test.123/edit">Редактировать тему</a><a id="wrong-stick" href="/threads/other.999/stick">Закрепить тему</a>');window.__nativeClicks=0;document.querySelector('#native-edit').addEventListener('click',e=>{e.preventDefault();window.__nativeClicks++;});}""")
+    await page.locator('[data-nav-act=moderation]').click()
+    await page.locator('[data-act=edit]').wait_for()
+    assert await page.locator('[data-act=stick]').count()==0
+    await page.evaluate('window.confirm=()=>false')
+    await page.locator('[data-act=edit]').click()
+    assert await page.evaluate('window.__nativeClicks')==0
+    await page.evaluate('window.confirm=()=>true')
+    await page.locator('[data-act=edit]').click()
+    await page.wait_for_function('window.__nativeClicks===1')
+    assert await page.evaluate('window.__sent.some(x=>x.type==="MT_NATIVE_MODERATION"&&x.action==="edit")')
+    count+=1
     count+=1
     await context.close()
     context=await browser.new_context(ignore_https_errors=True)
@@ -843,9 +856,28 @@ async def experience_workspace(browser):
     await page.locator('#workspace-profile').select_option('profile_majest')
     await registry.locator('[data-registry-id]').wait_for()
     assert await page.evaluate('window.__data.mtPunishmentRegistryV1.records.length===1')
+    # Persistent batch queue: individual checked decision, exact matching tab, manual completion.
+    await page.locator('.nav [data-view=complaints]').click()
+    await page.get_by_role('button',name='Сбросить',exact=True).click()
+    await page.locator('[data-case-card]').filter(has_text='QA complaint').locator('[data-case-select]').check()
+    await page.get_by_role('button',name='Создать очередь модерации').click()
+    await page.wait_for_function("window.__data.rpNexusStateV1.profiles[0].moderationBatch?.length===1")
+    await page.locator('[data-case-action=moderation-batch-open]').click()
+    await page.wait_for_function("window.__data.rpNexusStateV1.profiles[0].moderationBatch[0].status==='opened'")
+    assert await page.evaluate("window.__tabs.at(-1).url==='https://forum.majestic-rp.ru/threads/test.42/'")
+    await page.evaluate("""()=>{window.__batchMessages=[];browser.tabs.query=async()=>[{id:99,url:'https://forum.majestic-rp.ru/threads/other.999/'},{id:42,url:'https://forum.majestic-rp.ru/threads/test.42/'}];browser.tabs.sendMessage=async(id,m)=>{window.__batchMessages.push({id,m});return {ok:true};};}""")
+    await page.locator('[data-case-action=moderation-batch-insert]').click()
+    await page.wait_for_function("window.__data.rpNexusStateV1.profiles[0].moderationBatch[0].status==='inserted'")
+    assert await page.evaluate("window.__batchMessages.length===1&&window.__batchMessages[0].id===42&&window.__batchMessages[0].m.type==='MT_APPLY_MODERATION'&&window.__batchMessages[0].m.text.includes('98765')")
+    await page.locator('[data-case-action=moderation-batch-done]').click()
+    await page.wait_for_function("window.__data.rpNexusStateV1.profiles[0].moderationBatch[0].status==='done'")
+    await page.locator('#workspace-profile').select_option('profile_russia')
+    assert await page.locator('[data-case-action=moderation-batch-done]').count()==0
+    await page.locator('#workspace-profile').select_option('profile_majest')
+    await page.locator('[data-case-action=moderation-batch-reset]').wait_for()
     assert not errors,errors
     await context.close()
-    return 8
+    return 9
 
 
 async def main():

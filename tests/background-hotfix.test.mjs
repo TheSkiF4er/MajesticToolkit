@@ -131,3 +131,11 @@ test('Section Monitor is extension-only, uses active profile and opens inbox fro
  assert.equal((await send(ext,{type:'MT_SECTION_MONITOR',action:'list',profileId:'other-profile'})).ok,false);
  listeners.clicked('mt_section_'+id);await wait(()=>openedTabs.some(t=>t.url.includes('sectionMonitor='+encodeURIComponent(p.id)+'#complaints')));
 });
+
+test('native moderation requires permission, exact forum thread and matching profile',async()=>{
+ const origin='https://forum.majestic-rp.ru/*',url='https://forum.majestic-rp.ru/threads/test.100/';granted.add(origin);
+ const p=data.rpNexusStateV1.profiles.find(x=>x.forumUrl.startsWith('https://forum.majestic-rp.ru/'));
+ const message={type:'MT_NATIVE_MODERATION',profileId:p.id,action:'edit'};
+ assert.equal((await send(url,message)).ok,true);assert.equal((await send(url,{...message,action:'delete'})).ok,false);assert.equal((await send(url,{...message,profileId:'foreign'})).ok,false);assert.equal((await send('https://forum.majestic-rp.ru/forums/test.1/',message)).ok,false);assert.equal((await send(url,message,1)).ok,false);assert.equal((await send(url+'edit',message)).ok,false);
+ granted.delete(origin);assert.equal((await send(url,message)).ok,false);
+});

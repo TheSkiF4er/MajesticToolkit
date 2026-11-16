@@ -74,3 +74,16 @@ test('moderation opens only visible same-origin XenForo controls on thread pages
   assert.equal(XF.moderationAction(doc,url,'delete'),null);
   assert.equal(XF.moderationAction(fakeDoc({list:{'a[href],button[data-xf-click],button[data-href],.menu button':[hostile]}}),url,'close'),null);
 });
+
+test('advanced moderation recognizes exact thread routes and rejects cross-thread or destructive actions',()=>{
+ const url='https://forum.majestic-rp.ru/threads/topic.12/';
+ const node=(href,text='')=>fakeNode({href,text,within:['.menu']});
+ const foreign=node('/threads/other.13/lock','Закрыть тему'),wrong=node('/threads/topic.12/reply','Закрыть тему'),edit=node('/threads/topic.12/edit'),stick=node('/threads/topic.12/stick'),unstick=node('/threads/topic.12/unstick'),del=node('/threads/topic.12/delete');
+ const doc=fakeDoc({list:{'a[href],button[data-xf-click],button[data-href],.menu button':[foreign,wrong,edit,stick,unstick,del]}});
+ assert.equal(XF.moderationAction(doc,url,'close'),null);
+ assert.equal(XF.moderationAction(doc,url,'edit'),edit);
+ assert.equal(XF.moderationAction(doc,url,'stick'),stick);
+ assert.equal(XF.moderationAction(doc,url,'unstick'),unstick);
+ assert.equal(XF.moderationAction(doc,url+'edit','edit'),null);
+ assert.equal(XF.moderationAction(doc,url,'delete'),null);
+});

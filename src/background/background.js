@@ -178,8 +178,21 @@ api.runtime.onMessage.addListener((message,sender,sendResponse) => {
     validatePayloadSize(message,isTrustedExtension&&message.type==='RP_NEXUS_CASE_MUTATE'&&message.action==='moderation'?350000:65536);
     if(isForum && message.type!=='RP_NEXUS_FORUM_DATA' && !await api.permissions.contains({origins:[`https://${new URL(sender.url).hostname}/*`]}))throw Error('Доступ к форуму отозван');
     if(message.type==='MT_SECTION_MONITOR'){if(!isTrustedExtension)throw Error('Недоверенный источник');if(message.action==='list')return sectionView(message.profileId);if(message.action==='scan')return scanSections(message.profileId,message.input?.id??null);return sectionAction(message.profileId,message.action,message.input);}
+    if(message.type==='MT_NATIVE_MODERATION'){
+      if(!isForum)throw Error('Недоверенный источник');
+      const state=await api.storage.local.get('rpNexusStateV1'),v=state.rpNexusStateV1,XF=globalThis.MTXenForo;
+      const host=XF.domain(sender.url),p=XF.matchingProfile(v?.profiles,v?.activeProfileId,sender.url);
+      if(!p||p.id!==message.profileId||!forumSettingsFor(v.preferences?.forum,host,p.id).enabled||!Object.hasOwn(XF.MODERATION_ACTIONS,message.action))throw Error('Контекст модерации изменился');
+      if(!/^\/threads\/(?:[^/]+\.)?\d+(?:\/page-\d+)?\/?$/i.test(new URL(sender.url).pathname))throw Error('Нужна страница конкретной темы');
+      const key=globalThis.RPNComplaints.threadKey(sender.url),c=(await importedStore.listCases()).find(x=>x.profileId===p.id&&x.threadKey===key);
+      if(c)await importedStore.mutateCaseWorkflow(c.id,'note',{text:'Запрошено штатное действие XenForo: '+XF.MODERATION_ACTIONS[message.action]+'. Результат не подтверждён.'});
+      return true;
+    }
     if (message.type === 'RP_NEXUS_OPEN_WORKSPACE') {
       if (!isForum && !isVideo && !isTrustedExtension) throw Error('Недоверенный источник');
+      if(message.view==='registry'){
+        if(!isForum)throw Error('Нужна тема форума');const v=(await api.storage.local.get('rpNexusStateV1')).rpNexusStateV1,p=globalThis.MTXenForo.matchingProfile(v?.profiles,v?.activeProfileId,sender.url);const key=globalThis.RPNComplaints.threadKey(sender.url);const c=(await importedStore.listCases()).find(x=>x.profileId===p?.id&&x.threadKey===key);if(!c||p.id!==v.activeProfileId)throw Error('Выберите профиль жалобы');await api.tabs.create({url:api.runtime.getURL('ui/workspace.html?rulesTab=registry&registryCase='+encodeURIComponent(c.id)+'#rules')});return true;
+      }
       if(message.view==='calculator'){
         const params=new URLSearchParams({calculator:'1'});
         if(isForum){const state=(await api.storage.local.get('rpNexusStateV1')).rpNexusStateV1;const profile=globalThis.MTXenForo.matchingProfile(state?.profiles,state?.activeProfileId,sender.url);const thread=overlayThread(sender.url);if(profile&&thread){params.set('thread',thread);params.set('calcProfile',profile.id);const c=(await importedStore.listCases()).find(c=>c.profileId===profile.id&&c.threadKey===thread);if(c)params.set('caseId',c.id);}}
@@ -342,7 +355,7 @@ api.runtime.onMessage.addListener((message,sender,sendResponse) => {
     }
     throw Error('Неизвестный запрос');
   }
-  if (!['RP_NEXUS_OPEN_WORKSPACE','RP_NEXUS_SCAN_OPEN_TABS','RP_NEXUS_TRACK_CURRENT_THREAD','RP_NEXUS_THREAD_OBSERVED','RP_NEXUS_VIDEO_ADD','RP_NEXUS_CASE_MUTATE','RP_NEXUS_FORUM_DATA','RP_NEXUS_VIDEO_CASES','MAJESTIC_SAVE_PUBLIC_PLAYER','MAJESTIC_TIMER','MT_BINDER_ACTION','MT_NAVIGATION_ACTION','MT_FORUM_READING','MT_PUNISHMENT_OVERLAY','MT_SECTION_MONITOR'].includes(message.type)) return;
+  if (!['RP_NEXUS_OPEN_WORKSPACE','RP_NEXUS_SCAN_OPEN_TABS','RP_NEXUS_TRACK_CURRENT_THREAD','RP_NEXUS_THREAD_OBSERVED','RP_NEXUS_VIDEO_ADD','RP_NEXUS_CASE_MUTATE','RP_NEXUS_FORUM_DATA','RP_NEXUS_VIDEO_CASES','MAJESTIC_SAVE_PUBLIC_PLAYER','MAJESTIC_TIMER','MT_BINDER_ACTION','MT_NAVIGATION_ACTION','MT_FORUM_READING','MT_PUNISHMENT_OVERLAY','MT_SECTION_MONITOR','MT_NATIVE_MODERATION'].includes(message.type)) return;
   void task().then(value => sendResponse({ok:true,value})).catch(error => sendResponse({ok:false,error:error?.message || 'Ошибка'}));
   return true;
 });

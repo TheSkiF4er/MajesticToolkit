@@ -133,35 +133,40 @@
   });
   function threadPage() { return Boolean(context()?.thread); }
   function nativeActions() {
-    return ['close','move'].map(id=>({id,title:id==='close'?'Закрыть / открыть тему':'Переместить тему',node:XF.moderationAction(document,location.href,id)})).filter(x=>x.node);
+    return Object.entries(XF.MODERATION_ACTIONS).map(([id,title])=>({id,title,node:XF.moderationAction(document,location.href,id)})).filter(x=>x.node);
   }
   function nativeMenu() {
     // XenForo 2.x themes may hide the thread tools behind a textless menu trigger.
-    const candidates=[...document.querySelectorAll('.block-outer-opposite [data-xf-click="menu"], .p-title-pageAction [data-xf-click="menu"], .block-outer [data-xf-click="menu"], .js-threadAction [data-xf-click="menu"], button,a')];
+    const candidates=[...document.querySelectorAll('.block-outer-opposite [data-xf-click="menu"], .p-title-pageAction [data-xf-click="menu"], .block-outer [data-xf-click="menu"], .js-threadAction [data-xf-click="menu"], .block-outer button, .p-title-pageAction button')];
     return candidates.find(x=>!x.closest('#rp-nexus-forum-020') && x.getClientRects().length &&
       (x.matches('.block-outer-opposite [data-xf-click="menu"], .p-title-pageAction [data-xf-click="menu"], .block-outer [data-xf-click="menu"], .js-threadAction [data-xf-click="menu"]') ||
        /(?:инструменты\s*темы|управление\s*темой|thread\s*tools|moderation)/i.test(x.textContent.trim())));
   }
+  let nativeBusy=false;
+  async function discoverNative(){
+    if(!threadPage())return;
+    const menu=nativeMenu();if(menu&&!nativeActions().length){menu.click();await new Promise(r=>setTimeout(r,350));}
+    if(enabled&&extraPane==='moderation')draw();
+  }
   async function openNative(action) {
-    if (!threadPage()) { notify('Откройте страницу конкретной темы.'); return; }
-    const initialURL=location.href;
-    let result = nativeActions().find(x => x.id === action);
-    if (!result?.node) {
-      const menu = nativeMenu();
-      if (menu) {
-        menu.click();
-        // XenForo overlays can animate and mount their entries asynchronously.
-        for(let i=0;i<5&&!result?.node;i++){
-          await new Promise(r=>setTimeout(r,120));
-          result=nativeActions().find(x=>x.id===action);
-        }
-      }
-    }
-    if (!enabled || !threadPage() || location.href!==initialURL) return;
-    if (!result?.node) { notify('Действие не доступно в интерфейсе форума или нет прав.'); return; }
-    if (!confirm(`Открыть штатное действие форума «${result.title}»? Подтвердите операцию на самом сайте.`)) return;
-    result.node.click();
-    notify('Открыто штатное действие форума. Завершите его на сайте.');
+    if(nativeBusy||!threadPage())return;
+    nativeBusy=true;
+    try{
+      const initialURL=location.href,profileId=activeProfile()?.id;
+      let result=nativeActions().find(x=>x.id===action);
+      if(!result){const menu=nativeMenu();if(menu){menu.click();for(let i=0;i<5&&!result;i++){await new Promise(r=>setTimeout(r,120));result=nativeActions().find(x=>x.id===action);}}}
+      if(!enabled||location.href!==initialURL||activeProfile()?.id!==profileId||!result){notify('Штатное действие недоступно или контекст изменился.');return;}
+      if(!confirm(`Тема: ${context()?.title||initialURL}\nДействие: ${result.title}\nШтатный элемент XenForo может выполнить действие сразу. Продолжить?`))return;
+      const response=await api.runtime.sendMessage({type:'MT_NATIVE_MODERATION',profileId,action});
+      if(!response?.ok)throw Error(response?.error||'Проверка доступа не пройдена');
+      if(!enabled||location.href!==initialURL||activeProfile()?.id!==profileId||XF.moderationAction(document,location.href,action)!==result.node)throw Error('Контекст или штатное действие изменилось');
+      result.node.click();notify('Штатное действие вызвано. Результат проверяйте на форуме.');setTimeout(()=>{if(enabled&&location.href===initialURL&&activeProfile()?.id===profileId)void scanThread();},1000);
+    }catch(e){notify(e.message);}finally{nativeBusy=false;}
+  }
+  function moderationPanel(){
+    if(!threadPage())return '<p class="sub">Откройте тему форума.</p>';
+    const actions=nativeActions();
+    return `<b>${C.esc(context()?.title||'Текущая тема')}</b><p class="sub">${currentCase?C.esc(currentCase.title+' · '+currentCase.status):'Жалоба не сохранена'} · состояние форума: ${C.esc(XF.threadState(document,location.href))}</p><div class="actions"><button class="btn secondary" data-act="discover-native">Показать доступные действия</button>${actions.map(x=>`<button class="btn secondary" data-act="${x.id}">${C.esc(x.title)}</button>`).join('')}</div><p class="sub">Только найденные штатные элементы. Вызов не подтверждает успешное изменение.</p><div class="actions"><button class="btn secondary" data-act="track">Добавить жалобу</button><button class="btn secondary" data-act="complaints">Очередь жалоб ↗</button>${currentCase?'<button class="btn secondary" data-act="moderation">Рассмотрение и решение ↗</button><button class="btn secondary" data-act="case-registry">Реестр ↗</button>':''}</div>`;
   }
   function mountNavigation() {
     if(!enabled||!settings.navigationEnabled){navigation.clear();return;}
@@ -184,16 +189,16 @@
     const previous={search:panel.querySelector('#rpn-search')?.value||'',nickname:panel.querySelector('#rpn-nickname')?.value||'',reason:panel.querySelector('#rpn-reason')?.value||''};
     closePending();
     replaceHtml(panel, `<div class="bar"><div><div class="name">MajesticToolkit · Forum Experience</div><div class="sub">${C.esc(profile?.name || 'Без профиля')} · ${C.esc(profile?.server || '')}</div></div><button class="btn secondary" data-act="workspace" title="Управление шаблонами">Настроить ↗</button></div>
-      <div class="workspace-tabs" role="group" aria-label="Forum Workspace">${settings.binderEnabled?`<button class="btn secondary" data-nav-act="binder" aria-pressed="${!navMode&&!extraPane}">Биндер</button>`:''}${settings.navigationEnabled?`<button class="btn secondary" data-nav-act="navigation" aria-pressed="${navMode&&!extraPane}">Навигация</button>`:''}<button class="btn secondary" data-nav-act="context" aria-pressed="${extraPane==='context'}">Тема</button><button class="btn secondary" data-nav-act="design" aria-pressed="${extraPane==='design'}">Дизайн</button>${settings.punishmentEnabled!==false?`<button class="btn secondary" data-nav-act="punishments" aria-pressed="${extraPane==='punishments'}">Наказания</button>`:''}</div>${forumProfiles.length>1?`<label class="sub" for="rpn-nav-profile">Профиль форума</label><select class="field" id="rpn-nav-profile">${forumProfiles.map(p=>`<option value="${C.esc(p.id)}" ${p.id===profile?.id?'selected':''}>${C.esc(p.name+' · '+p.server)}</option>`).join('')}</select>`:''}
+      <div class="workspace-tabs" role="group" aria-label="Forum Workspace">${settings.binderEnabled?`<button class="btn secondary" data-nav-act="binder" aria-pressed="${!navMode&&!extraPane}">Биндер</button>`:''}${settings.navigationEnabled?`<button class="btn secondary" data-nav-act="navigation" aria-pressed="${navMode&&!extraPane}">Навигация</button>`:''}<button class="btn secondary" data-nav-act="context" aria-pressed="${extraPane==='context'}">Тема</button><button class="btn secondary" data-nav-act="design" aria-pressed="${extraPane==='design'}">Дизайн</button>${settings.punishmentEnabled!==false?`<button class="btn secondary" data-nav-act="punishments" aria-pressed="${extraPane==='punishments'}">Наказания</button>`:''}<button class="btn secondary" data-nav-act="moderation" aria-pressed="${extraPane==='moderation'}">Модерация</button></div>${forumProfiles.length>1?`<label class="sub" for="rpn-nav-profile">Профиль форума</label><select class="field" id="rpn-nav-profile">${forumProfiles.map(p=>`<option value="${C.esc(p.id)}" ${p.id===profile?.id?'selected':''}>${C.esc(p.name+' · '+p.server)}</option>`).join('')}</select>`:''}
       <div id="rpn-nav-panel" ${navMode&&!extraPane?'':'hidden'}><label class="sub" for="rpn-nav-search">Навигация и быстрый поиск</label><input class="field" id="rpn-nav-search" type="search" maxlength="200" placeholder="Команда, тема, шаблон…" autocomplete="off"><div id="rpn-nav-content"></div></div>
-      <div id="rpn-punishment-panel" ${extraPane==='punishments'?'':'hidden'}></div>
+      <div class="section" ${extraPane==='moderation'?'':'hidden'}>${extraPane==='moderation'?moderationPanel():''}</div><div id="rpn-punishment-panel" ${extraPane==='punishments'?'':'hidden'}></div>
       <div id="rpn-binder-panel" ${navMode||extraPane||!settings.binderEnabled?'hidden':''}><label class="sub" for="rpn-search">Быстрый ответ</label><input class="field" id="rpn-search" type="search" autocomplete="off" placeholder="Поиск по шаблонам"><div class="actions"><button class="btn secondary" data-filter="all">Все</button><button class="btn secondary" data-filter="favorite">Избранное</button><button class="btn secondary" data-filter="recent">Недавние</button><button class="btn secondary" data-act="last">Последний</button></div><label class="sub" for="rpn-category">Папка</label><select class="field" id="rpn-category"><option value="">Все папки</option>${[...new Set(templates.map(t=>t.category).filter(Boolean).flatMap(c=>c.split('/').map((_,i,a)=>a.slice(0,i+1).join('/'))))].sort().map(c=>`<option value="${C.esc(c)}">${C.esc(c)}</option>`).join('')}</select>
       <div class="bar"><input class="field" id="rpn-nickname" placeholder="{{nickname}} (необязательно)" maxlength="200" style="width:50%;margin:3px 0"><input class="field" id="rpn-reason" placeholder="{{reason}}" maxlength="200" style="width:50%;margin:3px 0"></div>
       <div class="bar"><label class="sub" for="rpn-editor">Редактор</label><select class="field" id="rpn-editor" aria-label="Редактор ответа"></select></div><label class="sub" for="rpn-mode">Вставка</label><select class="field" id="rpn-mode"><option value="cursor">В курсор / вместо выделения</option><option value="start">В начало</option><option value="end">В конец</option></select>
       <div id="rpn-variable-form"></div><div id="rpn-template-list"></div>
       </div><div ${navMode||extraPane?'hidden':''} class="section"><div class="bar"><b>Пользовательские ссылки</b><span class="sub">${customLinks.filter(x=>x.profileId==='*'||x.profileId===profile?.id).length}</span></div><div class="actions">${(settings.navigationEnabled?XF.selectNavigation(customLinks,profile?.id,context()?.host,'panel').filter(x=>x.kind!=='bookmark'):[]).slice(0,15).map(x=>`<button class="btn secondary" data-link="${C.esc(x.id)}">${C.esc(x.title)}</button>`).join('')||'<span class="sub">Добавьте ссылки в рабочем пространстве.</span>'}</div></div>
       <div class="section" ${extraPane==='design'?'':'hidden'}><div class="bar"><b>Оформление и чтение</b><button class="btn secondary" data-act="customization">Настроить ↗</button></div><div id="rpn-reading" class="actions"></div></div><div class="section" ${extraPane==='context'?'':'hidden'}><b>${C.esc(context()?.title||'Текущая страница')}</b><p class="sub">${C.esc(context()?.section||context()?.kind||'')}</p><div class="actions">${settings.navigationEnabled?'<button class="btn secondary" data-nav-act="context-bookmark">В закладки</button><button class="btn secondary" data-nav-act="context-copy-url">Копировать ссылку</button>':''}</div></div><div class="section" ${extraPane==='context'?'':'hidden'}><div class="bar"><b>Публичный профиль XenForo</b></div>${publicMemberCard()}${XF.memberProfile(document,location.href)?'<button class="btn secondary" data-act="save-member">Сохранить карточку</button>':''}</div>
-      <div class="section" ${extraPane==='context'?'':'hidden'}><div class="bar"><b>Управление темой</b><span class="sub">Только штатные функции форума</span></div><div class="actions"><button class="btn secondary" data-act="close">Закрыть / открыть</button><button class="btn secondary" data-act="move">Переместить</button></div></div>
+      <div class="section" ${extraPane==='context'?'':'hidden'}><div class="bar"><b>Управление темой</b><span class="sub">Только штатные функции форума</span></div><div class="actions"><button class="btn secondary" data-act="show-moderation">Открыть панель модерации</button></div></div>
       <div class="section" ${extraPane==='context'?'':'hidden'}><div class="bar"><b>Жалобы и доказательства</b></div>${currentCase?`<p class="sub">${C.esc(currentCase.title)} · ${C.esc(({new:'Новая','in-progress':'На рассмотрении',waiting:'Ожидание',done:'Завершена'})[currentCase.status]||'')}</p>${currentCase.moderationStatus?`<p class="sub">Нарушения: ${C.esc(currentCase.violations)} · ${C.esc(currentCase.moderationStatus)}</p>`:''}${currentCase.deadline?`<p class="sub">Срок: ${C.esc(new Date(currentCase.deadline).toLocaleString('ru-RU'))}</p>`:''}`:'<p class="sub">Нет сохранённой жалобы для этой темы.</p>'}<div class="actions"><button class="btn" data-act="track">Отслеживать текущую тему</button><button class="btn secondary" data-act="complaints">Все жалобы ↗</button>${currentCase?'<button class="btn secondary" data-act="moderation">Рассмотрение ↗</button>':''}</div></div><div class="actions"><button class="btn secondary" data-act="workspace">Все шаблоны ↗</button><button class="btn secondary" data-act="hide">Скрыть</button></div><div class="msg" role="status" aria-live="polite"></div>`);
     for(const key of ['search','nickname','reason'])panel.querySelector('#rpn-'+key).value=previous[key];
     panel.querySelector('#rpn-mode').value=insertionMode;panel.querySelector('#rpn-category').value=binderCategory;
@@ -260,7 +265,7 @@
     const a=ev.target.closest('a[data-nav-link]');if(a&&enabled&&settings.navigationEnabled){const item=customLinks.find(x=>x.id===a.dataset.navLink);if(item?.kind==='bookmark')void navAction('opened',{id:item.id}).catch(()=>{});return;}
     const b = ev.target.closest('button'); if (!b || !enabled) return;
     if(b.dataset.navAct||b.dataset.navCommand||b.dataset.navResult!==undefined){
-      const act=b.dataset.navAct;if(act==='punishments'){showPunishments();return;}if(['binder','context','design'].includes(act)){if(act==='binder'&&!settings.binderEnabled)return;if(pending&&!confirm('Закрыть незаполненный шаблон?'))return;extraPane=act==='binder'?'':act;navMode=false;draw();return;}if(!settings.navigationEnabled)return;
+      const act=b.dataset.navAct;if(act==='punishments'){showPunishments();return;}if(['binder','context','design','moderation'].includes(act)){if(act==='binder'&&!settings.binderEnabled)return;if(pending&&!confirm('Закрыть незаполненный шаблон?'))return;extraPane=act==='binder'?'':act;navMode=false;draw();return;}if(!settings.navigationEnabled)return;
       if(act==='navigation'){showNavigation();return;}
       if(act==='bookmark'||act==='context-bookmark'){void navAction('bookmark',{title:context()?.title}).then(navError).then(async()=>{await readStorage();notify('Страница сохранена в закладках');}).catch(e=>notify(e.message));return;}
       if(act==='copy-url'||act==='context-copy-url'){void navigator.clipboard.writeText(location.href).then(()=>notify('Ссылка скопирована')).catch(e=>notify(e.message));return;}
@@ -298,7 +303,10 @@
     if(b.dataset.act==='moderation'){void api.runtime.sendMessage({type:'RP_NEXUS_OPEN_WORKSPACE',view:'calculator'});return;}
     if (b.dataset.act === 'complaints') { void api.runtime.sendMessage({type:'RP_NEXUS_OPEN_WORKSPACE',view:'complaints'}); return; }
     if (b.dataset.act === 'hide') { expanded = false; draw(); return; }
-    if (['close', 'move'].includes(b.dataset.act)) void openNative(b.dataset.act);
+    if(b.dataset.act==='show-moderation'){extraPane='moderation';navMode=false;draw();return;}
+    if(b.dataset.act==='discover-native'){void discoverNative();return;}
+    if(b.dataset.act==='case-registry'){void api.runtime.sendMessage({type:'RP_NEXUS_OPEN_WORKSPACE',view:'registry'});return;}
+    if(Object.hasOwn(XF.MODERATION_ACTIONS,b.dataset.act))void openNative(b.dataset.act);
   });
   function shortcut(ev) {
     if(!enabled)return;
