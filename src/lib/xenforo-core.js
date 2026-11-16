@@ -99,5 +99,21 @@
     }
     return null;
   }
-  globalThis.MTXenForo = Object.freeze({FORUMS,PREFIX,LIMIT,BOOKMARK_LIMIT,newLinkId,selectNavigation,pageUrl,domain,safeLink,validateLink,validateLinks,matchingProfile,identify,memberProfile,moderationAction});
+  // A missing reply form is not evidence of a locked thread (guest/no permission).
+  // Only explicit visible lock markers or an unambiguous native thread control count.
+  function threadState(doc,href){
+    if(!identify(href,doc)?.thread)return 'unknown';
+    const marker=Array.from(doc.querySelectorAll('.blockStatus-message--locked')).find(n=>!n.closest?.('[hidden],[aria-hidden="true"]')&&(!n.getClientRects||n.getClientRects().length));
+    if(marker)return 'closed';
+    const control=moderationAction(doc,href,'close');if(!control)return 'unknown';
+    const raw=control.getAttribute('href')||control.getAttribute('data-href')||'';
+    try{const u=new URL(raw,href);const current=new URL(href);const key=x=>x.pathname.match(/\/threads\/([^/]+)(?:\/|$)/i)?.[1]?.match(/(?:^|\.)(\d+)$/)?.[1];
+      if(u.origin===current.origin&&key(u)&&key(u)===key(current)){
+        // lock/unlock and close/open controls name the requested next state.
+        if(/\/(?:unlock|open)\/?$/i.test(u.pathname))return 'closed';
+        if(/\/(?:lock|close)\/?$/i.test(u.pathname))return 'open';
+      }
+    }catch{}return 'unknown';
+  }
+  globalThis.MTXenForo = Object.freeze({FORUMS,PREFIX,LIMIT,BOOKMARK_LIMIT,newLinkId,selectNavigation,pageUrl,domain,safeLink,validateLink,validateLinks,matchingProfile,identify,memberProfile,moderationAction,threadState});
 })();

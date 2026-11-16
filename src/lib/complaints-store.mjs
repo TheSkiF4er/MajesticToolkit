@@ -4,7 +4,7 @@ import {loadState} from './state.mjs';
 import {getActiveProfile} from './model.mjs';
 import {listRules} from './rules-store.mjs';
 import {listTemplates} from './forum-store.mjs';
-import {assertCaseScope,saveModerationRecord,prepareDecision} from './moderation-core.mjs';
+import {assertCaseScope,saveModerationRecord,prepareDecision,assertDecisionReady} from './moderation-core.mjs';
 const C = globalThis.RPNComplaints;
 export const CASE_PREFIX = C.PREFIX;
 let serial = Promise.resolve();
@@ -56,23 +56,25 @@ export function removeComplaintEvidence(id, evidenceId) {
 // Serialized with evidence and status mutations to avoid lost workflow events.
 export function mutateCaseWorkflow(id,action,payload={}) {
   return enqueue(async()=>{
-    const updated=C.workflowAction(await getCase(id),action,payload);
+    const current=await getCase(id);
+    if(action==='next'&&current.workflow.stage==='decision'&&current.moderation){const profile=getActiveProfile(await loadState());if(current.moderation.status!=='reviewed')throw Error('Сначала подтвердите расчёт');if(assertDecisionReady(current,profile,await listRules()).result.players.some(x=>x.unresolved))throw Error('Расчёт содержит неоднозначности');}
+    const updated=C.workflowAction(current,action,payload);
     await api.storage.local.set({[CASE_PREFIX+id]:updated});
     return updated;
   });
 }
 export function removeComplaint(id) { return enqueue(async () => { await getCase(id); await api.storage.local.remove(CASE_PREFIX + id); }); }
-export function observeThread(url, postId, profileId = null) {
+export function observeThread(url, postId, profileId = null, forumState = 'unknown') {
   return enqueue(async () => {
     const key = C.threadKey(url);
     const cases = (await listCases()).filter(c => c.threadKey === key && c.watching && (!profileId || c.profileId===profileId));
     const changed = [];
     for (const c of cases) {
-      const result = C.observeCase(c, postId);
+      const result = C.observeCase(c, postId, undefined, forumState);
       const samePost=result.item.lastSeenPostId===c.lastSeenPostId;
       const lastCheck=c.lastCheckedAt?Date.parse(c.lastCheckedAt):0;
       // Suppress redundant full-record writes during repeated scans of an unchanged thread.
-      if(result.changed || !samePost || Date.now()-lastCheck>=4*60000)await api.storage.local.set({ [CASE_PREFIX + c.id]: result.item });
+      if(result.changed || !samePost || result.item.forumState.state!==c.forumState.state || Date.now()-lastCheck>=4*60000)await api.storage.local.set({ [CASE_PREFIX + c.id]: result.item });
       if (result.changed) changed.push(result.item);
     }
     return changed;
@@ -149,5 +151,19 @@ export function mutateModeration(id,action,input={}){
   const active=getActiveProfile(await loadState());assertCaseScope(next,active);
   if(active.id!==profile.id||active.server!==profile.server||active.project!==profile.project)throw Error('Активный профиль изменился');
   await api.storage.local.set({[CASE_PREFIX+id]:next});return next;
+ });
+}
+
+// Validate every target before a single storage write; no partial batch on a validation error.
+export function mutateComplaintQueue(profileId,ids,operation,input={}){
+ return enqueue(async()=>{
+  if(!Array.isArray(ids)||!ids.length||ids.length>100||new Set(ids).size!==ids.length)throw Error('Выберите от 1 до 100 уникальных жалоб');
+  const profile=getActiveProfile(await loadState());if(profile.id!==profileId)throw Error('Активный профиль изменился');
+  const items=await Promise.all(ids.map(getCase));
+  for(const c of items){if(c.profileId!==profileId)throw Error('Жалоба другого профиля');const host=profile.project==='majestic'?'forum.majestic-rp.ru':profile.project==='russia-online'?'forum.russia.online':null;if(!host||new URL(c.url).hostname!==host)throw Error('Жалоба другого проекта');if(c.moderation)assertCaseScope(c,profile);}
+  const rules=operation==='finish'?await listRules():[];
+  const next=items.map(c=>{if(operation==='finish'){if(input.confirm!==true||c.workflow.stage!=='decision')throw Error('Каждая жалоба должна быть на этапе решения');if(c.moderation){if(c.moderation.status!=='reviewed')throw Error('Сначала подтвердите расчёт');if(assertDecisionReady(c,profile,rules).result.players.some(x=>x.unresolved))throw Error('Расчёт содержит неоднозначности');}return C.workflowAction(c,'next',{confirm:true});}if(operation==='triage'){const patch=Object.fromEntries(Object.entries(input).filter(([k])=>['priority','category','section','assignee','tags'].includes(k)));return C.updateCase(c,{triage:patch,...(typeof input.watching==='boolean'?{watching:input.watching}:{})});}return C.triageAction(c,operation,input);});
+  const active=getActiveProfile(await loadState());if(active.id!==profileId||active.project!==profile.project||active.server!==profile.server)throw Error('Активный профиль изменился');
+  await api.storage.local.set(Object.fromEntries(next.map(c=>[CASE_PREFIX+c.id,c])));return next;
  });
 }

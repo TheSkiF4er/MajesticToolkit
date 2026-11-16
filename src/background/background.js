@@ -307,7 +307,7 @@ api.runtime.onMessage.addListener((message,sender,sendResponse) => {
       if (core.threadKey(message.url) !== core.threadKey(sender.url)) throw Error('Тема не совпадает со страницей');
       const saved=(await api.storage.local.get('rpNexusStateV1')).rpNexusStateV1;
       const profile=matchingForumProfile(saved,sender.url,globalThis.MTXenForo);
-      const changes = await store.observeThread(message.url,message.postId,profile.id);
+      const changes = await store.observeThread(message.url,message.postId,profile.id,message.forumState??'unknown');
       for (const item of changes) await notifyChange(item);
       return changes.length;
     }
@@ -323,6 +323,7 @@ api.runtime.onMessage.addListener((message,sender,sendResponse) => {
     if (message.type === 'RP_NEXUS_CASE_MUTATE') {
       if (!isTrustedExtension) throw Error('Недоверенный источник');
       switch(message.action) {
+        case 'queue': return store.mutateComplaintQueue(message.profileId,message.ids,message.operation,message.input);
         case 'create': return store.createComplaint(message.input);
         case 'update': return store.editComplaint(message.id,message.patch);
         case 'delete': return store.removeComplaint(message.id);

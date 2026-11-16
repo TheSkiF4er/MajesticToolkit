@@ -357,7 +357,7 @@
   }
   async function scanThread() {
     if (!enabled || !threadPage()) return false;
-    const response = await api.runtime.sendMessage({type:'RP_NEXUS_THREAD_OBSERVED',url:location.href,postId:findLastPostId()});
+    const response = await api.runtime.sendMessage({type:'RP_NEXUS_THREAD_OBSERVED',url:location.href,postId:findLastPostId(),forumState:globalThis.MTXenForo.threadState(document,location.href)});
     return Boolean(response?.ok);
   }
   let lastScan=0,delayedScan=null,lastObserved=null;

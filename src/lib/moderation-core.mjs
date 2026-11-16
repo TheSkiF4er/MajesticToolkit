@@ -58,5 +58,5 @@ export function prepareDecision(c,p,rows,template,supplied={}){
 export function assertDecisionReady(c,p,rows){
  if(!c.moderation)return;
  if(c.moderation.status==='draft'||!c.moderation.history[0]||c.moderation.decisionSnapshotId!==c.moderation.history[0].id)throw Error('Подготовьте черновик решения для актуального расчёта');
- decisionContext(c,p,rows);
+ return decisionContext(c,p,rows);
 }

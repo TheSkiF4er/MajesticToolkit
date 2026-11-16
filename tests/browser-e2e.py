@@ -540,7 +540,7 @@ async def experience_workspace(browser):
       const data=seed||initial;window.__data=data;window.__tabs=[];const listeners=[];
       const notify=changes=>{queueMicrotask(()=>listeners.forEach(fn=>fn(changes,'local')));};
       const event={addListener(){},removeListener(){}};
-      window.browser={runtime:{id:'fixture',getURL:path=>'http://localhost:8765/'+path,onMessage:event,async sendMessage(m){if(m.type==='RP_NEXUS_CASE_MUTATE'&&m.action==='moderation'){try{const s=await import('mt:lib/complaints-store.mjs');return {ok:true,value:await s.mutateModeration(m.id,m.operation,m.input)};}catch(e){return {ok:false,error:e.message};}}return {ok:true,value:[]};}},permissions:{async contains(){return false;},onAdded:event,onRemoved:event},tabs:{async create(x){window.__tabs.push(x);return x;},async query(){return[];}},storage:{onChanged:{addListener(fn){listeners.push(fn);}},local:{async get(k){if(k===null)return structuredClone(data);if(Array.isArray(k))return Object.fromEntries(k.map(x=>[x,data[x]]));if(typeof k==='object')return {...k,...Object.fromEntries(Object.keys(k).filter(x=>x in data).map(x=>[x,data[x]]))};return {[k]:data[k]};},async set(x){const changes={};for(const [k,v] of Object.entries(x)){changes[k]={oldValue:data[k],newValue:v};data[k]=structuredClone(v);}notify(changes);},async remove(keys){const changes={};for(const k of Array.isArray(keys)?keys:[keys]){changes[k]={oldValue:data[k]};delete data[k];}notify(changes);}}}};
+      window.browser={runtime:{id:'fixture',getURL:path=>'http://localhost:8765/'+path,onMessage:event,async sendMessage(m){if(m.type==='RP_NEXUS_CASE_MUTATE'){try{const s=await import('mt:lib/complaints-store.mjs');const value=m.action==='moderation'?await s.mutateModeration(m.id,m.operation,m.input):m.action==='queue'?await s.mutateComplaintQueue(m.profileId,m.ids,m.operation,m.input):m.action==='create'?await s.createComplaint(m.input):m.action==='update'?await s.editComplaint(m.id,m.patch):m.action==='workflow'?await s.mutateCaseWorkflow(m.id,m.workflowAction,m.payload):null;return {ok:true,value};}catch(e){return {ok:false,error:e.message};}}return {ok:true,value:[]};}},permissions:{async contains(){return false;},onAdded:event,onRemoved:event},tabs:{async create(x){window.__tabs.push(x);return x;},async query(){return[];}},storage:{onChanged:{addListener(fn){listeners.push(fn);}},local:{async get(k){if(k===null)return structuredClone(data);if(Array.isArray(k))return Object.fromEntries(k.map(x=>[x,data[x]]));if(typeof k==='object')return {...k,...Object.fromEntries(Object.keys(k).filter(x=>x in data).map(x=>[x,data[x]]))};return {[k]:data[k]};},async set(x){const changes={};for(const [k,v] of Object.entries(x)){changes[k]={oldValue:data[k],newValue:v};data[k]=structuredClone(v);}notify(changes);},async remove(keys){const changes={};for(const k of Array.isArray(keys)?keys:[keys]){changes[k]={oldValue:data[k]};delete data[k];}notify(changes);}}}};
       window.confirm=()=>true;
       if(!crypto.randomUUID)crypto.randomUUID=()=>Array.from(crypto.getRandomValues(new Uint8Array(16)),x=>x.toString(16).padStart(2,'0')).join('');
       if(!crypto.subtle)Object.defineProperty(crypto,'subtle',{value:{async digest(algorithm,bytes){if(algorithm!=='SHA-256')throw Error('Unexpected algorithm');return Uint8Array.from(await window.__fixtureSha256(Array.from(new Uint8Array(bytes)))).buffer;}}});
@@ -719,7 +719,45 @@ async def experience_workspace(browser):
     # Moderation Workspace: actual case store, calculator, evidence and Binder decision.
     case_id=await page.evaluate("""async()=>{const s=await import('mt:lib/complaints-store.mjs'),f=await import('mt:lib/forum-store.mjs');const c=await s.createComplaint({profileId:'profile_majest',title:'QA complaint',url:'https://forum.majestic-rp.ru/threads/test.42/'});await s.addComplaintEvidence(c.id,{title:'QA video',url:'https://www.youtube.com/watch?v=test',seconds:42});await f.upsertTemplate({label:'QA decision',text:'Игрок {{player_id}}: {{rule_code}} — {{punishment}}. {{signature}}',format:'plain',category:'QA',profileId:'profile_majest',shortcut:0});return c.id;}""")
     await page.locator('.nav [data-view=complaints]').click()
-    await page.get_by_role('button',name='Нарушения и наказания ↗').click()
+    # Complaint Manager 2.0: real form, queue, saved view and batch mutation.
+    await page.get_by_role('button',name='+ Добавить жалобу').click()
+    dlg=page.locator('#complaint-dialog')
+    await dlg.locator('[name=title]').fill('QA urgent case')
+    await dlg.locator('[name=url]').fill('https://forum.majestic-rp.ru/threads/queue.43/')
+    await dlg.locator('[name=priority]').select_option('urgent')
+    await dlg.locator('[name=category]').fill('STATE')
+    await dlg.locator('[name=assignee]').fill('QA moderator')
+    await dlg.locator('[name=tags]').fill('QA, Суд')
+    await dlg.get_by_role('button',name='Сохранить',exact=True).click()
+    await page.wait_for_function("Object.values(window.__data).some(x=>x?.title==='QA urgent case'&&x?.triage?.priority==='urgent')")
+    await page.locator('#case-priority-filter').select_option('urgent')
+    assert await page.locator('[data-case-card]').count()==1
+    await page.evaluate("window.prompt=()=> 'QA saved view'")
+    await page.get_by_role('button',name='Сохранить фильтр').click()
+    await page.wait_for_function("window.__data.rpNexusStateV1.profiles[0].complaintViews?.length===1")
+    await page.get_by_role('button',name='Сбросить',exact=True).click()
+    assert await page.locator('[data-case-card]').count()==2
+    await page.locator('#case-saved-view').select_option(label='QA saved view')
+    assert await page.locator('[data-case-card]').count()==1
+    await page.locator('[data-case-select]').check()
+    assert await page.locator('#case-selection-count').inner_text()=='1'
+    await page.locator('[data-case-action=batch]').click()
+    batch=page.locator('#case-batch-dialog')
+    await batch.locator('[name=operation]').select_option('priority')
+    await batch.locator('[name=priority]').select_option('high')
+    await batch.get_by_role('button',name='Применить',exact=True).click()
+    await page.wait_for_function("Object.values(window.__data).some(x=>x?.title==='QA urgent case'&&x?.triage?.priority==='high')")
+    await page.get_by_role('button',name='Сбросить',exact=True).click()
+    urgent=page.locator('[data-case-card]').filter(has_text='QA urgent case')
+    await page.evaluate("window.prompt=()=> 'Ожидаем видео'")
+    await urgent.get_by_role('button',name='Ожидание',exact=True).click()
+    await page.wait_for_function("Object.values(window.__data).some(x=>x?.title==='QA urgent case'&&x?.status==='waiting')")
+    await page.locator('[data-case-action=queue-filter][data-queue=waiting]').click()
+    assert await page.locator('[data-case-card]').count()==1
+    await page.get_by_role('button',name='Продолжить',exact=True).click()
+    await page.wait_for_function("Object.values(window.__data).some(x=>x?.title==='QA urgent case'&&x?.status==='in-progress')")
+    await page.get_by_role('button',name='Сбросить',exact=True).click()
+    await page.locator('[data-case-card]').filter(has_text='QA complaint').get_by_role('button',name='Нарушения и наказания ↗').click()
     assert await page.evaluate("id=>window.__tabs.at(-1).url.includes('caseId='+id)",case_id)
     await page.locator('.nav [data-view=rules]').click()
     await page.locator('[data-rules-tab=calculator]').click()
@@ -746,7 +784,7 @@ async def experience_workspace(browser):
     assert await page.evaluate('document.documentElement.scrollWidth<=window.innerWidth+1')
     assert not errors,errors
     await context.close()
-    return 5
+    return 6
 
 
 async def main():

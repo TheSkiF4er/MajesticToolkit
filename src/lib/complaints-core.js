@@ -3,6 +3,9 @@
   'use strict';
   const PREFIX = 'rpnComplaintV3:';
   const MAX_CASES = 500;
+  const PRIORITIES = Object.freeze(['low','normal','high','urgent']);
+  const PRIORITY_LABELS = Object.freeze({low:'Низкий',normal:'Обычный',high:'Высокий',urgent:'Срочный'});
+  const QUEUE_STATES = Object.freeze(['active','waiting','recheck','referred','archived']);
   const MAX_EVIDENCE = 60;
   const STATUS = Object.freeze(['new', 'in-progress', 'waiting', 'done']);
   const ALLOWED_HOSTS = Object.freeze(['forum.majestic-rp.ru', 'forum.russia.online']);
@@ -48,9 +51,13 @@
       const i=WORKFLOW_STAGES.indexOf(w.stage),index=i+(action==='next'?1:-1);
       if(index<0||index>=WORKFLOW_STAGES.length)throw Error('Дальнейший переход невозможен');
       if(action==='next'&&!w.checks[w.stage])throw Error('Сначала выполните и отметьте проверку текущего этапа');
+      if(action==='next'&&index===4&&item.status==='waiting')throw Error('Сначала возобновите рассмотрение');
+      if(action==='next'&&index===4&&!Object.values(w.checks).every(Boolean))throw Error('Завершите все проверки');
       if(action==='next'&&index===4&&!item.draft.trim())throw Error('Перед завершением сохраните черновик решения');
       if(action==='next'&&index===4&&payload.confirm!==true)throw Error('Завершение требует явного подтверждения');
       next=event({...w,stage:WORKFLOW_STAGES[index]},'step',`Этап: ${WORKFLOW_LABELS[WORKFLOW_STAGES[index]]}`);
+      if(index===4)patch.triage={...item.triage,queue:'active'};
+      if(item.status==='done'&&index<4){patch.triage={...item.triage,queue:'recheck'};next={...next,checks:{...next.checks,decision:false}};if(item.moderation)patch.moderation={...item.moderation,status:'draft',revision:uuid(),decisionSnapshotId:null,updatedAt:new Date().toISOString()};}
       patch.status=index===4?'done':(item.status==='done'?'in-progress':item.status==='new'?'in-progress':item.status);
     }else if(action==='decision'){
       if(!Object.hasOwn(DECISION_KINDS,payload.kind))throw Error('Неизвестный тип решения');
@@ -147,6 +154,36 @@
     const out={version:1,revision:identifier(value.revision),project:value.project,server:str(value.server,'Сервер',90,true),players,policy,status:value.status,history,note:str(value.note??'','Комментарий',4000,true),draftFormat:value.draftFormat==='bbcode'?'bbcode':'plain',decisionSnapshotId:value.decisionSnapshotId==null?null:identifier(value.decisionSnapshotId),updatedAt:date(value.updatedAt,'Дата рассмотрения')};
     if(JSON.stringify(out).length>300000)throw Error('Рассмотрение превышает допустимый размер');return out;
   }
+  function cleanTriage(value) {
+    if(value===undefined) value={};
+    if(!value||typeof value!=='object'||Array.isArray(value))throw Error('Некорректные настройки очереди');
+    const priority=value.priority??'normal',queue=value.queue??'active';
+    if(!PRIORITIES.includes(priority)||!QUEUE_STATES.includes(queue))throw Error('Неизвестный приоритет или очередь');
+    const tags=value.tags??[];
+    if(!Array.isArray(tags)||tags.length>20)throw Error('До 20 тегов');
+    return {priority,queue,category:str(value.category??'','Категория',80,true),section:str(value.section??'','Раздел',180,true),assignee:str(value.assignee??'','Ответственный',100,true),tags:[...new Set(tags.map(t=>str(t,'Тег',40)))],reason:str(value.reason??'','Причина',500,true)};
+  }
+  function triageAction(old, action, payload={}) {
+    const c=cleanCase(old), t=c.triage;
+    if(action==='archive'&&c.status!=='done')throw Error('Архивировать можно только завершённую жалобу');
+    if(action==='reopen'&&c.status!=='done')throw Error('Жалоба не завершена');
+    if(action==='restore'&&t.queue!=='archived')throw Error('Жалоба не в архиве');
+    if(['wait','resume','refer','recheck'].includes(action)&&c.status==='done')throw Error('Сначала откройте жалобу заново');
+    const transitions={archive:['archived','done'],restore:['active',c.status],reopen:['recheck','in-progress'],wait:['waiting','waiting'],resume:['active','in-progress'],refer:['referred','waiting'],recheck:['recheck','in-progress']};
+    if(!Object.hasOwn(transitions,action))throw Error('Неизвестное действие очереди');
+    const [queue,status]=transitions[action], reason=str(payload.reason??'','Причина',500,true);
+    if(['reopen','wait','refer','recheck'].includes(action)&&!reason)throw Error('Укажите причину');
+    let w=c.workflow;
+    if(action==='reopen'||action==='recheck')w={...w,stage:w.checks.intake?'facts':'intake',checks:{...w.checks,facts:false,evidence:false,decision:false}};
+    w=event(w,'note',`Очередь: ${ {archive:'архив',restore:'восстановлена',reopen:'повторное открытие',wait:'ожидание',resume:'возобновлена',refer:'передача',recheck:'повторная проверка'}[action]}${reason?' — '+reason:''}`.slice(0,500));
+    const moderation=(action==='reopen'||action==='recheck')&&c.moderation?{...c.moderation,status:'draft',revision:uuid(),decisionSnapshotId:null,updatedAt:new Date().toISOString()}:c.moderation;
+    return cleanCase({...c,status,triage:{...t,queue,reason},moderation,workflow:w,updatedAt:new Date().toISOString()});
+  }
+  function cleanForumState(value){
+    if(value===undefined)return {state:'unknown',observedAt:null};
+    if(!value||typeof value!=='object'||!['unknown','open','closed'].includes(value.state))throw Error('Некорректное состояние темы');
+    const observedAt=date(value.observedAt??null,'Дата наблюдения',true);if(value.state!=='unknown'&&!observedAt)throw Error('Нет времени наблюдения');return {state:value.state,observedAt};
+  }
   function cleanCase(data) {
     if (!data || typeof data !== 'object' || Array.isArray(data)) throw Error('Некорректная жалоба');
     if (!/^[\w-]{8,120}$/.test(data.id)) throw Error('Некорректный ID жалобы');
@@ -158,6 +195,8 @@
     if (new Set(evidence.map(e => e.id)).size !== evidence.length) throw Error('Дублирование доказательств');
     if (typeof data.watching !== 'boolean' || typeof data.unread !== 'boolean') throw Error('Некорректные настройки жалобы');
     if (!(data.lastSeenPostId === null || (Number.isSafeInteger(data.lastSeenPostId) && data.lastSeenPostId >= 0))) throw Error('Некорректный ID сообщения');
+    const triage=cleanTriage(data.triage??{queue:data.status==='waiting'?'waiting':'active'});
+    if(triage.queue==='archived'&&data.status!=='done'||triage.queue==='referred'&&data.status!=='waiting'||triage.queue==='waiting'&&data.status!=='waiting'||triage.queue==='recheck'&&data.status==='done')throw Error('Очередь не соответствует локальному статусу');
     return {
       id: str(data.id, 'ID жалобы', 120), profileId: str(data.profileId, 'Профиль', 128),
       url: thread.url, threadKey: thread.key,
@@ -166,27 +205,29 @@
       deadline: date(data.deadline, 'Срок', true), watching: data.watching,
       lastSeenPostId: data.lastSeenPostId,
       lastCheckedAt: date(data.lastCheckedAt, 'Дата проверки', true),
-      unread: data.unread, evidence, ...(data.moderation==null?{}:{moderation:cleanModeration(data.moderation,evidence)}), workflow:cleanWorkflow(data.workflow,data.status),
+      unread: data.unread, evidence, triage, forumState:cleanForumState(data.forumState), ...(data.moderation==null?{}:{moderation:cleanModeration(data.moderation,evidence)}), workflow:cleanWorkflow(data.workflow,data.status),
       createdAt: date(data.createdAt, 'Дата создания'), updatedAt: date(data.updatedAt, 'Дата изменения')
     };
   }
   function createCase(data) {
     if(data.status==='done')throw Error('Создание завершённой жалобы требует процесса рассмотрения');
     const now = new Date().toISOString();
-    return cleanCase({ id: uuid(), profileId: data.profileId, title: data.title, url: data.url, status: data.status || 'new', note: data.note ?? '', draft: data.draft ?? '', deadline: data.deadline || null, watching: data.watching ?? true, lastSeenPostId: null, lastCheckedAt: null, unread: false, evidence: [], createdAt: now, updatedAt: now });
+    return cleanCase({ id: uuid(), profileId: data.profileId, title: data.title, url: data.url, status: data.status || 'new', note: data.note ?? '', draft: data.draft ?? '', deadline: data.deadline || null, watching: data.watching ?? true, lastSeenPostId: null, lastCheckedAt: null, unread: false, evidence: [], triage:cleanTriage({...cleanTriage(data.triage),queue:data.status==='waiting'?'waiting':'active',reason:''}), createdAt: now, updatedAt: now });
   }
   function updateCase(old, fields) {
-    const allowed = ['title','status','note','draft','deadline','watching','unread'];
+    const allowed = ['title','status','note','draft','deadline','watching','unread','triage'];
     const values = Object.fromEntries(Object.entries(fields).filter(([key]) => allowed.includes(key)));
     const item=cleanCase(old);
     let flow=item.workflow;
+    if(Object.hasOwn(values,'triage')){const patch=values.triage;if(!patch||typeof patch!=='object'||Array.isArray(patch))throw Error('Некорректные настройки очереди');values.triage=cleanTriage({...item.triage,...Object.fromEntries(Object.entries(patch).filter(([k])=>['priority','category','section','assignee','tags'].includes(k)))});if(JSON.stringify(values.triage)!==JSON.stringify(item.triage))flow=event(flow,'note','Обновлены приоритет, категория, ответственный или теги');}
+
     if(Object.hasOwn(values,'status')&&values.status!==item.status){
       flow=event(flow,'status',`Статус: ${values.status}`);
       if(values.status==='done' && item.workflow.stage!=='closed')throw Error('Для завершения пройдите этапы процесса и подтвердите решение');
-      else if(flow.stage==='closed')flow={...flow,stage:'decision'};
+      else if(flow.stage==='closed'){flow={...flow,stage:'decision',checks:{...flow.checks,decision:false}};if(item.moderation)values.moderation={...item.moderation,status:'draft',revision:uuid(),decisionSnapshotId:null,updatedAt:new Date().toISOString()};values.triage=cleanTriage({...item.triage,...values.triage,queue:values.status==='waiting'?'waiting':'recheck'});}else if(values.status==='waiting'||item.status==='waiting'){values.triage=cleanTriage({...item.triage,...values.triage,queue:values.status==='waiting'?'waiting':'active'});}
     }
     if(Object.hasOwn(values,'deadline')&&values.deadline!==item.deadline)flow=event(flow,'deadline',`Срок: ${values.deadline||'снят'}`);
-    if(Object.hasOwn(values,'draft')&&values.draft!==item.draft)flow=event(flow,'draft','Черновик изменён (без публикации)');
+    if(Object.hasOwn(values,'draft')&&values.draft!==item.draft){flow=event(item.moderation?{...flow,checks:{...flow.checks,decision:false}}:flow,'draft','Черновик изменён (без публикации)');}
     return cleanCase({ ...item, ...values,workflow:flow, updatedAt: new Date().toISOString() });
   }
   function addEvidence(old, input) {
@@ -201,14 +242,16 @@
     const moderation=item.moderation?{...item.moderation,revision:uuid(),status:'draft',updatedAt:new Date().toISOString(),players:item.moderation.players.map(p=>({...p,items:p.items.map(i=>({...i,evidenceIds:i.evidenceIds.filter(e=>e!==id)}))}))}:undefined;
     return cleanCase({ ...item, moderation, evidence: item.evidence.filter(e => e.id !== id),workflow:event(item.workflow,'evidence','Удалено доказательство'), updatedAt: new Date().toISOString() });
   }
-  function observeCase(old, postId, checkedAt = new Date().toISOString()) {
+  function observeCase(old, postId, checkedAt = new Date().toISOString(), forumState='unknown') {
     const item = cleanCase(old);
     if (!item.watching) return { item, changed: false };
     const n = postId === null ? null : Number(postId);
     if (n !== null && (!Number.isSafeInteger(n) || n < 0)) throw Error('Некорректный номер сообщения');
     const changed = n !== null && item.lastSeenPostId !== null && n > item.lastSeenPostId;
     const lastSeenPostId = n === null ? item.lastSeenPostId : Math.max(n, item.lastSeenPostId ?? 0);
-    return { item: cleanCase({ ...item, lastSeenPostId, lastCheckedAt: checkedAt, unread: item.unread || changed, updatedAt: checkedAt }), changed };
+    if(!['unknown','open','closed'].includes(forumState))throw Error('Неизвестное состояние темы');
+    const observed=forumState==='unknown'?item.forumState:{state:forumState,observedAt:checkedAt};
+    return { item: cleanCase({ ...item, forumState:observed,lastSeenPostId, lastCheckedAt: checkedAt, unread: item.unread || changed, updatedAt: checkedAt }), changed };
   }
   function timecode(seconds) {
     if (seconds === null || seconds === undefined) return '';
@@ -216,5 +259,5 @@
     if (!Number.isInteger(s) || s < 0) return '';
     return `${Math.floor(s/3600) ? Math.floor(s/3600) + ':' : ''}${String(Math.floor(s/60)%60).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
   }
-  root.RPNComplaints = Object.freeze({ PREFIX, MAX_CASES, MAX_EVIDENCE, STATUS, ALLOWED_HOSTS, VIDEO_HOSTS, cleanCase, cleanModeration, createCase, updateCase, addEvidence, removeEvidence, observeCase, canonicalThreadUrl, threadKey, cleanEvidence, videoLink, timecode, WORKFLOW_STAGES, WORKFLOW_LABELS, WORKFLOW_CHECKS, DECISION_KINDS, initialWorkflow, cleanWorkflow, workflowAction, draftDecision, deadlineTier });
+  root.RPNComplaints = Object.freeze({ PREFIX, MAX_CASES, MAX_EVIDENCE, STATUS, PRIORITIES, PRIORITY_LABELS, QUEUE_STATES, cleanTriage, triageAction, ALLOWED_HOSTS, VIDEO_HOSTS, cleanCase, cleanModeration, createCase, updateCase, addEvidence, removeEvidence, observeCase, canonicalThreadUrl, threadKey, cleanEvidence, videoLink, timecode, WORKFLOW_STAGES, WORKFLOW_LABELS, WORKFLOW_CHECKS, DECISION_KINDS, initialWorkflow, cleanWorkflow, workflowAction, draftDecision, deadlineTier });
 })(globalThis);

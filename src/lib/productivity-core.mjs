@@ -1,3 +1,4 @@
+import {caseSearchText} from './complaint-queue.mjs';
 import {currentRevision,formatSanction} from './rules-core.mjs';
 // Productivity 0.9.0: deterministic, local-only index. No browser globals or remote calls.
 export const CATEGORIES = Object.freeze({forum:'Шаблоны форума',navigation:'Навигация форума',complaints:'Жалобы',economy:'Экономика',rules:'Правила проекта',law:'Законодательство',government:'Ведомства',documents:'Документы',integrations:'Закладки',sources:'Форум и Fletcher Wiki'});
@@ -24,7 +25,7 @@ export function buildSearchRecords({templates=[],cases=[],economy=[],laws=[],gov
     item.text=clean([item.title,item.description,item.body].join(' '));out.push(item);
   };
   for(const x of templates) add('forum',x.id,x.profileId,x.label,x.category,x.text,{url:''});
-  for(const x of cases) add('complaints',x.id,x.profileId,x.title,`Статус: ${x.status||'—'} ${x.url||''}`,`${x.note||''} ${x.draft||''} ${(x.evidence||[]).map(y=>`${y.title||''} ${y.note||''}`).join(' ')}`,{url:x.url||''});
+  for(const x of cases) add('complaints',x.id,x.profileId,x.title,`Статус: ${x.status||'—'} ${x.url||''}`,caseSearchText({...x,evidence:x.evidence??[]},rules),{url:x.url||''});
   for(const x of economy) add('economy',x.id,x.profileId,x.title||x.player||'Запись',`${x.type||''} ${x.date||''} ${x.family||''}`,x.note||'');
   for(const r of rules){if(r.archived)continue;const x=currentRevision(r);add('rules',r.id,r.profileId,`${x.code} — ${x.title}`,`${x.category} · ${x.verification==='reviewed'?'Проверено пользователем':'Требует проверки'}`,`${x.text} ${x.aliases.join(' ')} ${x.sanctions.map(formatSanction).join(' ')} ${r.note}`,{url:x.sourceUrl});}
   for(const x of laws){
