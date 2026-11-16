@@ -1,3 +1,4 @@
+import {registryAction} from '../lib/punishment-registry-store.mjs';
 import {sectionAction,sectionView,scanSections,SECTION_KEY} from '../lib/section-monitor-store.mjs';
 import {punishmentOverlay,OVERLAY_PREFIX,overlayThread} from '../lib/punishment-overlay-store.mjs';
 import {RULES_KEY} from '../lib/rules-core.mjs';
@@ -326,6 +327,7 @@ api.runtime.onMessage.addListener((message,sender,sendResponse) => {
     if (message.type === 'RP_NEXUS_CASE_MUTATE') {
       if (!isTrustedExtension) throw Error('Недоверенный источник');
       switch(message.action) {
+        case 'registry': return registryAction(message.profileId,message.operation,message.input);
         case 'queue': return store.mutateComplaintQueue(message.profileId,message.ids,message.operation,message.input);
         case 'create': return store.createComplaint(message.input);
         case 'update': return store.editComplaint(message.id,message.patch);

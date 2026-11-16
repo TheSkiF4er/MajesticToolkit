@@ -540,7 +540,7 @@ async def experience_workspace(browser):
       const data=seed||initial;window.__data=data;window.__tabs=[];const listeners=[];
       const notify=changes=>{queueMicrotask(()=>listeners.forEach(fn=>fn(changes,'local')));};
       const event={addListener(){},removeListener(){}};
-      window.browser={runtime:{id:'fixture',getURL:path=>'http://localhost:8765/'+path,onMessage:event,async sendMessage(m){if(m.type==='MT_SECTION_MONITOR'){try{const s=await import('mt:lib/section-monitor-store.mjs');const value=m.action==='list'?await s.sectionView(m.profileId):m.action==='scan'?await s.scanSections(m.profileId,m.input?.id??null):await s.sectionAction(m.profileId,m.action,m.input);return {ok:true,value};}catch(e){return {ok:false,error:e.message};}}if(m.type==='RP_NEXUS_CASE_MUTATE'){try{const s=await import('mt:lib/complaints-store.mjs');const value=m.action==='moderation'?await s.mutateModeration(m.id,m.operation,m.input):m.action==='queue'?await s.mutateComplaintQueue(m.profileId,m.ids,m.operation,m.input):m.action==='create'?await s.createComplaint(m.input):m.action==='update'?await s.editComplaint(m.id,m.patch):m.action==='workflow'?await s.mutateCaseWorkflow(m.id,m.workflowAction,m.payload):null;return {ok:true,value};}catch(e){return {ok:false,error:e.message};}}return {ok:true,value:[]};}},permissions:{async contains(){return !!window.__sectionGranted;},onAdded:event,onRemoved:event},tabs:{async create(x){window.__tabs.push(x);return x;},async query(){return window.__sectionGranted?[{id:91,url:'https://forum.majestic-rp.ru/forums/qa.12/'}]:[];},async sendMessage(id,m){return {ok:true,rows:window.__sectionRows};}},notifications:{async create(id,value){(window.__sectionNotifications??=[]).push({id,value});}},storage:{onChanged:{addListener(fn){listeners.push(fn);}},local:{async get(k){if(k===null)return structuredClone(data);if(Array.isArray(k))return Object.fromEntries(k.map(x=>[x,data[x]]));if(typeof k==='object')return {...k,...Object.fromEntries(Object.keys(k).filter(x=>x in data).map(x=>[x,data[x]]))};return {[k]:data[k]};},async set(x){const changes={};for(const [k,v] of Object.entries(x)){changes[k]={oldValue:data[k],newValue:v};data[k]=structuredClone(v);}notify(changes);},async remove(keys){const changes={};for(const k of Array.isArray(keys)?keys:[keys]){changes[k]={oldValue:data[k]};delete data[k];}notify(changes);}}}};
+      window.browser={runtime:{id:'fixture',getURL:path=>'http://localhost:8765/'+path,onMessage:event,async sendMessage(m){if(m.type==='MT_SECTION_MONITOR'){try{const s=await import('mt:lib/section-monitor-store.mjs');const value=m.action==='list'?await s.sectionView(m.profileId):m.action==='scan'?await s.scanSections(m.profileId,m.input?.id??null):await s.sectionAction(m.profileId,m.action,m.input);return {ok:true,value};}catch(e){return {ok:false,error:e.message};}}if(m.type==='RP_NEXUS_CASE_MUTATE'){try{const s=await import('mt:lib/complaints-store.mjs');const value=m.action==='registry'?await (await import('mt:lib/punishment-registry-store.mjs')).registryAction(m.profileId,m.operation,m.input):m.action==='moderation'?await s.mutateModeration(m.id,m.operation,m.input):m.action==='queue'?await s.mutateComplaintQueue(m.profileId,m.ids,m.operation,m.input):m.action==='create'?await s.createComplaint(m.input):m.action==='update'?await s.editComplaint(m.id,m.patch):m.action==='workflow'?await s.mutateCaseWorkflow(m.id,m.workflowAction,m.payload):null;return {ok:true,value};}catch(e){return {ok:false,error:e.message};}}return {ok:true,value:[]};}},permissions:{async contains(){return !!window.__sectionGranted;},onAdded:event,onRemoved:event},tabs:{async create(x){window.__tabs.push(x);return x;},async query(){return window.__sectionGranted?[{id:91,url:'https://forum.majestic-rp.ru/forums/qa.12/'}]:[];},async sendMessage(id,m){return {ok:true,rows:window.__sectionRows};}},notifications:{async create(id,value){(window.__sectionNotifications??=[]).push({id,value});}},storage:{onChanged:{addListener(fn){listeners.push(fn);}},local:{async get(k){if(k===null)return structuredClone(data);if(Array.isArray(k))return Object.fromEntries(k.map(x=>[x,data[x]]));if(typeof k==='object')return {...k,...Object.fromEntries(Object.keys(k).filter(x=>x in data).map(x=>[x,data[x]]))};return {[k]:data[k]};},async set(x){const changes={};for(const [k,v] of Object.entries(x)){changes[k]={oldValue:data[k],newValue:v};data[k]=structuredClone(v);}notify(changes);},async remove(keys){const changes={};for(const k of Array.isArray(keys)?keys:[keys]){changes[k]={oldValue:data[k]};delete data[k];}notify(changes);}}}};
       window.confirm=()=>true;
       if(!crypto.randomUUID)crypto.randomUUID=()=>Array.from(crypto.getRandomValues(new Uint8Array(16)),x=>x.toString(16).padStart(2,'0')).join('');
       if(!crypto.subtle)Object.defineProperty(crypto,'subtle',{value:{async digest(algorithm,bytes){if(algorithm!=='SHA-256')throw Error('Unexpected algorithm');return Uint8Array.from(await window.__fixtureSha256(Array.from(new Uint8Array(bytes)))).buffer;}}});
@@ -814,8 +814,38 @@ async def experience_workspace(browser):
     await page.locator('#workspace-profile').select_option('profile_majest')
     await page.locator('#section-monitor-root').get_by_text('QA section',exact=True).wait_for()
     assert await page.evaluate('document.documentElement.scrollWidth<=window.innerWidth+1')
+    # Register a completed case through the actual stores and UI.
+    await page.evaluate("""async id=>{const s=await import('mt:lib/complaints-store.mjs');let c=await s.getCase(id);c=await s.mutateCaseWorkflow(id,'decision',{kind:'satisfied'});const m=c.moderation;c=await s.mutateModeration(id,'save',{expected:m.revision,players:m.players,policy:JSON.parse(m.policy),note:m.note,calculate:true,review:true});c=await s.mutateModeration(id,'decision',{expected:c.moderation.revision,expectedDraft:c.draft});while(c.workflow.stage!=='closed'){c=await s.mutateCaseWorkflow(id,'check',{stage:c.workflow.stage,done:true});c=await s.mutateCaseWorkflow(id,'next',{confirm:true});}}""",case_id)
+    await page.locator('.nav [data-view=rules]').click()
+    await page.locator('[data-rules-tab=registry]').click()
+    registry=page.locator('#punishment-registry')
+    await registry.locator('#registry-case').select_option(case_id)
+    await registry.get_by_role('button',name='Зарегистрировать решение').click()
+    await page.wait_for_function("window.__data.mtPunishmentRegistryV1?.records.length===1")
+    await registry.locator('[data-registry-id]').wait_for()
+    await registry.get_by_role('button',name='Зарегистрировать решение').click()
+    await registry.get_by_role('button',name='Предпросмотр',exact=True).click()
+    assert '98765' in await registry.get_by_label('Предпросмотр экспорта').input_value()
+    await registry.get_by_label('Формат',exact=True).select_option('json')
+    await registry.get_by_role('button',name='Предпросмотр',exact=True).click()
+    async with page.expect_download() as download_info:
+        await registry.get_by_role('button',name='Скачать экспорт',exact=True).click()
+    download=await download_info.value
+    assert download.suggested_filename.endswith('.json')
+    assert json.loads(Path(await download.path()).read_text())['records'][0]['players'][0]['id']=='98765'
+    exported=json.loads(await registry.get_by_label('Предпросмотр экспорта').input_value())
+    assert exported['records'][0]['players'][0]['id']=='98765'
+    await page.evaluate("window.prompt=()=> 'Ручная проверка публикации'")
+    await registry.get_by_role('button',name='Отметить публикацию').click()
+    await page.wait_for_function("window.__data.mtPunishmentRegistryV1.records[0].events.at(-1).state==='published'")
+    await page.locator('#workspace-profile').select_option('profile_russia')
+    await registry.get_by_text('Нет записей в реестре.',exact=True).wait_for()
+    await page.locator('#workspace-profile').select_option('profile_majest')
+    await registry.locator('[data-registry-id]').wait_for()
+    assert await page.evaluate('window.__data.mtPunishmentRegistryV1.records.length===1')
+    assert not errors,errors
     await context.close()
-    return 7
+    return 8
 
 
 async def main():

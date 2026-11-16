@@ -1,3 +1,4 @@
+import {REGISTRY_KEY,exportRegistryData,replaceRegistryData,validateRegistry,removeRegistryProfile} from '../lib/punishment-registry-store.mjs';
 import {mountSectionMonitor} from './section-monitor-page.mjs';
 import {SECTION_KEY,exportSectionData,replaceSectionData,validateSectionData} from '../lib/section-monitor-store.mjs';
 import {removeCalculatorProfile} from '../lib/punishment-calculator-store.mjs';
@@ -127,7 +128,7 @@ async function refreshAllModules() {
 }
 function renderPopup() {
   const p = getActiveProfile(state);
-  return `<div class="popup-shell stack ws-popup"><div class="brand"><span class="logo" aria-label="Логотип MajesticToolkit">MT</span><div><h1>MajesticToolkit</h1><p>Rules &amp; Punishments · 1.7.2</p></div></div><div class="card stack"><div class="row spread"><strong>Активный профиль</strong>${tag(projectLabel(p.project))}</div><select aria-label="Выбрать профиль" id="popup-profile">${state.profiles.map(x => `<option value="${e(x.id)}" ${x.id === state.activeProfileId ? 'selected' : ''}>${e(x.name)} · ${e(x.server)}</option>`).join('')}</select><p class="subtle">${e(p.server)}</p>${p.forumUrl ? `<button class="button secondary" data-url="${e(p.forumUrl)}">Открыть форум ↗</button>` : ''}</div><div class="row"><button class="button primary" data-action="panel">Боковая панель</button><button class="button secondary" data-action="workspace">Рабочее пространство ↗</button></div><div class="ws-popup-grid"><button class="button secondary" data-action="popup-search">Поиск</button><button class="button secondary" data-action="popup-forum">Биндер</button><button class="button secondary" data-action="popup-navigation">Навигация</button><button class="button secondary" data-action="popup-customization">Оформление</button><button class="button secondary" data-action="popup-monitor">Серверы и игроки</button><button class="button secondary" data-action="popup-complaints">Жалобы</button><button class="button secondary" data-action="popup-timers">Таймеры</button><button class="button secondary" data-action="popup-economy">Экономика</button><button class="button secondary" data-action="popup-rules">Правила проекта</button><button class="button secondary" data-action="popup-law">Законы</button><button class="button secondary" data-action="popup-government">Ведомства</button><button class="button secondary" data-action="popup-documents">Документы</button><button class="button secondary" data-action="popup-integrations">Интеграции</button><button class="button secondary" data-action="popup-knowledge">Центр знаний</button><button class="button secondary" data-action="popup-settings">Настройки и профили</button><button class="button link" data-url="https://docossum.com/">Docossum ↗</button><button class="button link" data-url="https://fletcher-wiki.com/">Fletcher ↗</button></div><footer class="copyright">© <a href="https://github.com/TheSkiF4er" target="_blank" rel="noopener noreferrer">SkiF4er</a></footer></div>`;
+  return `<div class="popup-shell stack ws-popup"><div class="brand"><span class="logo" aria-label="Логотип MajesticToolkit">MT</span><div><h1>MajesticToolkit</h1><p>Rules &amp; Punishments · 1.7.3</p></div></div><div class="card stack"><div class="row spread"><strong>Активный профиль</strong>${tag(projectLabel(p.project))}</div><select aria-label="Выбрать профиль" id="popup-profile">${state.profiles.map(x => `<option value="${e(x.id)}" ${x.id === state.activeProfileId ? 'selected' : ''}>${e(x.name)} · ${e(x.server)}</option>`).join('')}</select><p class="subtle">${e(p.server)}</p>${p.forumUrl ? `<button class="button secondary" data-url="${e(p.forumUrl)}">Открыть форум ↗</button>` : ''}</div><div class="row"><button class="button primary" data-action="panel">Боковая панель</button><button class="button secondary" data-action="workspace">Рабочее пространство ↗</button></div><div class="ws-popup-grid"><button class="button secondary" data-action="popup-search">Поиск</button><button class="button secondary" data-action="popup-forum">Биндер</button><button class="button secondary" data-action="popup-navigation">Навигация</button><button class="button secondary" data-action="popup-customization">Оформление</button><button class="button secondary" data-action="popup-monitor">Серверы и игроки</button><button class="button secondary" data-action="popup-complaints">Жалобы</button><button class="button secondary" data-action="popup-timers">Таймеры</button><button class="button secondary" data-action="popup-economy">Экономика</button><button class="button secondary" data-action="popup-rules">Правила проекта</button><button class="button secondary" data-action="popup-law">Законы</button><button class="button secondary" data-action="popup-government">Ведомства</button><button class="button secondary" data-action="popup-documents">Документы</button><button class="button secondary" data-action="popup-integrations">Интеграции</button><button class="button secondary" data-action="popup-knowledge">Центр знаний</button><button class="button secondary" data-action="popup-settings">Настройки и профили</button><button class="button link" data-url="https://docossum.com/">Docossum ↗</button><button class="button link" data-url="https://fletcher-wiki.com/">Fletcher ↗</button></div><footer class="copyright">© <a href="https://github.com/TheSkiF4er" target="_blank" rel="noopener noreferrer">SkiF4er</a></footer></div>`;
 }
 function render() {
   if (!state) return;
@@ -138,7 +139,7 @@ function render() {
   const title = titles[view];
   const contents = { rules: rulesSection, home: sectionHome, timers: timersSection, search: () => productivitySection(state), forum: () => forumSection(state), monitor: () => monitorSection(state), complaints: () => complaintsSection(state), economy: () => economySection(state), law: () => lawSection(state), government: () => governmentSection(state), documents: () => documentSection(state), integrations: () => integrationsSection(state), knowledge:()=>knowledgeSection(state), profiles: sectionProfiles, sites: sectionSites, settings: sectionSettings, backup: sectionBackup };
   const wasOpen=document.querySelector('.ws-dashboard details')?.open; if(wasOpen!==undefined)dashboardConfigOpen=wasOpen;
-  replaceHtml(app, `<div class="layout ws-layout"><aside class="side"><div class="brand"><div class="logo" aria-label="Логотип MajesticToolkit">MT</div><div><h1>MajesticToolkit</h1><p>Rules &amp; Punishments · 1.7.2</p></div></div>${profileSelect()}<nav class="nav" aria-label="Разделы">${groupedNav()}</nav><div class="side-footer">Локальные данные · Без облачной регистрации<div class="copyright">© <a href="https://github.com/TheSkiF4er" target="_blank" rel="noopener noreferrer">SkiF4er</a></div></div></aside><main class="main" id="workspace-main"><header class="topline"><div><p class="eyebrow">MajesticToolkit / ${e(title[0])}</p><h2>${e(title[0])}</h2><p class="lead">${e(title[1])}</p></div><button class="button secondary ws-search" data-action="nav" data-view="search" aria-label="Единый поиск">⌕ Поиск <kbd>Ctrl K</kbd></button></header>${moduleWarning()}${view==='forum'?`<nav class="ws-forum-tabs" aria-label="Разделы форума">${FORUM_TABS.map(([id,label])=>`<button class="button ${forumPane===id?'primary':'secondary'}" data-action="forum-pane" data-pane="${id}" aria-pressed="${forumPane===id}">${label}</button>`).join('')}</nav>`:''}${contents[view]()}</main></div>`);
+  replaceHtml(app, `<div class="layout ws-layout"><aside class="side"><div class="brand"><div class="logo" aria-label="Логотип MajesticToolkit">MT</div><div><h1>MajesticToolkit</h1><p>Rules &amp; Punishments · 1.7.3</p></div></div>${profileSelect()}<nav class="nav" aria-label="Разделы">${groupedNav()}</nav><div class="side-footer">Локальные данные · Без облачной регистрации<div class="copyright">© <a href="https://github.com/TheSkiF4er" target="_blank" rel="noopener noreferrer">SkiF4er</a></div></div></aside><main class="main" id="workspace-main"><header class="topline"><div><p class="eyebrow">MajesticToolkit / ${e(title[0])}</p><h2>${e(title[0])}</h2><p class="lead">${e(title[1])}</p></div><button class="button secondary ws-search" data-action="nav" data-view="search" aria-label="Единый поиск">⌕ Поиск <kbd>Ctrl K</kbd></button></header>${moduleWarning()}${view==='forum'?`<nav class="ws-forum-tabs" aria-label="Разделы форума">${FORUM_TABS.map(([id,label])=>`<button class="button ${forumPane===id?'primary':'secondary'}" data-action="forum-pane" data-pane="${id}" aria-pressed="${forumPane===id}">${label}</button>`).join('')}</nav>`:''}${contents[view]()}</main></div>`);
   if(view==='complaints')mountSectionMonitor(document.getElementById('section-monitor-root'),state,feedback);
   if(view==='rules'){mountRulesExperience(document.getElementById('rules-experience'),state,feedback);void mountRules(document.getElementById('rules-root'),state,feedback).catch(err=>feedback(err.message,true));}
   if(view==='forum'){
@@ -176,18 +177,18 @@ async function exportBackup() {
   const laws = lawRecords();
   const government = governmentRecords();
   const documents = documentRecords();
-  const text = makeRulesExperienceBackup([validateState(state), templates, cases, economy, laws, government, documents, externalLinks(), productivity, await listXenForoLinks(), await loadMonitor(), await loadKnowledge(state.profiles.map(p=>p.id)), globalThis.RPNForumCore.cleanTemplate,await listSources(),await listRules()],await exportPunishmentData(state.profiles),await exportSectionData(state.profiles));
+  const text = makeRulesExperienceBackup([validateState(state), templates, cases, economy, laws, government, documents, externalLinks(), productivity, await listXenForoLinks(), await loadMonitor(), await loadKnowledge(state.profiles.map(p=>p.id)), globalThis.RPNForumCore.cleanTemplate,await listSources(),await listRules()],await exportPunishmentData(state.profiles),await exportSectionData(state.profiles),await exportRegistryData(state.profiles));
   const blob = new Blob([text], { type: 'application/json;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
-  anchor.download = `majestictoolkit-backup-v1.7.2-${new Date().toISOString().slice(0,10)}.json`;
+  anchor.download = `majestictoolkit-backup-v1.7.3-${new Date().toISOString().slice(0,10)}.json`;
   document.body.appendChild(anchor); anchor.click(); anchor.remove();
   setTimeout(() => URL.revokeObjectURL(url), 30000);
   feedback(`Копия: ${templates.length} шаблонов, ${cases.length} жалоб, ${economy.length} операций/матчей, ${laws.length} записей законодательства, ${government.length} ведомственных записей, ${documents.length} документов/шаблонов, ${externalLinks().length} внешних закладок`);
 }
 async function createBackupText(){
-  return makeRulesExperienceBackup([validateState(state),await listTemplates(),await listCases(),await listEconomyRecords(),lawRecords(),governmentRecords(),documentRecords(),externalLinks(),productivity,await listXenForoLinks(),await loadMonitor(),await loadKnowledge(state.profiles.map(p=>p.id)),globalThis.RPNForumCore.cleanTemplate,await listSources(),await listRules()],await exportPunishmentData(state.profiles),await exportSectionData(state.profiles));
+  return makeRulesExperienceBackup([validateState(state),await listTemplates(),await listCases(),await listEconomyRecords(),lawRecords(),governmentRecords(),documentRecords(),externalLinks(),productivity,await listXenForoLinks(),await loadMonitor(),await loadKnowledge(state.profiles.map(p=>p.id)),globalThis.RPNForumCore.cleanTemplate,await listSources(),await listRules()],await exportPunishmentData(state.profiles),await exportSectionData(state.profiles),await exportRegistryData(state.profiles));
 }
 async function requestCaseReplacement(cases) {
   const result=await api.runtime.sendMessage({type:'RP_NEXUS_CASE_MUTATE',action:'replace',cases});
@@ -242,6 +243,7 @@ async function executeAction(button) {
     const previousTemplates = await listTemplates();
     const dependent = previousTemplates.filter(t => t.profileId === id);
     const previousCases = await listCases();
+    const previousRegistry=await exportRegistryData(state.profiles);
     const related = previousCases.filter(c => c.profileId === id);
     const previousEconomy = await listEconomyRecords();
     const relatedEconomy = previousEconomy.filter(r => r.profileId === id);
@@ -251,7 +253,7 @@ async function executeAction(button) {
     const previousDocuments = documentRecords().slice();
     const relatedDocuments = previousDocuments.filter(r=>r.profileId===id);
     const relatedGovernment = previousGovernment.filter(r=>r.profileId===id);
-    if (!confirm(`Удалить профиль «${p.name}» и связанных с ним шаблонов: ${dependent.length}, жалоб: ${related.length}, записей экономики: ${relatedEconomy.length}, записей законодательства: ${relatedLaws.length}, ведомственных записей: ${relatedGovernment.length}, документов: ${relatedDocuments.length}, правил: ${previousRules.filter(r=>r.profileId===id).length}? Это действие нельзя отменить без резервной копии.`)) return;
+    if (!confirm(`Удалить профиль «${p.name}» и связанных с ним шаблонов: ${dependent.length}, жалоб: ${related.length}, записей экономики: ${relatedEconomy.length}, записей законодательства: ${relatedLaws.length}, ведомственных записей: ${relatedGovernment.length}, документов: ${relatedDocuments.length}, правил: ${previousRules.filter(r=>r.profileId===id).length}, записей реестра: ${previousRegistry.records.filter(r=>r.profileId===id).length}? Это действие нельзя отменить без резервной копии.`)) return;
     try {
       await replaceXenForoLinks(previousXfLinks.filter(x=>x.profileId!==id));
       if (dependent.length) await replaceTemplates(previousTemplates.filter(t => t.profileId !== id));
@@ -264,12 +266,14 @@ async function executeAction(button) {
       await removeRuleProfile(id);
       await replaceKnowledge({...previousKnowledge,resources:previousKnowledge.resources.filter(r=>r.profileId!==id),relations:previousKnowledge.relations.filter(r=>r.profileId!==id)},state.profiles.filter(p=>p.id!==id).map(p=>p.id));
       if (relatedGovernment.length) await replaceGovernment(previousGovernment.filter(r=>r.profileId!==id),state.profiles.filter(p=>p.id!==id).map(p=>p.id));
+      await removeRegistryProfile(id);
       state = await modifyState(s => deleteProfile(s, id));
       await replaceSectionData(await exportSectionData(state.profiles),state.profiles).catch(error=>console.warn('MajesticToolkit: не удалось очистить подписки',error));
       await removeCalculatorProfile(id).catch(error=>console.warn('MajesticToolkit: не удалось очистить расчёты',error));
       await removePunishmentProfile(id).catch(error=>console.warn('MajesticToolkit: не удалось очистить черновики удалённого профиля',error));
       await clearNavigationHistory(id).catch(error=>console.warn('MajesticToolkit: не удалось очистить историю удалённого профиля',error));
     } catch (error) {
+      await replaceRegistryData(previousRegistry,state.profiles);
       await replaceXenForoLinks(previousXfLinks);
       await replaceMonitor(previousMonitor);
       await replaceSources(previousSources);
@@ -425,6 +429,7 @@ document.addEventListener('change', event => {
         const beforeRules=await listRules();
         const beforePunishments=await exportPunishmentData(beforeState.profiles);
         const beforeSections=await exportSectionData(beforeState.profiles);
+        const beforeRegistry=await exportRegistryData(beforeState.profiles);
         const beforeKnowledge=await loadKnowledge(beforeState.profiles.map(p=>p.id));
         try {
           if (backup.schemaVersion < 3 && beforeCases.some(c => !backup.state.profiles.some(p => p.id === c.profileId))) {
@@ -441,6 +446,7 @@ document.addEventListener('change', event => {
           if (backup.rules===null && beforeRules.some(r=>!backup.state.profiles.some(p=>p.id===r.profileId&&p.project===r.project)))throw Error('Старая копия несовместима с профилями базы правил. Сначала экспортируйте v15.');
           if (backup.punishments===null) validatePunishmentBackup(beforePunishments,backup.state.profiles);
           if (backup.sectionMonitor===null) validateSectionData(beforeSections,backup.state.profiles);
+          if (backup.punishmentRegistry===null) validateRegistry(beforeRegistry,backup.state.profiles);
           await createRestorePoint(api.storage.local);
           if (backup.schemaVersion >= 2) await replaceTemplates(backup.templates);
           if (backup.schemaVersion >= 3) await requestCaseReplacement(backup.cases);
@@ -458,6 +464,7 @@ document.addEventListener('change', event => {
           state = await restoreState(backup.state);
           if (backup.punishments!==null) await replacePunishmentData(backup.punishments,backup.state.profiles);
           if (backup.sectionMonitor!==null) await replaceSectionData(backup.sectionMonitor,backup.state.profiles);
+          if (backup.punishmentRegistry!==null) await replaceRegistryData(backup.punishmentRegistry,backup.state.profiles);
           await completeRestorePoint(api.storage.local);
         } catch (error) {
           if (backup.schemaVersion >= 2) await replaceTemplates(beforeTemplates);
@@ -476,6 +483,7 @@ document.addEventListener('change', event => {
           await restoreState(beforeState);
           if (backup.punishments!==null) await replacePunishmentData(beforePunishments,beforeState.profiles);
           if (backup.sectionMonitor!==null) await replaceSectionData(beforeSections,beforeState.profiles);
+          if (backup.punishmentRegistry!==null) await replaceRegistryData(beforeRegistry,beforeState.profiles);
           throw error;
         }
         await Promise.all([refreshForum(),refreshComplaints(),refreshEconomy(),refreshLaw(),refreshGovernment(),refreshDocuments(),refreshIntegrations()]);
@@ -516,7 +524,7 @@ document.addEventListener('submit', event => {
   const f = event.target.elements;
   const id = f.namedItem('profileId').value;
   const data = { name: f.namedItem('name').value, project: f.namedItem('project').value, server: f.namedItem('server').value, forumUrl: f.namedItem('forumUrl').value };
-  void (async()=>{if(id&&((await listRules()).some(r=>r.profileId===id&&r.project!==data.project)||state.profiles.some(p=>p.id===id&&p.rulesImport&&p.project!==data.project)))throw Error('Нельзя изменить проект профиля с сохранёнными правилами. Создайте новый профиль.');return modifyState(s => id ? editProfile(s, id, data) : addProfile(s, data));})().then(next => { state = next; dialog.close(); render(); feedback(id ? 'Профиль обновлён' : 'Профиль создан'); }).catch(err => feedback(err.message, true));
+  void (async()=>{if(id&&((await exportRegistryData(state.profiles)).records.some(r=>r.profileId===id&&r.project!==data.project)||(await listRules()).some(r=>r.profileId===id&&r.project!==data.project)||state.profiles.some(p=>p.id===id&&p.rulesImport&&p.project!==data.project)))throw Error('Нельзя изменить проект профиля с сохранёнными правилами. Создайте новый профиль.');return modifyState(s => id ? editProfile(s, id, data) : addProfile(s, data));})().then(next => { state = next; dialog.close(); render(); feedback(id ? 'Профиль обновлён' : 'Профиль создан'); }).catch(err => feedback(err.message, true));
 }, true);
 document.addEventListener('keydown', event => {
   if(popup || event.isComposing || event.repeat)return;
@@ -547,6 +555,7 @@ api.storage.onChanged.addListener((changes, area) => {
     if(view==='search')void refreshProductivitySearch().then(()=>renderSearchResults(state)).catch(err=>feedback(err.message,true));
   }
   if(area==='local'&&changes[SOURCE_KEY]){clearProductivityCache();if(view==='search')void refreshProductivitySearch().then(()=>renderSearchResults(state));if(view==='knowledge')void refreshKnowledge(state.profiles.map(p=>p.id)).then(render);}
+  if(area==='local'&&changes[REGISTRY_KEY])document.getElementById('punishment-registry')?.dispatchEvent(new Event('registry-refresh'));
   if(area==='local'&&changes[TIMERS_KEY]){void refreshTimers().then(()=>{if(view==='timers')render();}).catch(err=>feedback(err.message,true));}
   if(area==='local'&&changes[MONITOR_KEY]){void refreshMonitor().then(()=>{if(view==='monitor')render();}).catch(err=>feedback(err.message,true));}
   if(area==='local'&&changes[KNOWLEDGE_KEY]){void refreshKnowledge(state?.profiles?.map(p=>p.id)).then(()=>{if(view==='knowledge')render();}).catch(err=>feedback(err.message,true));}

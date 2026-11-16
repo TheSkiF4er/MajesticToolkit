@@ -62,6 +62,7 @@
     }else if(action==='decision'){
       if(!Object.hasOwn(DECISION_KINDS,payload.kind))throw Error('Неизвестный тип решения');
       next=event({...w,decision:payload.kind},'decision',`Шаблон: ${DECISION_KINDS[payload.kind]}`);
+      if(item.moderation&&payload.kind!==w.decision){if(item.status==='done')throw Error('Сначала откройте рассмотрение заново');patch.moderation={...item.moderation,decisionSnapshotId:null,revision:uuid(),updatedAt:new Date().toISOString()};}
     }else if(action==='note'){
       next=event(w,'note',str(payload.text,'Запись в журнале',500));
     }else throw Error('Неизвестная операция процесса');
