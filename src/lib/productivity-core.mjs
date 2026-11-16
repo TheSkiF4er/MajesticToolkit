@@ -1,6 +1,7 @@
+import {currentRevision,formatSanction} from './rules-core.mjs';
 // Productivity 0.9.0: deterministic, local-only index. No browser globals or remote calls.
-export const CATEGORIES = Object.freeze({forum:'Шаблоны форума',navigation:'Навигация форума',complaints:'Жалобы',economy:'Экономика',law:'Законодательство',government:'Ведомства',documents:'Документы',integrations:'Закладки',sources:'Форум и Fletcher Wiki'});
-export const SECTION_FOR = Object.freeze({forum:'forum',navigation:'forum',complaints:'complaints',economy:'economy',law:'law',government:'government',documents:'documents',integrations:'integrations',sources:'knowledge'});
+export const CATEGORIES = Object.freeze({forum:'Шаблоны форума',navigation:'Навигация форума',complaints:'Жалобы',economy:'Экономика',rules:'Правила проекта',law:'Законодательство',government:'Ведомства',documents:'Документы',integrations:'Закладки',sources:'Форум и Fletcher Wiki'});
+export const SECTION_FOR = Object.freeze({forum:'forum',navigation:'forum',complaints:'complaints',economy:'economy',rules:'rules',law:'law',government:'government',documents:'documents',integrations:'integrations',sources:'knowledge'});
 export const DEFAULT_SHORTCUTS = Object.freeze(['home','search','forum','complaints','economy','law','government','documents']);
 export const PRODUCTIVITY_KEY = 'majesticToolkitProductivityV9';
 export const ACCENTS = Object.freeze(['blue','teal','violet','amber']);
@@ -16,7 +17,7 @@ export function validateProductivity(value){
   if(!Array.isArray(value.shortcuts)||value.shortcuts.length!==8||value.shortcuts.some(x=>typeof x!=='string'||!['home','search',...Object.values(SECTION_FOR),'integrations','profiles','sites','settings','backup'].includes(x)))throw Error('Некорректная раскладка горячих клавиш');
   return {accent:value.accent,shortcutsEnabled:value.shortcutsEnabled,shortcuts:[...value.shortcuts]};
 }
-export function buildSearchRecords({templates=[],cases=[],economy=[],laws=[],government=[],documents=[],links=[],sources=[],navigation=[]}={}){
+export function buildSearchRecords({templates=[],cases=[],economy=[],laws=[],government=[],documents=[],links=[],sources=[],navigation=[],rules=[]}={}){
   const out=[]; const add=(type,id,profileId,title,description,body,extra={})=>{
     if(!Object.hasOwn(CATEGORIES,type)||typeof id!=='string'||!id||typeof profileId!=='string')return;
     const item={key:`${type}:${id}`,id,type,profileId,title:flat(title,250),description:flat(description,550),body:flat(body),...extra};
@@ -25,6 +26,7 @@ export function buildSearchRecords({templates=[],cases=[],economy=[],laws=[],gov
   for(const x of templates) add('forum',x.id,x.profileId,x.label,x.category,x.text,{url:''});
   for(const x of cases) add('complaints',x.id,x.profileId,x.title,`Статус: ${x.status||'—'} ${x.url||''}`,`${x.note||''} ${x.draft||''} ${(x.evidence||[]).map(y=>`${y.title||''} ${y.note||''}`).join(' ')}`,{url:x.url||''});
   for(const x of economy) add('economy',x.id,x.profileId,x.title||x.player||'Запись',`${x.type||''} ${x.date||''} ${x.family||''}`,x.note||'');
+  for(const r of rules){if(r.archived)continue;const x=currentRevision(r);add('rules',r.id,r.profileId,`${x.code} — ${x.title}`,`${x.category} · ${x.verification==='reviewed'?'Проверено пользователем':'Требует проверки'}`,`${x.text} ${x.aliases.join(' ')} ${x.sanctions.map(formatSanction).join(' ')} ${r.note}`,{url:x.sourceUrl});}
   for(const x of laws){
     if(x.type==='memo')add('law',x.id,x.profileId,x.title,`Памятка · ${x.category||''}`,x.body||'');
     if(x.type==='book'){
@@ -86,7 +88,7 @@ export function answerLocal(question,rows,profileId='',host=''){
   const own=rows.filter(r=>(r.profileId===profileId||r.profileId==='*')&&(!host||r.type!=='navigation'||!r.host||r.host==='*'||r.host===host));
   const counts=Object.fromEntries(Object.keys(CATEGORIES).map(type=>[type,own.filter(r=>r.type===type).length]));
   if(/^(сколько|статистика|обзор|количество|что есть|что сохранено)/u.test(q)){
-    return {answer:`В активном профиле: ${counts.forum} шаблонов форума, ${counts.complaints} жалоб, ${counts.economy} записей экономики, ${counts.law} документов и статей законодательства, ${counts.government} ведомственных записей, ${counts.documents} документов и шаблонов, ${counts.integrations} внешних закладок, ${counts.navigation} записей навигации, ${counts.sources} импортированных статей форума и Fletcher Wiki.`,refs:[]};
+    return {answer:`В активном профиле: ${counts.forum} шаблонов форума, ${counts.complaints} жалоб, ${counts.economy} записей экономики, ${counts.rules} правил проекта, ${counts.law} документов и статей законодательства, ${counts.government} ведомственных записей, ${counts.documents} документов и шаблонов, ${counts.integrations} внешних закладок, ${counts.navigation} записей навигации, ${counts.sources} импортированных статей форума и Fletcher Wiki.`,refs:[]};
   }
   const results=searchRecords(rows,question,{profileId,host,limit:5});
   if(!results.length)return {answer:'В локальных данных нет подходящих записей. Импортируйте законы или добавьте записи в соответствующем разделе. Откройте нужную страницу форума или Fletcher Wiki и импортируйте её текст в Центре знаний. Я не подменяю отсутствующие данные догадками.',refs:[]};

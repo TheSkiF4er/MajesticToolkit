@@ -1,0 +1,4 @@
+import {makeBackupV14,parseBackupV14} from './source-backup.mjs';
+import {validateRules} from './rules-core.mjs';
+export function makeBackupV15(...args){const raw=JSON.parse(makeBackupV14(...args.slice(0,-1)));return JSON.stringify({...raw,schemaVersion:15,rules:validateRules(args.at(-1),raw.payload.profiles)},null,2);}
+export function parseBackupV15(text,validateState,cleanTemplate){if(typeof text!=='string'||new TextEncoder().encode(text).length>48*1024*1024)throw Error('Резервная копия превышает 48 МиБ');let raw;try{raw=JSON.parse(text);}catch{throw Error('Неверный JSON');}if(raw?.schemaVersion!==15)return {...parseBackupV14(text,validateState,cleanTemplate),rules:null};const data=parseBackupV14(JSON.stringify({...raw,schemaVersion:14}),validateState,cleanTemplate);return {...data,schemaVersion:15,rules:validateRules(raw.rules,data.state.profiles)};}

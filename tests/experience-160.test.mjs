@@ -8,7 +8,7 @@ test('workspace widget configuration is validated, persisted and backward compat
  let pref=changeWidget(undefined,'bookmarks','up');pref=changeWidget(pref,'timers','toggle');assert.equal(pref.order[0],'bookmarks');assert.deepEqual(pref.hidden,['timers']);
  const state=validateState(savePreferences(legacy,{workspace:pref}));assert.deepEqual(parseBackup(makeBackup(state)),state);
  assert.throws(()=>workspacePreferences({order:Array(6).fill('binder'),hidden:[]}));assert.throws(()=>workspacePreferences({order:[...WIDGETS],hidden:['unknown']}));assert.throws(()=>changeWidget(pref,'binder','unknown'));
- assert.equal(NAV_GROUPS.flatMap(x=>x[1]).length,16);assert.equal(FORUM_TABS.length,4);
+ assert.equal(NAV_GROUPS.flatMap(x=>x[1]).length,17);assert.equal(FORUM_TABS.length,4);
 });
 test('dashboard filters profiles and domains, retains global timers, and escapes local text',()=>{
  const initial=defaultState(),id=initial.activeProfileId;

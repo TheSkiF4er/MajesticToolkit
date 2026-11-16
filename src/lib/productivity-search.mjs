@@ -1,3 +1,4 @@
+import {listRules} from './rules-store.mjs';
 import {listXenForoLinks} from './xenforo-store.mjs';
 import './forum-core.js';
 import './complaints-core.js';
@@ -17,10 +18,10 @@ export async function getLocalIndex(){
   if(inflight){await inflight;return getLocalIndex();}
   const version=epoch;
   const task=(async()=>{
-    const [templates,cases,economy,laws,government,documents,links,sources,navigation]=await Promise.all([
-      listTemplates(),listCases(),listEconomy(),listLawRecords(),listGovernment(),listDocumentRecords(),listLinks(),listSources(),listXenForoLinks()
+    const [templates,cases,economy,laws,government,documents,links,sources,navigation,rules]=await Promise.all([
+      listTemplates(),listCases(),listEconomy(),listLawRecords(),listGovernment(),listDocumentRecords(),listLinks(),listSources(),listXenForoLinks(),listRules()
     ]);
-    return buildSearchRecords({templates,cases,economy,laws,government,documents,links,sources,navigation});
+    return buildSearchRecords({templates,cases,economy,laws,government,documents,links,sources,navigation,rules});
   })();
   inflight=task;
   let rows;

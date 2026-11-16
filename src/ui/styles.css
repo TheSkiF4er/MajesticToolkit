@@ -185,3 +185,10 @@ textarea{width:100%;resize:vertical;background:var(--panel);color:var(--ink);bor
 @media(max-width:770px){body[data-mode=workspace] .ws-layout .side,body[data-mode=sidebar] .ws-layout .side{height:auto;position:static;overflow:visible;padding:10px;display:block}body[data-mode=workspace] .ws-layout .nav,body[data-mode=sidebar] .ws-layout .nav{display:flex;overflow:auto;padding:6px 0;gap:8px}.ws-nav-group{display:flex;align-items:center;gap:3px}.ws-nav-label{display:none}.ws-layout .nav button{white-space:nowrap;min-height:38px;padding:8px}.ws-layout .main{padding:18px 12px 40px}.ws-welcome{align-items:flex-start;flex-direction:column}.ws-widgets{grid-template-columns:1fr}.ws-layout .topline h2{font-size:24px}.ws-search kbd{display:none}.ws-profile{margin-bottom:5px}.ws-forum-tabs .button{flex:1 1 40%}}
 body[data-mode=sidebar] .ws-layout .side{height:auto;position:static;overflow:visible;display:block;padding:10px}body[data-mode=sidebar] .ws-layout .nav{display:flex;overflow:auto;gap:8px}body[data-mode=sidebar] .ws-nav-group{display:flex;gap:3px}body[data-mode=sidebar] .ws-nav-label{display:none}body[data-mode=sidebar] .ws-widgets{grid-template-columns:1fr}body[data-mode=sidebar] .ws-quick{grid-template-columns:repeat(2,minmax(0,1fr))}body[data-mode=sidebar] .ws-layout .main{padding:16px 12px}body[data-mode=sidebar] .ws-welcome{display:block}body[data-mode=sidebar] .ws-welcome .row{margin-top:10px}
 @media(prefers-reduced-motion:reduce){.ws-layout *{scroll-behavior:auto!important}}
+
+/* Rules Database 1.6.1 */
+.rules-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;align-items:start}
+.rules-text{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;line-height:1.5;margin:0}
+#rules-root .card{min-width:0;overflow-wrap:anywhere}
+#rules-root textarea{width:100%;resize:vertical}
+#rules-root #rules-detail:empty{display:none}

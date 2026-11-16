@@ -1,0 +1,5 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+const p={id:'profile-test-123',project:'majestic'};
+const fields={code:'5.1',title:'DM',category:'Основные',text:'Тестовая формулировка',aliases:[],sourceUrl:'https://forum.majestic-rp.ru/threads/test.123/',verification:'unverified',sanctions:[]};
+test('storage mutations preserve records across reload and reject cross-profile updates',async()=>{const data={};globalThis.browser={storage:{local:{async get(k){return {[k]:structuredClone(data[k])};},async set(x){Object.assign(data,structuredClone(x));}}}};const store=await import('../src/lib/rules-store.mjs');const [a,b]=await Promise.all([store.addRule(p,fields),store.addRule(p,{...fields,code:'5.2'})]);assert.equal((await store.listRules()).length,2);await store.saveRuleRevision(p,a.id,{...fields,text:'Новая'},a.activeRevisionId);await assert.rejects(store.patchRule({...p,id:'other-profile'},a.id,{favorite:true}));await store.patchRule(p,b.id,{archived:true});assert.equal((await store.listRules()).find(r=>r.id===a.id).revisions.length,2);await store.removeRuleProfile(p.id);assert.deepEqual(await store.listRules(),[]);});

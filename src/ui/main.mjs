@@ -1,3 +1,6 @@
+import {rulesSection,mountRules} from './rules-page.mjs';
+import {RULES_KEY} from '../lib/rules-core.mjs';
+import {listRules,replaceRules,removeRuleProfile} from '../lib/rules-store.mjs';
 import {NAV_GROUPS,FORUM_TABS,dashboardShell,dashboardWidgets,loadDashboard} from './workspace-page.mjs';
 import {changeWidget,workspacePreferences} from '../lib/workspace-preferences.mjs';
 import {mountCustomization} from './customization-page.mjs';
@@ -21,7 +24,7 @@ import '../lib/complaints-core.js';
 import '../lib/forum-core.js';
 import { economySection, refreshEconomy, handleEconomyAction, handleEconomySubmit, setEconomyFilter, setEconomySearch } from './economy-page.mjs';
 import { replaceEconomy, listEconomy as listEconomyRecords } from '../lib/economy-store.mjs';
-import {makeBackupV14,parseBackupV14} from '../lib/source-backup.mjs';
+import {makeBackupV15,parseBackupV15} from '../lib/rules-backup.mjs';
 import {KNOWLEDGE_KEY,emptyKnowledge} from '../lib/knowledge-core.mjs';
 import {loadKnowledge,replaceKnowledge} from '../lib/knowledge-store.mjs';
 import {knowledgeSection,knowledgeSnapshot,refreshKnowledge,handleKnowledgeAction,handleKnowledgeSubmit,setKnowledgeQuery,setKnowledgeKind} from './knowledge-page.mjs';
@@ -65,7 +68,7 @@ let videoPermissionGranted = false;
 let moduleErrors = [];
 const VIDEO_ORIGINS = ['https://www.youtube.com/*','https://rutube.ru/*','https://www.twitch.tv/*'];
 let timeout;
-const NAV = [ ['home','Обзор','⌂'], ['search','Поиск и помощник','⌕'], ['forum','Форум','▤'], ['monitor','Серверы и игроки','◈'], ['complaints','Жалобы','◷'], ['timers','Таймеры','◴'], ['economy','Экономика','▥'], ['law','Законы','⚖'], ['government','Ведомства','§'], ['documents','Документы','▣'], ['integrations','Интеграции','↗'], ['knowledge','Центр знаний','◇'], ['profiles','Профили','◉'], ['sites','Сайты и доступ','↗'], ['settings','Настройки','⚙'], ['backup','Резервные копии','⇩'] ];
+const NAV = [ ['home','Обзор','⌂'], ['search','Поиск и помощник','⌕'], ['forum','Форум','▤'], ['monitor','Серверы и игроки','◈'], ['complaints','Жалобы','◷'], ['timers','Таймеры','◴'], ['economy','Экономика','▥'], ['rules','Правила проекта','§'], ['law','Законы','⚖'], ['government','Ведомства','§'], ['documents','Документы','▣'], ['integrations','Интеграции','↗'], ['knowledge','Центр знаний','◇'], ['profiles','Профили','◉'], ['sites','Сайты и доступ','↗'], ['settings','Настройки','⚙'], ['backup','Резервные копии','⇩'] ];
 
 function feedback(message, isError = false) {
   notice.textContent = message;
@@ -99,9 +102,9 @@ function sectionSettings() {
   return `<div class="stack"><section class="card stack"><div class="control"><div><h3>Тема интерфейса</h3><p class="subtle">Влияет на popup, боковую панель и рабочее пространство</p></div><select aria-label="Тема" data-setting="theme"><option value="system" ${p.theme === 'system' ? 'selected' : ''}>Системная</option><option value="light" ${p.theme === 'light' ? 'selected' : ''}>Светлая</option><option value="dark" ${p.theme === 'dark' ? 'selected' : ''}>Тёмная</option><option value="sepia" ${p.theme === 'sepia' ? 'selected' : ''}>Сепия</option><option value="contrast" ${p.theme === 'contrast' ? 'selected' : ''}>Высокая контрастность</option></select></div><div class="divider"></div><div class="control"><div><h3>Начальный раздел</h3><p class="subtle">Выбирается при новом открытии расширения</p></div><select aria-label="Стартовый экран" data-setting="startPage">${NAV.map(([id,label]) => `<option value="${id}" ${p.startPage === id ? 'selected' : ''}>${e(label)}</option>`).join('')}</select></div><div class="divider"></div><div class="control"><div><h3>Компактный интерфейс</h3><p class="subtle">Уменьшает отступы в карточках</p></div><label class="check"><input type="checkbox" data-setting="compact" ${p.compact ? 'checked' : ''}><span>Включить</span></label></div></section><section class="card stack"><h3>Productivity 0.9.0</h3><div class="control"><div><strong>Цветовой акцент</strong><p class="subtle">Для всех окон расширения</p></div><select aria-label="Цветовой акцент" data-productivity-setting="accent">${[['blue','Синий'],['teal','Бирюзовый'],['violet','Фиолетовый'],['amber','Янтарный']].map(([id,label])=>`<option value="${id}" ${productivity.accent===id?'selected':''}>${label}</option>`).join('')}</select></div><div class="control"><div><strong>Горячие клавиши</strong><p class="subtle">Alt+1–8 в окнах MajesticToolkit. Ctrl/⌘+K — поиск.</p></div><label class="check"><input type="checkbox" data-productivity-setting="shortcutsEnabled" ${productivity.shortcutsEnabled?'checked':''}>Включить</label></div><div class="productivity-shortcuts">${productivity.shortcuts.map((target,index)=>`<label class="field">Alt+${index+1}<select data-productivity-shortcut="${index}">${NAV.map(([id,label])=>`<option value="${id}" ${target===id?'selected':''}>${e(label)}</option>`).join('')}</select></label>`).join('')}</div><div class="row"><button class="button secondary" data-productivity-action="reset-shortcuts">Сбросить сочетания</button></div></section></div>`;
 }
 function sectionBackup() {
-  return `<div class="stack"><section class="card"><h3>Скачать резервную копию</h3><p class="lead">JSON-файл с профилями, шаблонами, жалобами, экономическими операциями, сделками, результатами игроков локальной базой законов и Government Tools и документами Document Studio. Авторизационные данные сайтов и содержимое страниц не сохраняются.</p><div class="row" style="margin-top:14px"><button class="button primary" data-action="export">Скачать JSON</button></div></section><section class="card"><h3>Восстановить из файла</h3><p class="lead">Данные проверяются до применения. Импорт заменит текущие профили и настройки. Максимальный размер — 48 МиБ. Поддерживаются копии v1–v14. Формат v14 также сохраняет этапы рассмотрения жалоб, журнал действий, связи Центра знаний, ссылки и закладки Navigation 2.0, Server Monitor и импортированные статьи. История посещений не экспортируется. При импорте старой копии новые записи сохраняются, если профили совместимы.</p><div style="margin-top:14px"><label class="field">Выберите .json<input id="backup-file" type="file" accept=".json,application/json"></label></div></section><section class="card"><h3>Точка восстановления после импорта</h3><p class="lead">Перед импортом создаётся проверенный снимок текущих данных (не более 20 МиБ). Он переживает закрытие браузера. OAuth-токены и данные других расширений в снимок не входят.</p><div class="row" style="margin-top:12px"><button class="button secondary" data-action="restore-point">Восстановить предыдущие данные</button><button class="button danger" data-action="discard-point">Удалить точку</button></div></section><section class="card"><h3>Где хранятся данные</h3><p class="lead">В локальном хранилище браузерного расширения. MajesticToolkit не имеет аккаунта, собственного сервера и телеметрии. Перед удалением расширения скачайте копию.</p></section></div>`;
+  return `<div class="stack"><section class="card"><h3>Скачать резервную копию</h3><p class="lead">JSON-файл с профилями, шаблонами, жалобами, экономическими операциями, сделками, результатами игроков локальной базой законов и Government Tools и документами Document Studio. Авторизационные данные сайтов и содержимое страниц не сохраняются.</p><div class="row" style="margin-top:14px"><button class="button primary" data-action="export">Скачать JSON</button></div></section><section class="card"><h3>Восстановить из файла</h3><p class="lead">Данные проверяются до применения. Импорт заменит текущие профили и настройки. Максимальный размер — 48 МиБ. Поддерживаются копии v1–v15. Формат v15 включает базу правил и её редакции. Формат v14 также сохраняет этапы рассмотрения жалоб, журнал действий, связи Центра знаний, ссылки и закладки Navigation 2.0, Server Monitor и импортированные статьи. История посещений не экспортируется. При импорте старой копии новые записи сохраняются, если профили совместимы.</p><div style="margin-top:14px"><label class="field">Выберите .json<input id="backup-file" type="file" accept=".json,application/json"></label></div></section><section class="card"><h3>Точка восстановления после импорта</h3><p class="lead">Перед импортом создаётся проверенный снимок текущих данных (не более 20 МиБ). Он переживает закрытие браузера. OAuth-токены и данные других расширений в снимок не входят.</p><div class="row" style="margin-top:12px"><button class="button secondary" data-action="restore-point">Восстановить предыдущие данные</button><button class="button danger" data-action="discard-point">Удалить точку</button></div></section><section class="card"><h3>Где хранятся данные</h3><p class="lead">В локальном хранилище браузерного расширения. MajesticToolkit не имеет аккаунта, собственного сервера и телеметрии. Перед удалением расширения скачайте копию.</p></section></div>`;
 }
-const titles = {knowledge:['Центр знаний','Связи документов, законов, шаблонов и внешних справочников'],search:['Поиск и локальный помощник','Быстрый индекс всех локальных разделов, ответы с указанием источников'],integrations:['Интеграции','Google Docs, Sheets, Drive, Fletcher Wiki и Docossum'],documents:['Document Studio','Редактор, формы, шаблоны, история локальных версий и PDF'],government:['Government Tools','Конструктор решений, правовые основания, процессуальные шаблоны и ведомства'],law:['Law Codex','Законы, неизменяемые редакции, статьи, избранное и памятки'],economy:['Экономика и аналитика','Сделки, денежные операции, калькуляторы, игроки и семьи'],complaints:['Жалобы и доказательства','Отслеживание тем, сроки, черновики и таймкоды'],timers:['Таймеры','Локальные таймеры с системными уведомлениями'],monitor:['Server Monitor','Официальный каталог серверов и сохранённые публичные карточки игроков'],forum:['Forum Experience','Биндер, персональная навигация и оформление в едином пространстве'],home:['Обзор','Рабочая среда под ваши RP-проекты'],profiles:['Профили','Переключение между игровыми серверами'],sites:['Сайты и разрешения','Вы контролируете, где работает расширение'],settings:['Настройки','Настройте интерфейс под себя'],backup:['Резервные копии','Перенос данных между браузерами']};
+const titles = {rules:['Правила проекта','Источники, редакции и структурированные санкции'],knowledge:['Центр знаний','Связи документов, законов, шаблонов и внешних справочников'],search:['Поиск и локальный помощник','Быстрый индекс всех локальных разделов, ответы с указанием источников'],integrations:['Интеграции','Google Docs, Sheets, Drive, Fletcher Wiki и Docossum'],documents:['Document Studio','Редактор, формы, шаблоны, история локальных версий и PDF'],government:['Government Tools','Конструктор решений, правовые основания, процессуальные шаблоны и ведомства'],law:['Law Codex','Законы, неизменяемые редакции, статьи, избранное и памятки'],economy:['Экономика и аналитика','Сделки, денежные операции, калькуляторы, игроки и семьи'],complaints:['Жалобы и доказательства','Отслеживание тем, сроки, черновики и таймкоды'],timers:['Таймеры','Локальные таймеры с системными уведомлениями'],monitor:['Server Monitor','Официальный каталог серверов и сохранённые публичные карточки игроков'],forum:['Forum Experience','Биндер, персональная навигация и оформление в едином пространстве'],home:['Обзор','Рабочая среда под ваши RP-проекты'],profiles:['Профили','Переключение между игровыми серверами'],sites:['Сайты и разрешения','Вы контролируете, где работает расширение'],settings:['Настройки','Настройте интерфейс под себя'],backup:['Резервные копии','Перенос данных между браузерами']};
 function moduleWarning() {
   if (!moduleErrors.length) return '';
   return `<section class="card stack" role="alert"><h3>Часть разделов временно недоступна</h3><p class="subtle">${e(moduleErrors.map(x=>x.name).join(', '))}. Остальные разделы и локальные данные доступны.</p><button type="button" class="button secondary" data-action="retry-modules">Повторить загрузку</button></section>`;
@@ -119,7 +122,7 @@ async function refreshAllModules() {
 }
 function renderPopup() {
   const p = getActiveProfile(state);
-  return `<div class="popup-shell stack ws-popup"><div class="brand"><span class="logo" aria-label="Логотип MajesticToolkit">MT</span><div><h1>MajesticToolkit</h1><p>Forum Experience · 1.6.0</p></div></div><div class="card stack"><div class="row spread"><strong>Активный профиль</strong>${tag(projectLabel(p.project))}</div><select aria-label="Выбрать профиль" id="popup-profile">${state.profiles.map(x => `<option value="${e(x.id)}" ${x.id === state.activeProfileId ? 'selected' : ''}>${e(x.name)} · ${e(x.server)}</option>`).join('')}</select><p class="subtle">${e(p.server)}</p>${p.forumUrl ? `<button class="button secondary" data-url="${e(p.forumUrl)}">Открыть форум ↗</button>` : ''}</div><div class="row"><button class="button primary" data-action="panel">Боковая панель</button><button class="button secondary" data-action="workspace">Рабочее пространство ↗</button></div><div class="ws-popup-grid"><button class="button secondary" data-action="popup-search">Поиск</button><button class="button secondary" data-action="popup-forum">Биндер</button><button class="button secondary" data-action="popup-navigation">Навигация</button><button class="button secondary" data-action="popup-customization">Оформление</button><button class="button secondary" data-action="popup-monitor">Серверы и игроки</button><button class="button secondary" data-action="popup-complaints">Жалобы</button><button class="button secondary" data-action="popup-timers">Таймеры</button><button class="button secondary" data-action="popup-economy">Экономика</button><button class="button secondary" data-action="popup-law">Законы</button><button class="button secondary" data-action="popup-government">Ведомства</button><button class="button secondary" data-action="popup-documents">Документы</button><button class="button secondary" data-action="popup-integrations">Интеграции</button><button class="button secondary" data-action="popup-knowledge">Центр знаний</button><button class="button secondary" data-action="popup-settings">Настройки и профили</button><button class="button link" data-url="https://docossum.com/">Docossum ↗</button><button class="button link" data-url="https://fletcher-wiki.com/">Fletcher ↗</button></div><footer class="copyright">© <a href="https://github.com/TheSkiF4er" target="_blank" rel="noopener noreferrer">SkiF4er</a></footer></div>`;
+  return `<div class="popup-shell stack ws-popup"><div class="brand"><span class="logo" aria-label="Логотип MajesticToolkit">MT</span><div><h1>MajesticToolkit</h1><p>Rules Database · 1.6.1</p></div></div><div class="card stack"><div class="row spread"><strong>Активный профиль</strong>${tag(projectLabel(p.project))}</div><select aria-label="Выбрать профиль" id="popup-profile">${state.profiles.map(x => `<option value="${e(x.id)}" ${x.id === state.activeProfileId ? 'selected' : ''}>${e(x.name)} · ${e(x.server)}</option>`).join('')}</select><p class="subtle">${e(p.server)}</p>${p.forumUrl ? `<button class="button secondary" data-url="${e(p.forumUrl)}">Открыть форум ↗</button>` : ''}</div><div class="row"><button class="button primary" data-action="panel">Боковая панель</button><button class="button secondary" data-action="workspace">Рабочее пространство ↗</button></div><div class="ws-popup-grid"><button class="button secondary" data-action="popup-search">Поиск</button><button class="button secondary" data-action="popup-forum">Биндер</button><button class="button secondary" data-action="popup-navigation">Навигация</button><button class="button secondary" data-action="popup-customization">Оформление</button><button class="button secondary" data-action="popup-monitor">Серверы и игроки</button><button class="button secondary" data-action="popup-complaints">Жалобы</button><button class="button secondary" data-action="popup-timers">Таймеры</button><button class="button secondary" data-action="popup-economy">Экономика</button><button class="button secondary" data-action="popup-rules">Правила проекта</button><button class="button secondary" data-action="popup-law">Законы</button><button class="button secondary" data-action="popup-government">Ведомства</button><button class="button secondary" data-action="popup-documents">Документы</button><button class="button secondary" data-action="popup-integrations">Интеграции</button><button class="button secondary" data-action="popup-knowledge">Центр знаний</button><button class="button secondary" data-action="popup-settings">Настройки и профили</button><button class="button link" data-url="https://docossum.com/">Docossum ↗</button><button class="button link" data-url="https://fletcher-wiki.com/">Fletcher ↗</button></div><footer class="copyright">© <a href="https://github.com/TheSkiF4er" target="_blank" rel="noopener noreferrer">SkiF4er</a></footer></div>`;
 }
 function render() {
   if (!state) return;
@@ -128,9 +131,10 @@ function render() {
   document.body.dataset.compact = String(state.preferences.compact);
   if (popup) { replaceHtml(app, moduleWarning() + renderPopup()); return; }
   const title = titles[view];
-  const contents = { home: sectionHome, timers: timersSection, search: () => productivitySection(state), forum: () => forumSection(state), monitor: () => monitorSection(state), complaints: () => complaintsSection(state), economy: () => economySection(state), law: () => lawSection(state), government: () => governmentSection(state), documents: () => documentSection(state), integrations: () => integrationsSection(state), knowledge:()=>knowledgeSection(state), profiles: sectionProfiles, sites: sectionSites, settings: sectionSettings, backup: sectionBackup };
+  const contents = { rules: rulesSection, home: sectionHome, timers: timersSection, search: () => productivitySection(state), forum: () => forumSection(state), monitor: () => monitorSection(state), complaints: () => complaintsSection(state), economy: () => economySection(state), law: () => lawSection(state), government: () => governmentSection(state), documents: () => documentSection(state), integrations: () => integrationsSection(state), knowledge:()=>knowledgeSection(state), profiles: sectionProfiles, sites: sectionSites, settings: sectionSettings, backup: sectionBackup };
   const wasOpen=document.querySelector('.ws-dashboard details')?.open; if(wasOpen!==undefined)dashboardConfigOpen=wasOpen;
-  replaceHtml(app, `<div class="layout ws-layout"><aside class="side"><div class="brand"><div class="logo" aria-label="Логотип MajesticToolkit">MT</div><div><h1>MajesticToolkit</h1><p>Forum Experience · 1.6.0</p></div></div>${profileSelect()}<nav class="nav" aria-label="Разделы">${groupedNav()}</nav><div class="side-footer">Локальные данные · Без облачной регистрации<div class="copyright">© <a href="https://github.com/TheSkiF4er" target="_blank" rel="noopener noreferrer">SkiF4er</a></div></div></aside><main class="main" id="workspace-main"><header class="topline"><div><p class="eyebrow">MajesticToolkit / ${e(title[0])}</p><h2>${e(title[0])}</h2><p class="lead">${e(title[1])}</p></div><button class="button secondary ws-search" data-action="nav" data-view="search" aria-label="Единый поиск">⌕ Поиск <kbd>Ctrl K</kbd></button></header>${moduleWarning()}${view==='forum'?`<nav class="ws-forum-tabs" aria-label="Разделы форума">${FORUM_TABS.map(([id,label])=>`<button class="button ${forumPane===id?'primary':'secondary'}" data-action="forum-pane" data-pane="${id}" aria-pressed="${forumPane===id}">${label}</button>`).join('')}</nav>`:''}${contents[view]()}</main></div>`);
+  replaceHtml(app, `<div class="layout ws-layout"><aside class="side"><div class="brand"><div class="logo" aria-label="Логотип MajesticToolkit">MT</div><div><h1>MajesticToolkit</h1><p>Rules Database · 1.6.1</p></div></div>${profileSelect()}<nav class="nav" aria-label="Разделы">${groupedNav()}</nav><div class="side-footer">Локальные данные · Без облачной регистрации<div class="copyright">© <a href="https://github.com/TheSkiF4er" target="_blank" rel="noopener noreferrer">SkiF4er</a></div></div></aside><main class="main" id="workspace-main"><header class="topline"><div><p class="eyebrow">MajesticToolkit / ${e(title[0])}</p><h2>${e(title[0])}</h2><p class="lead">${e(title[1])}</p></div><button class="button secondary ws-search" data-action="nav" data-view="search" aria-label="Единый поиск">⌕ Поиск <kbd>Ctrl K</kbd></button></header>${moduleWarning()}${view==='forum'?`<nav class="ws-forum-tabs" aria-label="Разделы форума">${FORUM_TABS.map(([id,label])=>`<button class="button ${forumPane===id?'primary':'secondary'}" data-action="forum-pane" data-pane="${id}" aria-pressed="${forumPane===id}">${label}</button>`).join('')}</nav>`:''}${contents[view]()}</main></div>`);
+  if(view==='rules')void mountRules(document.getElementById('rules-root'),state,feedback).catch(err=>feedback(err.message,true));
   if(view==='forum'){
     for(const el of document.querySelectorAll('[data-forum-pane]'))el.hidden=el.dataset.forumPane!==forumPane;
     if(forumPane==='customization')mountCustomization(document.getElementById('forum-customization'),state,next=>{state=next;render();},feedback);
@@ -166,18 +170,18 @@ async function exportBackup() {
   const laws = lawRecords();
   const government = governmentRecords();
   const documents = documentRecords();
-  const text = makeBackupV14(validateState(state), templates, cases, economy, laws, government, documents, externalLinks(), productivity, await listXenForoLinks(), await loadMonitor(), await loadKnowledge(state.profiles.map(p=>p.id)), globalThis.RPNForumCore.cleanTemplate,await listSources());
+  const text = makeBackupV15(validateState(state), templates, cases, economy, laws, government, documents, externalLinks(), productivity, await listXenForoLinks(), await loadMonitor(), await loadKnowledge(state.profiles.map(p=>p.id)), globalThis.RPNForumCore.cleanTemplate,await listSources(),await listRules());
   const blob = new Blob([text], { type: 'application/json;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
-  anchor.download = `majestictoolkit-backup-v1.6.0-${new Date().toISOString().slice(0,10)}.json`;
+  anchor.download = `majestictoolkit-backup-v1.6.1-${new Date().toISOString().slice(0,10)}.json`;
   document.body.appendChild(anchor); anchor.click(); anchor.remove();
   setTimeout(() => URL.revokeObjectURL(url), 30000);
   feedback(`Копия: ${templates.length} шаблонов, ${cases.length} жалоб, ${economy.length} операций/матчей, ${laws.length} записей законодательства, ${government.length} ведомственных записей, ${documents.length} документов/шаблонов, ${externalLinks().length} внешних закладок`);
 }
 async function createBackupText(){
-  return makeBackupV14(validateState(state),await listTemplates(),await listCases(),await listEconomyRecords(),lawRecords(),governmentRecords(),documentRecords(),externalLinks(),productivity,await listXenForoLinks(),await loadMonitor(),await loadKnowledge(state.profiles.map(p=>p.id)),globalThis.RPNForumCore.cleanTemplate,await listSources());
+  return makeBackupV15(validateState(state),await listTemplates(),await listCases(),await listEconomyRecords(),lawRecords(),governmentRecords(),documentRecords(),externalLinks(),productivity,await listXenForoLinks(),await loadMonitor(),await loadKnowledge(state.profiles.map(p=>p.id)),globalThis.RPNForumCore.cleanTemplate,await listSources(),await listRules());
 }
 async function requestCaseReplacement(cases) {
   const result=await api.runtime.sendMessage({type:'RP_NEXUS_CASE_MUTATE',action:'replace',cases});
@@ -226,6 +230,7 @@ async function executeAction(button) {
     const previousMonitor=await loadMonitor();
     const previousKnowledge=await loadKnowledge(state.profiles.map(p=>p.id));
     const previousSources=await listSources();
+    const previousRules=await listRules();
     const previousTemplates = await listTemplates();
     const dependent = previousTemplates.filter(t => t.profileId === id);
     const previousCases = await listCases();
@@ -238,7 +243,7 @@ async function executeAction(button) {
     const previousDocuments = documentRecords().slice();
     const relatedDocuments = previousDocuments.filter(r=>r.profileId===id);
     const relatedGovernment = previousGovernment.filter(r=>r.profileId===id);
-    if (!confirm(`Удалить профиль «${p.name}» и связанных с ним шаблонов: ${dependent.length}, жалоб: ${related.length}, записей экономики: ${relatedEconomy.length}, записей законодательства: ${relatedLaws.length}, ведомственных записей: ${relatedGovernment.length}, документов: ${relatedDocuments.length}? Это действие нельзя отменить без резервной копии.`)) return;
+    if (!confirm(`Удалить профиль «${p.name}» и связанных с ним шаблонов: ${dependent.length}, жалоб: ${related.length}, записей экономики: ${relatedEconomy.length}, записей законодательства: ${relatedLaws.length}, ведомственных записей: ${relatedGovernment.length}, документов: ${relatedDocuments.length}, правил: ${previousRules.filter(r=>r.profileId===id).length}? Это действие нельзя отменить без резервной копии.`)) return;
     try {
       await replaceXenForoLinks(previousXfLinks.filter(x=>x.profileId!==id));
       if (dependent.length) await replaceTemplates(previousTemplates.filter(t => t.profileId !== id));
@@ -248,6 +253,7 @@ async function executeAction(button) {
       if (relatedDocuments.length) await replaceDocumentRecords(previousDocuments.filter(r=>r.profileId!==id),state.profiles.filter(p=>p.id!==id).map(p=>p.id),previousGovernment.filter(r=>r.profileId!==id));
       await replaceMonitor({...previousMonitor,players:previousMonitor.players.filter(x=>x.profileId!==id)});
       await replaceSources(previousSources.filter(x=>x.profileId!==id));
+      await removeRuleProfile(id);
       await replaceKnowledge({...previousKnowledge,resources:previousKnowledge.resources.filter(r=>r.profileId!==id),relations:previousKnowledge.relations.filter(r=>r.profileId!==id)},state.profiles.filter(p=>p.id!==id).map(p=>p.id));
       if (relatedGovernment.length) await replaceGovernment(previousGovernment.filter(r=>r.profileId!==id),state.profiles.filter(p=>p.id!==id).map(p=>p.id));
       state = await modifyState(s => deleteProfile(s, id));
@@ -256,6 +262,7 @@ async function executeAction(button) {
       await replaceXenForoLinks(previousXfLinks);
       await replaceMonitor(previousMonitor);
       await replaceSources(previousSources);
+      await replaceRules(previousRules);
       await replaceKnowledge(previousKnowledge,state.profiles.map(p=>p.id));
       if (dependent.length) await replaceTemplates(previousTemplates);
       if (related.length) await requestCaseReplacement(previousCases);
@@ -297,6 +304,7 @@ async function executeAction(button) {
   if (action === 'popup-integrations') {await api.tabs.create({url:api.runtime.getURL('ui/workspace.html#integrations')});return;}
   if (action === 'popup-documents') {await api.tabs.create({url:api.runtime.getURL('ui/workspace.html#documents')});return;}
   if (action === 'popup-government') {await api.tabs.create({url:api.runtime.getURL('ui/workspace.html#government')});return;}
+  if (action === 'popup-rules') {await api.tabs.create({url:api.runtime.getURL('ui/workspace.html#rules')});return;}
   if (action === 'popup-law') {await api.tabs.create({url:api.runtime.getURL('ui/workspace.html#law')});return;}
   if (action === 'popup-economy') {await api.tabs.create({url:api.runtime.getURL('ui/workspace.html#economy')});return;}
   if (action === 'popup-timers') {await api.tabs.create({url:api.runtime.getURL('ui/workspace.html#timers')});return;}
@@ -376,7 +384,7 @@ document.addEventListener('change', event => {
     const file = el.files[0];
     if (file.size > 48 * 1024 * 1024) { feedback('Файл больше 48 МиБ', true); el.value = ''; return; }
     void file.text().then(text => {
-      const backup = parseBackupV14(text, validateState, globalThis.RPNForumCore.cleanTemplate);
+      const backup = parseBackupV15(text, validateState, globalThis.RPNForumCore.cleanTemplate);
       const replacing = backup.schemaVersion >= 3 ? `, ${backup.cases.length} жалоб` : '';
       const economyCount = backup.schemaVersion >= 4 ? `, ${backup.economy.length} записей экономики` : '';
       const lawCount = backup.schemaVersion >= 5 ? `, ${backup.lawRecords.length} записей Law Codex` : '';
@@ -385,9 +393,10 @@ document.addEventListener('change', event => {
       const linksCount = backup.schemaVersion >= 8 ? `, ${backup.siteLinks.length} внешних закладок` : '';
       const xfCount=backup.schemaVersion>=10?`, ${backup.xenforoNavigation.length} ссылок XenForo`:'';
       const knowledgeCount=backup.schemaVersion>=12?`, ${backup.knowledgeWorkspace.relations.length} связей Центра знаний`:'';
+      const rulesCount=backup.rules===null?'':`, ${backup.rules.length} правил проекта`;
       const sourcesCount=backup.schemaVersion>=14?`, ${backup.sourceLibrary.length} статей форума и Wiki`:'';
       const monitorCount=backup.schemaVersion>=11?`, ${backup.serverMonitor.players.length} карточек игроков`:'';
-      if (!confirm(`Восстановить ${backup.state.profiles.length} профилей, ${backup.templates.length} шаблонов${replacing}${economyCount}${lawCount}${govCount}${documentsCount}${linksCount}${xfCount}${monitorCount}${knowledgeCount}${sourcesCount}? Данные, отсутствующие в старом формате копии, сохранятся.`)) return;
+      if (!confirm(`Восстановить ${backup.state.profiles.length} профилей, ${backup.templates.length} шаблонов${replacing}${economyCount}${lawCount}${govCount}${documentsCount}${linksCount}${xfCount}${monitorCount}${knowledgeCount}${sourcesCount}${rulesCount}? Данные, отсутствующие в старом формате копии, сохранятся.`)) return;
       return (async () => {
         const beforeState = state;
         const beforeTemplates = await listTemplates();
@@ -401,6 +410,7 @@ document.addEventListener('change', event => {
         const beforeXfLinks = await listXenForoLinks();
         const beforeMonitor=await loadMonitor();
         const beforeSources=await listSources();
+        const beforeRules=await listRules();
         const beforeKnowledge=await loadKnowledge(beforeState.profiles.map(p=>p.id));
         try {
           if (backup.schemaVersion < 3 && beforeCases.some(c => !backup.state.profiles.some(p => p.id === c.profileId))) {
@@ -414,6 +424,7 @@ document.addEventListener('change', event => {
           if (backup.schemaVersion < 11 && beforeMonitor.players.some(x=>!backup.state.profiles.some(p=>p.id===x.profileId)))throw Error('Старая копия содержит другие профили. Сначала экспортируйте карточки игроков.');
           if (backup.schemaVersion < 14 && beforeSources.some(x=>!backup.state.profiles.some(p=>p.id===x.profileId)))throw Error('Старая копия не содержит тексты импортированных страниц, привязанные к другим профилям. Сначала экспортируйте копию v14.');
           if (backup.schemaVersion < 12 && [...beforeKnowledge.resources,...beforeKnowledge.relations].some(x=>!backup.state.profiles.some(p=>p.id===x.profileId)))throw Error('Старая копия содержит другие профили. Сначала экспортируйте связи Центра знаний.');
+          if (backup.rules===null && beforeRules.some(r=>!backup.state.profiles.some(p=>p.id===r.profileId&&p.project===r.project)))throw Error('Старая копия несовместима с профилями базы правил. Сначала экспортируйте v15.');
           await createRestorePoint(api.storage.local);
           if (backup.schemaVersion >= 2) await replaceTemplates(backup.templates);
           if (backup.schemaVersion >= 3) await requestCaseReplacement(backup.cases);
@@ -427,6 +438,7 @@ document.addEventListener('change', event => {
           if (backup.schemaVersion >= 11) await replaceMonitor(backup.serverMonitor);
           if (backup.schemaVersion >= 12) await replaceKnowledge(backup.knowledgeWorkspace,backup.state.profiles.map(p=>p.id));
           if (backup.schemaVersion >= 14) await replaceSources(backup.sourceLibrary);
+          if (backup.rules!==null) await replaceRules(backup.rules,backup.state.profiles);
           state = await restoreState(backup.state);
           await completeRestorePoint(api.storage.local);
         } catch (error) {
@@ -442,6 +454,7 @@ document.addEventListener('change', event => {
           if (backup.schemaVersion >= 11) await replaceMonitor(beforeMonitor);
           if (backup.schemaVersion >= 12) await replaceKnowledge(beforeKnowledge,beforeState.profiles.map(p=>p.id));
           if (backup.schemaVersion >= 14) await replaceSources(beforeSources);
+          if (backup.rules!==null) await replaceRules(beforeRules);
           await restoreState(beforeState);
           throw error;
         }
@@ -483,7 +496,7 @@ document.addEventListener('submit', event => {
   const f = event.target.elements;
   const id = f.namedItem('profileId').value;
   const data = { name: f.namedItem('name').value, project: f.namedItem('project').value, server: f.namedItem('server').value, forumUrl: f.namedItem('forumUrl').value };
-  void modifyState(s => id ? editProfile(s, id, data) : addProfile(s, data)).then(next => { state = next; dialog.close(); render(); feedback(id ? 'Профиль обновлён' : 'Профиль создан'); }).catch(err => feedback(err.message, true));
+  void (async()=>{if(id&&(await listRules()).some(r=>r.profileId===id&&r.project!==data.project))throw Error('Нельзя изменить проект профиля с сохранёнными правилами. Создайте новый профиль.');return modifyState(s => id ? editProfile(s, id, data) : addProfile(s, data));})().then(next => { state = next; dialog.close(); render(); feedback(id ? 'Профиль обновлён' : 'Профиль создан'); }).catch(err => feedback(err.message, true));
 }, true);
 document.addEventListener('keydown', event => {
   if(popup || event.isComposing || event.repeat)return;
@@ -501,6 +514,7 @@ document.addEventListener('keydown', event => {
   }
 });
 api.storage.onChanged.addListener((changes, area) => {
+  if(area==='local'&&changes[RULES_KEY]){document.getElementById('rules-root')?.dispatchEvent(new Event('rules-storage-change'));clearProductivityCache();if(view==='search')void refreshProductivitySearch().then(()=>renderSearchResults(state)).catch(err=>feedback(err.message,true));}
   if(area==='local'&&view==='home'&&state&&!popup&&Object.keys(changes).some(k=>[STORAGE_KEY,TIMERS_KEY,MONITOR_KEY].includes(k)||/^(rpnForumTemplateV2:|mtBinderUsage:|majesticToolkitXfNavV11:|rpnComplaintV3:|majesticDocumentV7:)/.test(k)))scheduleDashboard();
   if(area==='local' && changes[PRODUCTIVITY_KEY]?.newValue){
     try{productivity=validateProductivity(changes[PRODUCTIVITY_KEY].newValue);if(view==='settings')render();else document.documentElement.dataset.accent=productivity.accent;}

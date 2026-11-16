@@ -517,11 +517,55 @@ async def experience_workspace(browser):
     await page.locator('.nav [data-view=home]').click()
     await page.wait_for_function("document.querySelectorAll('.ws-widget').length===5")
     assert await page.locator('.ws-widget h3').first.inner_text()=='Закладки'
+    # Rules Database: create from actual editor, revision, source candidates, search and isolation.
+    await page.locator('#workspace-profile').select_option('profile_majest')
+    await page.locator('.nav [data-view=rules]').click()
+    await page.locator('[data-rules-action=new]').click()
+    form=page.locator('#rules-form')
+    for name,value in {'code':'5.1','title':'QA DM','category':'Основные','text':'Тестовая формулировка','sourceUrl':'https://forum.majestic-rp.ru/threads/test.42/','aliases':'Deathmatch'}.items():
+        await form.locator('[name='+name+']').fill(value)
+    await form.locator('[data-rules-action=add-sanction]').click()
+    await form.locator('[name=min]').fill('30')
+    await form.locator('[name=max]').fill('60')
+    await form.locator('button[type=submit]').click()
+    await page.locator('#rules-detail').get_by_text('5.1 — QA DM',exact=True).wait_for()
+    await page.locator('[data-rules-action=edit]').click()
+    await form.locator('[name=text]').fill('Новая редакция QA')
+    await form.locator('button[type=submit]').click()
+    await page.locator('#rules-detail').get_by_text('Новая редакция QA',exact=True).wait_for()
+    await page.locator('#rules-revision').select_option(index=0)
+    await page.locator('[data-rules-action=compare]').click()
+    assert await page.locator('#rules-compare').get_by_text('Новая редакция QA',exact=True).is_visible()
+    await page.locator('[data-rules-action=activate]').click()
+    await page.wait_for_function("window.__data.majesticToolkitRulesV1[0].activeRevisionId===window.__data.majesticToolkitRulesV1[0].revisions[0].id")
+    await page.locator('#rules-query').fill('Deathmatch')
+    assert await page.locator('#rules-list article').count()==1
+    await page.locator('#rules-type').select_option('ban')
+    assert await page.locator('#rules-list article').count()==0
+    await page.locator('#rules-type').select_option('')
+    await page.evaluate("async()=>{const m=await import('mt:lib/source-library.mjs');await m.saveSource({profileId:'profile_majest',kind:'forum',title:'QA источник',url:'https://forum.majestic-rp.ru/threads/test.42/',body:'5.1. Первая формулировка правила. 5.2. Вторая формулировка правила.'});}")
+    await page.locator('[data-rules-action=refresh]').click()
+    await page.locator('#rules-source').select_option(label='QA источник')
+    await page.locator('[data-rules-action=source]').click()
+    await page.locator('[data-rules-action=candidate][data-id="0"]').click()
+    assert await form.locator('[name=code]').input_value()=='5.1'
+    assert await form.locator('[name=text]').input_value()=='Первая формулировка правила.'
+    await form.locator('[data-rules-action=cancel]').click()
+    await page.locator('.nav [data-view=search]').click()
+    await page.locator('#productivity-search').fill('Deathmatch')
+    await page.locator('.productivity-hit').get_by_text('5.1 — QA DM',exact=True).wait_for()
+    await page.locator('#workspace-profile').select_option('profile_russia')
+    await page.locator('.nav [data-view=rules]').click()
+    await page.locator('#rules-list').wait_for()
+    assert await page.locator('#rules-list article').count()==0
+    await page.locator('#workspace-profile').select_option('profile_majest')
+    await page.locator('#rules-list article').wait_for()
+    assert await page.locator('#rules-list article').count()==1
     await page.set_viewport_size({'width':375,'height':780})
     assert await page.evaluate('document.documentElement.scrollWidth<=window.innerWidth+1')
     assert not errors,errors
     await context.close()
-    return 1
+    return 2
 
 
 async def main():
