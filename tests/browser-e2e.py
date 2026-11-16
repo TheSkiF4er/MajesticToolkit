@@ -64,7 +64,7 @@ def fixture(host='majestic',editor='textarea',member=False,moderation=False):
     return f'<!doctype html><html><head><meta charset="utf-8"><meta name="generator" content="XenForo 2.2"></head><body><nav class="p-nav"><ul class="p-nav-list"><li>Форум</li></ul></nav>{body}</body></html>'
 
 async def inject(page, member=False, canonical_override=True):
-    for part in ['lib/safe-dom.js','lib/forum-core.js','lib/xenforo-core.js','lib/complaints-core.js','lib/forum-customization.js','content/forum/context.js','content/forum/editors.js','content/forum/navigation.js','content/forum/lifecycle.js','content/forum/customization.js','content/forum/punishment-overlay.js','content/forum.js']:
+    for part in ['lib/safe-dom.js','lib/forum-core.js','lib/xenforo-core.js','lib/complaints-core.js','lib/forum-customization.js','content/forum/context.js','content/forum/editors.js','content/forum/navigation.js','content/forum/lifecycle.js','content/forum/customization.js','content/forum/punishment-overlay.js','lib/section-monitor-core.js','content/forum/section-scanner.js','content/forum.js']:
         if part=='content/forum.js' and canonical_override:
             await page.evaluate("""member => { const xf=globalThis.MTXenForo; const path = member ? '/members/test.42/' : '/threads/test.123/'; const canonical='https://forum.majestic-rp.ru'+path; globalThis.MTXenForo=Object.freeze({...xf, identify:(href,doc)=>xf.identify(canonical,doc), memberProfile:(doc,href)=>xf.memberProfile(doc,canonical), moderationAction:(doc,href,action)=>xf.moderationAction(doc,canonical,action)}); }""", member)
         await page.add_script_tag(content=(ROOT/'src'/part).read_text())
@@ -540,7 +540,7 @@ async def experience_workspace(browser):
       const data=seed||initial;window.__data=data;window.__tabs=[];const listeners=[];
       const notify=changes=>{queueMicrotask(()=>listeners.forEach(fn=>fn(changes,'local')));};
       const event={addListener(){},removeListener(){}};
-      window.browser={runtime:{id:'fixture',getURL:path=>'http://localhost:8765/'+path,onMessage:event,async sendMessage(m){if(m.type==='RP_NEXUS_CASE_MUTATE'){try{const s=await import('mt:lib/complaints-store.mjs');const value=m.action==='moderation'?await s.mutateModeration(m.id,m.operation,m.input):m.action==='queue'?await s.mutateComplaintQueue(m.profileId,m.ids,m.operation,m.input):m.action==='create'?await s.createComplaint(m.input):m.action==='update'?await s.editComplaint(m.id,m.patch):m.action==='workflow'?await s.mutateCaseWorkflow(m.id,m.workflowAction,m.payload):null;return {ok:true,value};}catch(e){return {ok:false,error:e.message};}}return {ok:true,value:[]};}},permissions:{async contains(){return false;},onAdded:event,onRemoved:event},tabs:{async create(x){window.__tabs.push(x);return x;},async query(){return[];}},storage:{onChanged:{addListener(fn){listeners.push(fn);}},local:{async get(k){if(k===null)return structuredClone(data);if(Array.isArray(k))return Object.fromEntries(k.map(x=>[x,data[x]]));if(typeof k==='object')return {...k,...Object.fromEntries(Object.keys(k).filter(x=>x in data).map(x=>[x,data[x]]))};return {[k]:data[k]};},async set(x){const changes={};for(const [k,v] of Object.entries(x)){changes[k]={oldValue:data[k],newValue:v};data[k]=structuredClone(v);}notify(changes);},async remove(keys){const changes={};for(const k of Array.isArray(keys)?keys:[keys]){changes[k]={oldValue:data[k]};delete data[k];}notify(changes);}}}};
+      window.browser={runtime:{id:'fixture',getURL:path=>'http://localhost:8765/'+path,onMessage:event,async sendMessage(m){if(m.type==='MT_SECTION_MONITOR'){try{const s=await import('mt:lib/section-monitor-store.mjs');const value=m.action==='list'?await s.sectionView(m.profileId):m.action==='scan'?await s.scanSections(m.profileId,m.input?.id??null):await s.sectionAction(m.profileId,m.action,m.input);return {ok:true,value};}catch(e){return {ok:false,error:e.message};}}if(m.type==='RP_NEXUS_CASE_MUTATE'){try{const s=await import('mt:lib/complaints-store.mjs');const value=m.action==='moderation'?await s.mutateModeration(m.id,m.operation,m.input):m.action==='queue'?await s.mutateComplaintQueue(m.profileId,m.ids,m.operation,m.input):m.action==='create'?await s.createComplaint(m.input):m.action==='update'?await s.editComplaint(m.id,m.patch):m.action==='workflow'?await s.mutateCaseWorkflow(m.id,m.workflowAction,m.payload):null;return {ok:true,value};}catch(e){return {ok:false,error:e.message};}}return {ok:true,value:[]};}},permissions:{async contains(){return !!window.__sectionGranted;},onAdded:event,onRemoved:event},tabs:{async create(x){window.__tabs.push(x);return x;},async query(){return window.__sectionGranted?[{id:91,url:'https://forum.majestic-rp.ru/forums/qa.12/'}]:[];},async sendMessage(id,m){return {ok:true,rows:window.__sectionRows};}},notifications:{async create(id,value){(window.__sectionNotifications??=[]).push({id,value});}},storage:{onChanged:{addListener(fn){listeners.push(fn);}},local:{async get(k){if(k===null)return structuredClone(data);if(Array.isArray(k))return Object.fromEntries(k.map(x=>[x,data[x]]));if(typeof k==='object')return {...k,...Object.fromEntries(Object.keys(k).filter(x=>x in data).map(x=>[x,data[x]]))};return {[k]:data[k]};},async set(x){const changes={};for(const [k,v] of Object.entries(x)){changes[k]={oldValue:data[k],newValue:v};data[k]=structuredClone(v);}notify(changes);},async remove(keys){const changes={};for(const k of Array.isArray(keys)?keys:[keys]){changes[k]={oldValue:data[k]};delete data[k];}notify(changes);}}}};
       window.confirm=()=>true;
       if(!crypto.randomUUID)crypto.randomUUID=()=>Array.from(crypto.getRandomValues(new Uint8Array(16)),x=>x.toString(16).padStart(2,'0')).join('');
       if(!crypto.subtle)Object.defineProperty(crypto,'subtle',{value:{async digest(algorithm,bytes){if(algorithm!=='SHA-256')throw Error('Unexpected algorithm');return Uint8Array.from(await window.__fixtureSha256(Array.from(new Uint8Array(bytes)))).buffer;}}});
@@ -783,8 +783,39 @@ async def experience_workspace(browser):
     await page.set_viewport_size({'width':375,'height':780})
     assert await page.evaluate('document.documentElement.scrollWidth<=window.innerWidth+1')
     assert not errors,errors
+    # Section Monitor: parse actual XenForo list markup, baseline, discovery and accept into real case store.
+    await page.set_viewport_size({'width':1280,'height':900})
+    await page.add_script_tag(path=str(ROOT/'src/content/forum/section-scanner.js'))
+    section_url='https://forum.majestic-rp.ru/forums/qa.12/'
+    def thread(n,title,replies):
+        return f'<div class="structItem structItem--thread"><div class="structItem-title"><a href="threads/qa.{n}/?token=ignored">{title}</a></div><div class="structItem-parts"><a class="username">QA user</a></div><div class="structItem-cell--meta"><dl class="pairs"><dd>{replies}</dd></dl></div></div>'
+    async def scan_fixture(markup):
+        await page.evaluate("""([html,url])=>{window.__sectionGranted=true;window.__sectionRows=MTSectionScanner.parse(new DOMParser().parseFromString(html,'text/html'),url);}""",[f'<div class="structItemContainer">{markup}</div>',section_url])
+    await scan_fixture(thread(900,'QA baseline',0))
+    await page.locator('.nav [data-view=complaints]').click()
+    monitor=page.locator('#section-monitor-root')
+    await monitor.get_by_text('Подписки (0)',exact=True).wait_for()
+    await monitor.locator('[name=sectionName]').fill('QA section')
+    await monitor.locator('[name=sectionUrl]').fill(section_url)
+    await monitor.get_by_role('button',name='Добавить подписку').click()
+    await monitor.get_by_text('QA section',exact=True).wait_for()
+    await monitor.get_by_role('button',name='Проверить все',exact=True).click()
+    await page.wait_for_function("window.__data.mtSectionMonitorV1?.subscriptions[0]?.initialized===true")
+    assert await page.evaluate('window.__data.mtSectionMonitorV1.inbox.length===0')
+    await scan_fixture(thread(900,'QA baseline',0)+thread(901,'QA discovered complaint',1))
+    await monitor.get_by_role('button',name='Проверить все',exact=True).click()
+    await monitor.get_by_text('QA discovered complaint',exact=True).last.wait_for()
+    await monitor.get_by_role('button',name='Принять в жалобы',exact=True).click()
+    await page.wait_for_function("Object.values(window.__data).some(x=>x?.title==='QA discovered complaint'&&x?.triage?.section==='QA section')")
+    await page.wait_for_function("window.__data.mtSectionMonitorV1.inbox[0].status==='accepted'")
+    assert await page.evaluate('window.__sectionNotifications.length===1')
+    await page.locator('#workspace-profile').select_option('profile_russia')
+    await page.locator('#section-monitor-root').get_by_text('Подписки (0)',exact=True).wait_for()
+    await page.locator('#workspace-profile').select_option('profile_majest')
+    await page.locator('#section-monitor-root').get_by_text('QA section',exact=True).wait_for()
+    assert await page.evaluate('document.documentElement.scrollWidth<=window.innerWidth+1')
     await context.close()
-    return 6
+    return 7
 
 
 async def main():

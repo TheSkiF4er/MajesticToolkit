@@ -1,0 +1,59 @@
+import './section-monitor-core.js';
+import {api} from './browser.mjs';
+import {loadState} from './state.mjs';
+import {getActiveProfile} from './model.mjs';
+import {listCases,createComplaint,editComplaint} from './complaints-store.mjs';
+const C=globalThis.MTSectionMonitor;
+export const SECTION_KEY='mtSectionMonitorV1';
+const now=()=>new Date().toISOString(), empty=()=>({version:1,subscriptions:[],inbox:[]});
+const id=v=>{if(typeof v!=='string'||!/^[-\w]{8,128}$/.test(v))throw Error('Некорректный ID мониторинга');return v;};
+const intervals=[5,15,30,60],states=['idle','ok','waiting','error','permission','paused'];
+const scope=(p,s)=>p.id===s.profileId&&p.project===s.project&&p.server===s.server;
+const host=s=>new URL(s.url).hostname;
+const bounded=(v,n)=>{if(!Array.isArray(v)||v.length>n)throw Error('Лимит данных мониторинга');return v;};
+export function validateSectionData(v,profiles){if(v?.version!==1)throw Error('Некорректный формат мониторинга');const ids=new Set(),keys=new Set();const subscriptions=bounded(v.subscriptions,100).map(s=>{const p=profiles.find(p=>scope(p,s));const url=C.sectionUrl(s.url);if(!p||C.HOSTS[new URL(url).hostname]!==p.project||ids.has(id(s.id))||keys.has(p.id+'|'+C.sectionKey(url))||!intervals.includes(s.interval)||typeof s.enabled!=='boolean'||typeof s.notify!=='boolean'||typeof s.initialized!=='boolean'||!states.includes(s.status)||!Number.isSafeInteger(s.failures)||s.failures<0||s.failures>8)throw Error('Некорректная подписка');ids.add(s.id);keys.add(p.id+'|'+C.sectionKey(url));const seen=bounded(s.seen,500).map(r=>C.row(r,new URL(url).hostname));if(new Set(seen.map(r=>r.key)).size!==seen.length)throw Error('Дублирование снимка');return {id:s.id,profileId:p.id,project:p.project,server:p.server,url,name:C.text(s.name,180,true),interval:s.interval,enabled:s.enabled,notify:s.notify,initialized:s.initialized,status:s.status,failures:s.failures,lastAttempt:C.date(s.lastAttempt),lastSuccess:C.date(s.lastSuccess),error:C.text(s.error,300),seen};});
+ const inboxKeys=new Set();const inbox=bounded(v.inbox,1500).map(e=>{const s=subscriptions.find(s=>s.id===e.subscriptionId);if(!s||e.profileId!==s.profileId||(e.status==='accepted'&&!e.caseId)||!['new','reply','changed'].includes(e.kind)||!['pending','dismissed','accepted'].includes(e.status))throw Error('Некорректное событие мониторинга');const row=C.row(e.row,host(s)),key=s.profileId+'|'+row.key;if(inboxKeys.has(key))throw Error('Дублирование входящих');inboxKeys.add(key);return {subscriptionId:s.id,profileId:s.profileId,row,kind:e.kind,status:e.status,at:C.date(e.at),caseId:e.caseId===null?null:id(e.caseId)};});if(profiles.some(p=>subscriptions.filter(s=>scope(p,s)).length>30))throw Error('Лимит подписок профиля');const result={version:1,subscriptions,inbox};if(new TextEncoder().encode(JSON.stringify(result)).length>6*1024*1024)throw Error('Мониторинг превышает 6 МиБ');return result;}
+async function read(profiles){const raw=(await api.storage.local.get(SECTION_KEY))[SECTION_KEY]??empty();if(raw.version!==1||!Array.isArray(raw.subscriptions)||!Array.isArray(raw.inbox))throw Error('Повреждены данные мониторинга');const subscriptions=raw.subscriptions.filter(s=>profiles.some(p=>scope(p,s)));const ids=new Set(subscriptions.map(s=>s.id));return validateSectionData({...raw,subscriptions,inbox:raw.inbox.filter(e=>ids.has(e.subscriptionId))},profiles);}
+export async function exportSectionData(profiles){return read(profiles);}
+export async function replaceSectionData(value,profiles){await api.storage.local.set({[SECTION_KEY]:validateSectionData(value,profiles)});}
+let pending=Promise.resolve();const enqueue=fn=>{const job=pending.then(fn);pending=job.catch(()=>{});return job;};
+async function save(data,profiles){await replaceSectionData(data,profiles);}
+const permission=s=>api.permissions.contains({origins:[new URL(s.url).origin+'/*']});
+function view(data,p){return {subscriptions:data.subscriptions.filter(s=>scope(p,s)).map(({seen,...s})=>({...s,seenCount:seen.length,topics:seen.slice(-100).reverse()})),inbox:data.inbox.filter(e=>e.profileId===p.id).sort((a,b)=>b.at.localeCompare(a.at))};}
+export async function sectionView(profileId){const state=await loadState(),p=getActiveProfile(state);if(p.id!==profileId)throw Error('Активный профиль изменился');return view(await read(state.profiles),p);}
+export function sectionAction(profileId,action,input={}){return enqueue(async()=>{const state=await loadState(),p=getActiveProfile(state);if(p.id!==profileId)throw Error('Активный профиль изменился');const data=await read(state.profiles);const own=data.subscriptions.filter(s=>scope(p,s));
+ if(await recoveryPending())throw Error('Выполняется восстановление данных');
+ if(action==='add'){const url=C.sectionUrl(input.url);if(C.HOSTS[new URL(url).hostname]!==p.project)throw Error('Раздел другого проекта');if(own.length>=30||data.subscriptions.length>=100)throw Error('Лимит подписок');if(own.some(s=>C.sectionKey(s.url)===C.sectionKey(url)))throw Error('Раздел уже отслеживается');if(!intervals.includes(input.interval)||typeof input.notify!=='boolean')throw Error('Неверные настройки');data.subscriptions.push({id:crypto.randomUUID(),profileId:p.id,project:p.project,server:p.server,url,name:C.text(input.name,180,true),interval:input.interval,enabled:true,notify:input.notify,initialized:false,status:'idle',failures:0,lastAttempt:null,lastSuccess:null,error:'',seen:[]});}
+ else if(['accept','dismiss','restore'].includes(action)){const e=data.inbox.find(e=>e.profileId===p.id&&e.row.key===input.key);if(!e)throw Error('Событие не найдено');const s=own.find(s=>s.id===e.subscriptionId);if(!s)throw Error('Подписка другого профиля');if(action==='accept'){if(!await permission(s))throw Error('Доступ к форуму отозван');let existing=(await listCases()).find(c=>c.profileId===p.id&&c.threadKey===e.row.key);if(!existing){try{existing=await createComplaint({profileId:p.id,url:e.row.url,title:e.row.title,triage:{section:s.name},watching:true});}catch(error){existing=(await listCases()).find(c=>c.profileId===p.id&&c.threadKey===e.row.key);if(!existing)throw error;}}e.caseId=existing.id;e.status='accepted';}else{e.status=action==='dismiss'?'dismissed':'pending';}}
+ else {const s=own.find(s=>s.id===input.id);if(!s)throw Error('Подписка не найдена');if(action==='remove'){data.subscriptions=data.subscriptions.filter(x=>x.id!==s.id);data.inbox=data.inbox.filter(e=>e.subscriptionId!==s.id);}else if(action==='pause'){s.enabled=false;s.status='paused';}else if(action==='resume'){s.enabled=true;s.status='idle';s.lastAttempt=null;s.failures=0;}else if(action==='settings'){if(!intervals.includes(input.interval)||typeof input.notify!=='boolean')throw Error('Неверные настройки');s.interval=input.interval;s.notify=input.notify;s.name=C.text(input.name,180,true);}else if(action==='baseline'){const t=s.seen.find(x=>x.key===input.key);if(!t)throw Error('Тема не обнаружена');if(!data.inbox.some(e=>e.profileId===p.id&&e.row.key===t.key))data.inbox.push({profileId:p.id,subscriptionId:s.id,row:t,kind:'new',status:'pending',at:now(),caseId:null});}else throw Error('Неизвестная операция');}
+ const latest=await loadState();if(await recoveryPending())throw Error('Выполняется восстановление данных');if(!scope(getActiveProfile(latest),{profileId:p.id,project:p.project,server:p.server}))throw Error('Профиль изменился');await save(data,latest.profiles);return view(data,p);});}
+async function scanOne(s,data){
+ s.lastAttempt=now();if(!await permission(s)){s.status='permission';s.error='Нет разрешения форума';return [];}
+ let tab;try{const tabs=await api.tabs.query({url:[new URL(s.url).origin+'/*']});const sameHost=tabs.filter(t=>{try{return Number.isInteger(t.id)&&new URL(t.url).origin===new URL(s.url).origin;}catch{return false;}});tab=sameHost.find(t=>{try{return C.sectionKey(t.url)===C.sectionKey(s.url);}catch{return false;}})??sameHost[0];}catch{}if(!tab){s.status='waiting';s.error='Откройте вкладку этого форума';return [];}
+ const result=await api.tabs.sendMessage(tab.id,{type:'MT_SECTION_SCAN',url:s.url});if(!result?.ok)throw Error(result?.error||'Не удалось получить список тем');if(!await permission(s))throw Error('Доступ отозван');
+ const rows=C.snapshot(result.rows,host(s)),d=C.diff(s.seen,rows,s.initialized);const inbox=data.inbox.map(e=>({...e})),events=[];
+ for(const event of d.events){const old=inbox.find(e=>e.profileId===s.profileId&&e.row.key===event.row.key);if(old&&JSON.stringify(old.row)===JSON.stringify(event.row))continue;if(old){Object.assign(old,{row:event.row,kind:event.kind,at:now(),status:old.status==='accepted'?'accepted':'pending'});}else{inbox.push({subscriptionId:s.id,profileId:s.profileId,row:event.row,kind:event.kind,status:'pending',at:now(),caseId:null});}events.push(event);}
+ if(inbox.length>1500){const disposable=inbox.filter(e=>e.status!=='pending').sort((a,b)=>a.at.localeCompare(b.at));while(inbox.length>1500&&disposable.length){const e=disposable.shift();inbox.splice(inbox.indexOf(e),1);}if(inbox.length>1500)throw Error('Входящая очередь заполнена; обработайте события');}
+ data.inbox=inbox;s.seen=d.seen;s.initialized=true;s.lastSuccess=now();s.status='ok';s.error='';s.failures=0;return events;
+}
+async function recoveryPending(){return (await api.storage.local.get('majesticToolkitRecoveryV1')).majesticToolkitRecoveryV1?.status==='pending';}
+export function scanSections(profileId=null,subscriptionId=null){return enqueue(async()=>{
+ if(await recoveryPending())throw Error('Выполняется восстановление данных');
+ let state=await loadState(),data=await read(state.profiles);const p=getActiveProfile(state);if(profileId&&profileId!==p.id)throw Error('Активный профиль изменился');let count=0;
+ const targets=data.subscriptions.filter(s=>s.enabled&&(!profileId||scope(p,s))&&(!subscriptionId||s.id===subscriptionId)).filter(s=>profileId||!s.lastAttempt||Date.now()-Date.parse(s.lastAttempt)>=Math.max(s.interval,Math.min(120,5*2**s.failures))*60000).sort((a,b)=>String(a.lastAttempt??'').localeCompare(String(b.lastAttempt??'')));
+ if(subscriptionId&&!targets.length)throw Error('Подписка неактивна или отсутствует');
+ // Bound alarm work to five requests per wake-up; oldest due subscriptions go first.
+ for(const target of targets.slice(0,5)){
+  const candidate=structuredClone(data),s=candidate.subscriptions.find(x=>x.id===target.id);let events=[],failed=false;const before=JSON.stringify(data);
+  try{events=await scanOne(s,candidate);validateSectionData(candidate,state.profiles);}catch(e){failed=true;const old=data.subscriptions.find(x=>x.id===s.id);old.lastAttempt=now();old.status='error';old.failures=Math.min(8,old.failures+1);old.error=String(e.message||e).slice(0,300);events=[];}
+  // Do not commit an in-flight response after a restore, profile change or revoked permission.
+  if(await recoveryPending())throw Error('Выполняется восстановление данных');const current=await loadState();if(!current.profiles.some(p=>scope(p,s))||(profileId&&!scope(getActiveProfile(current),s)))throw Error('Профиль изменился');
+  const stored=await read(current.profiles);if(JSON.stringify(stored)!==before)throw Error('Подписки изменились');
+  if(!failed&&s.status==='ok'&&!await permission(s))throw Error('Доступ отозван');
+  if(!failed)data=candidate;
+  await save(data,current.profiles);state=current;count+=events.length;
+  for(const event of events.filter(e=>e.kind==='reply')){const c=(await listCases()).find(c=>c.profileId===s.profileId&&c.threadKey===event.row.key&&c.watching&&c.status!=='done');if(c&&!c.unread)await editComplaint(c.id,{unread:true}).catch(()=>{});}
+  if(events.length&&s.notify)await api.notifications.create('mt_section_'+s.id,{type:'basic',iconUrl:'assets/icon-128.png',title:'MajesticToolkit · Мониторинг форума',message:`${s.name}: обнаружено изменений: ${events.length}`}).catch(()=>{});
+ }
+ return profileId?{...view(data,p),count}:count;
+});}

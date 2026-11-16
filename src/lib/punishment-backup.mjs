@@ -1,3 +1,4 @@
+import {validateSectionData} from './section-monitor-store.mjs';
 import {api} from './browser.mjs';
 import {makeBackupV15,parseBackupV15} from './rules-backup.mjs';
 import {validatePolicy} from './punishment-calculator.mjs';
@@ -69,5 +70,5 @@ export async function replacePunishmentData(value,profiles){
  const next=punishmentStorageRecords(value,profiles),raw=await api.storage.local.get(null);const previous=Object.fromEntries(Object.entries(raw).filter(([k])=>k.startsWith(CALCULATOR_PREFIX)||k.startsWith(OVERLAY_PREFIX)));
  const extra=Object.keys(previous).filter(k=>!Object.hasOwn(next,k));try{if(Object.keys(next).length)await api.storage.local.set(next);if(extra.length)await api.storage.local.remove(extra);}catch(err){if(Object.keys(previous).length)await api.storage.local.set(previous);const added=Object.keys(next).filter(k=>!Object.hasOwn(previous,k));if(added.length)await api.storage.local.remove(added);throw err;}
 }
-export function makeRulesExperienceBackup(args,punishments){const raw=JSON.parse(makeBackupV15(...args));raw.punishments=validatePunishmentBackup(punishments,raw.payload.profiles);const text=JSON.stringify(raw,null,2);if(new TextEncoder().encode(text).length>48*1024*1024)throw Error('Резервная копия превышает 48 МиБ');return text;}
-export function parseRulesExperienceBackup(text,validateState,cleanTemplate){const data=parseBackupV15(text,validateState,cleanTemplate),raw=JSON.parse(text);return {...data,punishments:raw.schemaVersion===15&&Object.hasOwn(raw,'punishments')?validatePunishmentBackup(raw.punishments,data.state.profiles):null};}
+export function makeRulesExperienceBackup(args,punishments,sectionMonitor){const raw=JSON.parse(makeBackupV15(...args));raw.punishments=validatePunishmentBackup(punishments,raw.payload.profiles);if(sectionMonitor!==undefined)raw.sectionMonitor=validateSectionData(sectionMonitor,raw.payload.profiles);const text=JSON.stringify(raw,null,2);if(new TextEncoder().encode(text).length>48*1024*1024)throw Error('Резервная копия превышает 48 МиБ');return text;}
+export function parseRulesExperienceBackup(text,validateState,cleanTemplate){const data=parseBackupV15(text,validateState,cleanTemplate),raw=JSON.parse(text);return {...data,sectionMonitor:raw.schemaVersion===15&&Object.hasOwn(raw,'sectionMonitor')?validateSectionData(raw.sectionMonitor,data.state.profiles):null,punishments:raw.schemaVersion===15&&Object.hasOwn(raw,'punishments')?validatePunishmentBackup(raw.punishments,data.state.profiles):null};}

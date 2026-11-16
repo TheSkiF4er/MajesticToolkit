@@ -1,3 +1,5 @@
+import {mountSectionMonitor} from './section-monitor-page.mjs';
+import {SECTION_KEY,exportSectionData,replaceSectionData,validateSectionData} from '../lib/section-monitor-store.mjs';
 import {removeCalculatorProfile} from '../lib/punishment-calculator-store.mjs';
 import {removePunishmentProfile} from '../lib/punishment-overlay-store.mjs';
 import {rulesSection,mountRules} from './rules-page.mjs';
@@ -125,7 +127,7 @@ async function refreshAllModules() {
 }
 function renderPopup() {
   const p = getActiveProfile(state);
-  return `<div class="popup-shell stack ws-popup"><div class="brand"><span class="logo" aria-label="Логотип MajesticToolkit">MT</span><div><h1>MajesticToolkit</h1><p>Rules &amp; Punishments · 1.7.1</p></div></div><div class="card stack"><div class="row spread"><strong>Активный профиль</strong>${tag(projectLabel(p.project))}</div><select aria-label="Выбрать профиль" id="popup-profile">${state.profiles.map(x => `<option value="${e(x.id)}" ${x.id === state.activeProfileId ? 'selected' : ''}>${e(x.name)} · ${e(x.server)}</option>`).join('')}</select><p class="subtle">${e(p.server)}</p>${p.forumUrl ? `<button class="button secondary" data-url="${e(p.forumUrl)}">Открыть форум ↗</button>` : ''}</div><div class="row"><button class="button primary" data-action="panel">Боковая панель</button><button class="button secondary" data-action="workspace">Рабочее пространство ↗</button></div><div class="ws-popup-grid"><button class="button secondary" data-action="popup-search">Поиск</button><button class="button secondary" data-action="popup-forum">Биндер</button><button class="button secondary" data-action="popup-navigation">Навигация</button><button class="button secondary" data-action="popup-customization">Оформление</button><button class="button secondary" data-action="popup-monitor">Серверы и игроки</button><button class="button secondary" data-action="popup-complaints">Жалобы</button><button class="button secondary" data-action="popup-timers">Таймеры</button><button class="button secondary" data-action="popup-economy">Экономика</button><button class="button secondary" data-action="popup-rules">Правила проекта</button><button class="button secondary" data-action="popup-law">Законы</button><button class="button secondary" data-action="popup-government">Ведомства</button><button class="button secondary" data-action="popup-documents">Документы</button><button class="button secondary" data-action="popup-integrations">Интеграции</button><button class="button secondary" data-action="popup-knowledge">Центр знаний</button><button class="button secondary" data-action="popup-settings">Настройки и профили</button><button class="button link" data-url="https://docossum.com/">Docossum ↗</button><button class="button link" data-url="https://fletcher-wiki.com/">Fletcher ↗</button></div><footer class="copyright">© <a href="https://github.com/TheSkiF4er" target="_blank" rel="noopener noreferrer">SkiF4er</a></footer></div>`;
+  return `<div class="popup-shell stack ws-popup"><div class="brand"><span class="logo" aria-label="Логотип MajesticToolkit">MT</span><div><h1>MajesticToolkit</h1><p>Rules &amp; Punishments · 1.7.2</p></div></div><div class="card stack"><div class="row spread"><strong>Активный профиль</strong>${tag(projectLabel(p.project))}</div><select aria-label="Выбрать профиль" id="popup-profile">${state.profiles.map(x => `<option value="${e(x.id)}" ${x.id === state.activeProfileId ? 'selected' : ''}>${e(x.name)} · ${e(x.server)}</option>`).join('')}</select><p class="subtle">${e(p.server)}</p>${p.forumUrl ? `<button class="button secondary" data-url="${e(p.forumUrl)}">Открыть форум ↗</button>` : ''}</div><div class="row"><button class="button primary" data-action="panel">Боковая панель</button><button class="button secondary" data-action="workspace">Рабочее пространство ↗</button></div><div class="ws-popup-grid"><button class="button secondary" data-action="popup-search">Поиск</button><button class="button secondary" data-action="popup-forum">Биндер</button><button class="button secondary" data-action="popup-navigation">Навигация</button><button class="button secondary" data-action="popup-customization">Оформление</button><button class="button secondary" data-action="popup-monitor">Серверы и игроки</button><button class="button secondary" data-action="popup-complaints">Жалобы</button><button class="button secondary" data-action="popup-timers">Таймеры</button><button class="button secondary" data-action="popup-economy">Экономика</button><button class="button secondary" data-action="popup-rules">Правила проекта</button><button class="button secondary" data-action="popup-law">Законы</button><button class="button secondary" data-action="popup-government">Ведомства</button><button class="button secondary" data-action="popup-documents">Документы</button><button class="button secondary" data-action="popup-integrations">Интеграции</button><button class="button secondary" data-action="popup-knowledge">Центр знаний</button><button class="button secondary" data-action="popup-settings">Настройки и профили</button><button class="button link" data-url="https://docossum.com/">Docossum ↗</button><button class="button link" data-url="https://fletcher-wiki.com/">Fletcher ↗</button></div><footer class="copyright">© <a href="https://github.com/TheSkiF4er" target="_blank" rel="noopener noreferrer">SkiF4er</a></footer></div>`;
 }
 function render() {
   if (!state) return;
@@ -136,7 +138,8 @@ function render() {
   const title = titles[view];
   const contents = { rules: rulesSection, home: sectionHome, timers: timersSection, search: () => productivitySection(state), forum: () => forumSection(state), monitor: () => monitorSection(state), complaints: () => complaintsSection(state), economy: () => economySection(state), law: () => lawSection(state), government: () => governmentSection(state), documents: () => documentSection(state), integrations: () => integrationsSection(state), knowledge:()=>knowledgeSection(state), profiles: sectionProfiles, sites: sectionSites, settings: sectionSettings, backup: sectionBackup };
   const wasOpen=document.querySelector('.ws-dashboard details')?.open; if(wasOpen!==undefined)dashboardConfigOpen=wasOpen;
-  replaceHtml(app, `<div class="layout ws-layout"><aside class="side"><div class="brand"><div class="logo" aria-label="Логотип MajesticToolkit">MT</div><div><h1>MajesticToolkit</h1><p>Rules &amp; Punishments · 1.7.1</p></div></div>${profileSelect()}<nav class="nav" aria-label="Разделы">${groupedNav()}</nav><div class="side-footer">Локальные данные · Без облачной регистрации<div class="copyright">© <a href="https://github.com/TheSkiF4er" target="_blank" rel="noopener noreferrer">SkiF4er</a></div></div></aside><main class="main" id="workspace-main"><header class="topline"><div><p class="eyebrow">MajesticToolkit / ${e(title[0])}</p><h2>${e(title[0])}</h2><p class="lead">${e(title[1])}</p></div><button class="button secondary ws-search" data-action="nav" data-view="search" aria-label="Единый поиск">⌕ Поиск <kbd>Ctrl K</kbd></button></header>${moduleWarning()}${view==='forum'?`<nav class="ws-forum-tabs" aria-label="Разделы форума">${FORUM_TABS.map(([id,label])=>`<button class="button ${forumPane===id?'primary':'secondary'}" data-action="forum-pane" data-pane="${id}" aria-pressed="${forumPane===id}">${label}</button>`).join('')}</nav>`:''}${contents[view]()}</main></div>`);
+  replaceHtml(app, `<div class="layout ws-layout"><aside class="side"><div class="brand"><div class="logo" aria-label="Логотип MajesticToolkit">MT</div><div><h1>MajesticToolkit</h1><p>Rules &amp; Punishments · 1.7.2</p></div></div>${profileSelect()}<nav class="nav" aria-label="Разделы">${groupedNav()}</nav><div class="side-footer">Локальные данные · Без облачной регистрации<div class="copyright">© <a href="https://github.com/TheSkiF4er" target="_blank" rel="noopener noreferrer">SkiF4er</a></div></div></aside><main class="main" id="workspace-main"><header class="topline"><div><p class="eyebrow">MajesticToolkit / ${e(title[0])}</p><h2>${e(title[0])}</h2><p class="lead">${e(title[1])}</p></div><button class="button secondary ws-search" data-action="nav" data-view="search" aria-label="Единый поиск">⌕ Поиск <kbd>Ctrl K</kbd></button></header>${moduleWarning()}${view==='forum'?`<nav class="ws-forum-tabs" aria-label="Разделы форума">${FORUM_TABS.map(([id,label])=>`<button class="button ${forumPane===id?'primary':'secondary'}" data-action="forum-pane" data-pane="${id}" aria-pressed="${forumPane===id}">${label}</button>`).join('')}</nav>`:''}${contents[view]()}</main></div>`);
+  if(view==='complaints')mountSectionMonitor(document.getElementById('section-monitor-root'),state,feedback);
   if(view==='rules'){mountRulesExperience(document.getElementById('rules-experience'),state,feedback);void mountRules(document.getElementById('rules-root'),state,feedback).catch(err=>feedback(err.message,true));}
   if(view==='forum'){
     for(const el of document.querySelectorAll('[data-forum-pane]'))el.hidden=el.dataset.forumPane!==forumPane;
@@ -173,18 +176,18 @@ async function exportBackup() {
   const laws = lawRecords();
   const government = governmentRecords();
   const documents = documentRecords();
-  const text = makeRulesExperienceBackup([validateState(state), templates, cases, economy, laws, government, documents, externalLinks(), productivity, await listXenForoLinks(), await loadMonitor(), await loadKnowledge(state.profiles.map(p=>p.id)), globalThis.RPNForumCore.cleanTemplate,await listSources(),await listRules()],await exportPunishmentData(state.profiles));
+  const text = makeRulesExperienceBackup([validateState(state), templates, cases, economy, laws, government, documents, externalLinks(), productivity, await listXenForoLinks(), await loadMonitor(), await loadKnowledge(state.profiles.map(p=>p.id)), globalThis.RPNForumCore.cleanTemplate,await listSources(),await listRules()],await exportPunishmentData(state.profiles),await exportSectionData(state.profiles));
   const blob = new Blob([text], { type: 'application/json;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
-  anchor.download = `majestictoolkit-backup-v1.7.1-${new Date().toISOString().slice(0,10)}.json`;
+  anchor.download = `majestictoolkit-backup-v1.7.2-${new Date().toISOString().slice(0,10)}.json`;
   document.body.appendChild(anchor); anchor.click(); anchor.remove();
   setTimeout(() => URL.revokeObjectURL(url), 30000);
   feedback(`Копия: ${templates.length} шаблонов, ${cases.length} жалоб, ${economy.length} операций/матчей, ${laws.length} записей законодательства, ${government.length} ведомственных записей, ${documents.length} документов/шаблонов, ${externalLinks().length} внешних закладок`);
 }
 async function createBackupText(){
-  return makeRulesExperienceBackup([validateState(state),await listTemplates(),await listCases(),await listEconomyRecords(),lawRecords(),governmentRecords(),documentRecords(),externalLinks(),productivity,await listXenForoLinks(),await loadMonitor(),await loadKnowledge(state.profiles.map(p=>p.id)),globalThis.RPNForumCore.cleanTemplate,await listSources(),await listRules()],await exportPunishmentData(state.profiles));
+  return makeRulesExperienceBackup([validateState(state),await listTemplates(),await listCases(),await listEconomyRecords(),lawRecords(),governmentRecords(),documentRecords(),externalLinks(),productivity,await listXenForoLinks(),await loadMonitor(),await loadKnowledge(state.profiles.map(p=>p.id)),globalThis.RPNForumCore.cleanTemplate,await listSources(),await listRules()],await exportPunishmentData(state.profiles),await exportSectionData(state.profiles));
 }
 async function requestCaseReplacement(cases) {
   const result=await api.runtime.sendMessage({type:'RP_NEXUS_CASE_MUTATE',action:'replace',cases});
@@ -262,6 +265,7 @@ async function executeAction(button) {
       await replaceKnowledge({...previousKnowledge,resources:previousKnowledge.resources.filter(r=>r.profileId!==id),relations:previousKnowledge.relations.filter(r=>r.profileId!==id)},state.profiles.filter(p=>p.id!==id).map(p=>p.id));
       if (relatedGovernment.length) await replaceGovernment(previousGovernment.filter(r=>r.profileId!==id),state.profiles.filter(p=>p.id!==id).map(p=>p.id));
       state = await modifyState(s => deleteProfile(s, id));
+      await replaceSectionData(await exportSectionData(state.profiles),state.profiles).catch(error=>console.warn('MajesticToolkit: не удалось очистить подписки',error));
       await removeCalculatorProfile(id).catch(error=>console.warn('MajesticToolkit: не удалось очистить расчёты',error));
       await removePunishmentProfile(id).catch(error=>console.warn('MajesticToolkit: не удалось очистить черновики удалённого профиля',error));
       await clearNavigationHistory(id).catch(error=>console.warn('MajesticToolkit: не удалось очистить историю удалённого профиля',error));
@@ -420,6 +424,7 @@ document.addEventListener('change', event => {
         const beforeSources=await listSources();
         const beforeRules=await listRules();
         const beforePunishments=await exportPunishmentData(beforeState.profiles);
+        const beforeSections=await exportSectionData(beforeState.profiles);
         const beforeKnowledge=await loadKnowledge(beforeState.profiles.map(p=>p.id));
         try {
           if (backup.schemaVersion < 3 && beforeCases.some(c => !backup.state.profiles.some(p => p.id === c.profileId))) {
@@ -435,6 +440,7 @@ document.addEventListener('change', event => {
           if (backup.schemaVersion < 12 && [...beforeKnowledge.resources,...beforeKnowledge.relations].some(x=>!backup.state.profiles.some(p=>p.id===x.profileId)))throw Error('Старая копия содержит другие профили. Сначала экспортируйте связи Центра знаний.');
           if (backup.rules===null && beforeRules.some(r=>!backup.state.profiles.some(p=>p.id===r.profileId&&p.project===r.project)))throw Error('Старая копия несовместима с профилями базы правил. Сначала экспортируйте v15.');
           if (backup.punishments===null) validatePunishmentBackup(beforePunishments,backup.state.profiles);
+          if (backup.sectionMonitor===null) validateSectionData(beforeSections,backup.state.profiles);
           await createRestorePoint(api.storage.local);
           if (backup.schemaVersion >= 2) await replaceTemplates(backup.templates);
           if (backup.schemaVersion >= 3) await requestCaseReplacement(backup.cases);
@@ -451,6 +457,7 @@ document.addEventListener('change', event => {
           if (backup.rules!==null) await replaceRules(backup.rules,backup.state.profiles);
           state = await restoreState(backup.state);
           if (backup.punishments!==null) await replacePunishmentData(backup.punishments,backup.state.profiles);
+          if (backup.sectionMonitor!==null) await replaceSectionData(backup.sectionMonitor,backup.state.profiles);
           await completeRestorePoint(api.storage.local);
         } catch (error) {
           if (backup.schemaVersion >= 2) await replaceTemplates(beforeTemplates);
@@ -468,6 +475,7 @@ document.addEventListener('change', event => {
           if (backup.rules!==null) await replaceRules(beforeRules);
           await restoreState(beforeState);
           if (backup.punishments!==null) await replacePunishmentData(beforePunishments,beforeState.profiles);
+          if (backup.sectionMonitor!==null) await replaceSectionData(beforeSections,beforeState.profiles);
           throw error;
         }
         await Promise.all([refreshForum(),refreshComplaints(),refreshEconomy(),refreshLaw(),refreshGovernment(),refreshDocuments(),refreshIntegrations()]);
@@ -526,6 +534,7 @@ document.addEventListener('keydown', event => {
   }
 });
 api.storage.onChanged.addListener((changes, area) => {
+  if(area==='local'&&changes[SECTION_KEY])document.getElementById('section-monitor-root')?.dispatchEvent(new Event('section-refresh'));
   if(area==='local'&&Object.keys(changes).some(k=>k===RULES_KEY||/^(mtPunishmentCalculatorV1:|mtPunishmentDraftV1:|rpnComplaintV3:|rpnForumTemplateV2:)/.test(k)))document.getElementById('rules-experience')?.dispatchEvent(new Event('rules-experience-refresh'));
   if(area==='local'&&changes[RULES_KEY]){document.getElementById('rules-root')?.dispatchEvent(new Event('rules-storage-change'));clearProductivityCache();if(view==='search')void refreshProductivitySearch().then(()=>renderSearchResults(state)).catch(err=>feedback(err.message,true));}
   if(area==='local'&&view==='home'&&state&&!popup&&Object.keys(changes).some(k=>[STORAGE_KEY,TIMERS_KEY,MONITOR_KEY,RULES_KEY].includes(k)||/^(rpnForumTemplateV2:|mtBinderUsage:|majesticToolkitXfNavV11:|rpnComplaintV3:|majesticDocumentV7:|mtPunishmentCalculatorV1:|mtPunishmentDraftV1:)/.test(k)))scheduleDashboard();
@@ -550,7 +559,7 @@ api.storage.onChanged.addListener((changes, area) => {
     void refreshEconomy().then(() => { if (view === 'economy' && !document.getElementById('economy-dialog')?.open) render(); }).catch(err=>feedback(err.message,true));
   }
   if (area === 'local' && Object.keys(changes).some(k => k.startsWith('rpnComplaintV3:'))) {
-    void refreshComplaints().then(() => {if(view==='complaints' && !document.activeElement?.matches?.('[data-case-draft]')) render();}).catch(err=>feedback(err.message,true));
+    void refreshComplaints().then(() => {if(view==='complaints' && !document.activeElement?.matches?.('[data-case-draft]')&&!document.activeElement?.closest?.('#section-subscription-form')) render();}).catch(err=>feedback(err.message,true));
   }
   if (area === 'local' && Object.keys(changes).some(k => (k.startsWith('rpnForumTemplateV2:')||k.startsWith('majesticToolkitXfNavV11:')||k.startsWith('mtBinderUsage:')))) {
     void refreshForum().then(() => { if (view === 'forum'&&!document.getElementById('forum-template-dialog')?.open) render(); }).catch(err => feedback(err.message, true));

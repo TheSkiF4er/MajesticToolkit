@@ -31,7 +31,7 @@ test('grant on an already open XenForo tab injects real binder scripts immediate
  listeners.added();
  await wait(()=>executions.some(x=>x.target.tabId===42));
  const installed=executions.find(x=>x.target.tabId===42);
- assert.deepEqual(installed.files,['lib/safe-dom.js','lib/forum-core.js','lib/xenforo-core.js','lib/complaints-core.js','lib/forum-customization.js','content/forum/context.js','content/forum/editors.js','content/forum/navigation.js','content/forum/lifecycle.js','content/forum/customization.js','content/forum/punishment-overlay.js','content/forum.js']);
+ assert.deepEqual(installed.files,['lib/safe-dom.js','lib/forum-core.js','lib/xenforo-core.js','lib/complaints-core.js','lib/forum-customization.js','content/forum/context.js','content/forum/editors.js','content/forum/navigation.js','content/forum/lifecycle.js','content/forum/customization.js','content/forum/punishment-overlay.js','lib/section-monitor-core.js','content/forum/section-scanner.js','content/forum.js']);
  assert.ok(registrations.some(x=>x.matches[0]==='https://forum.majestic-rp.ru/*'));
 });
 test('revoking site permission unregisters the persistent content script',async()=>{
@@ -121,4 +121,13 @@ test('Calculator workspace route uses trusted forum thread/profile and rejects r
  const {defaultState}=await import('../src/lib/model.mjs');const state=defaultState();data.rpNexusStateV1=state;const origin='https://forum.majestic-rp.ru/*',url='https://forum.majestic-rp.ru/threads/test.100/page-2?secret=1#post-3';granted.add(origin);
  const res=await send(url,{type:'RP_NEXUS_OPEN_WORKSPACE',view:'calculator',thread:'forged',calcProfile:'forged'});assert.equal(res.ok,true);const opened=new URL(openedTabs.at(-1).url);assert.equal(opened.hash,'#rules');assert.equal(opened.searchParams.get('thread'),'forum.majestic-rp.ru:100');assert.equal(opened.searchParams.get('calcProfile'),state.activeProfileId);assert.equal(opened.searchParams.get('calculator'),'1');assert.ok(!opened.href.includes('secret'));
  granted.delete(origin);assert.equal((await send(url,{type:'RP_NEXUS_OPEN_WORKSPACE',view:'calculator'})).ok,false);
+});
+
+test('Section Monitor is extension-only, uses active profile and opens inbox from notification',async()=>{
+ const {defaultState}=await import('../src/lib/model.mjs');const state=defaultState();data.rpNexusStateV1=state;const p=state.profiles[0],url='https://forum.majestic-rp.ru/forums/qa.77/';
+ const action={type:'MT_SECTION_MONITOR',profileId:p.id,action:'add',input:{url,name:'QA section',interval:5,notify:true}};
+ const content=await send(url,action);assert.equal(content.ok,false);
+ const ext='moz-extension://test-ext-id/ui/workspace.html';const res=await send(ext,action);assert.equal(res.ok,true);const id=res.value.subscriptions[0].id;
+ assert.equal((await send(ext,{type:'MT_SECTION_MONITOR',action:'list',profileId:'other-profile'})).ok,false);
+ listeners.clicked('mt_section_'+id);await wait(()=>openedTabs.some(t=>t.url.includes('sectionMonitor='+encodeURIComponent(p.id)+'#complaints')));
 });

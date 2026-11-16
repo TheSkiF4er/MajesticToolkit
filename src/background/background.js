@@ -1,3 +1,4 @@
+import {sectionAction,sectionView,scanSections,SECTION_KEY} from '../lib/section-monitor-store.mjs';
 import {punishmentOverlay,OVERLAY_PREFIX,overlayThread} from '../lib/punishment-overlay-store.mjs';
 import {RULES_KEY} from '../lib/rules-core.mjs';
 import {readingPosition} from '../lib/forum-reading-store.mjs';
@@ -40,7 +41,7 @@ async function syncScripts() {
       try {
         const granted = await api.permissions.contains({origins:[site.origin]});
         const isForum = FORUMS.includes(site);
-        const wanted={id:site.id,matches:[site.origin],js:isForum ? ['lib/safe-dom.js','lib/forum-core.js','lib/xenforo-core.js','lib/complaints-core.js','lib/forum-customization.js','content/forum/context.js','content/forum/editors.js','content/forum/navigation.js','content/forum/lifecycle.js','content/forum/customization.js','content/forum/punishment-overlay.js','content/forum.js'] : ['lib/safe-dom.js','lib/complaints-core.js','content/evidence.js'],runAt:'document_idle',allFrames:false,persistAcrossSessions:true};
+        const wanted={id:site.id,matches:[site.origin],js:isForum ? ['lib/safe-dom.js','lib/forum-core.js','lib/xenforo-core.js','lib/complaints-core.js','lib/forum-customization.js','content/forum/context.js','content/forum/editors.js','content/forum/navigation.js','content/forum/lifecycle.js','content/forum/customization.js','content/forum/punishment-overlay.js','lib/section-monitor-core.js','content/forum/section-scanner.js','content/forum.js'] : ['lib/safe-dom.js','lib/complaints-core.js','content/evidence.js'],runAt:'document_idle',allFrames:false,persistAcrossSessions:true};
         const current=byId.get(site.id);
         const obsolete=current&&(JSON.stringify(current.js)!==JSON.stringify(wanted.js) || JSON.stringify(current.matches)!==JSON.stringify(wanted.matches) || current.runAt!==wanted.runAt || current.allFrames!==false);
         // Persisted registrations from a previous version must be replaced on upgrade.
@@ -86,6 +87,7 @@ async function restoreTimerAlarms() {
   }
 }
 api.notifications.onClicked.addListener(id => {
+  if(id.startsWith('mt_section_')){void (async()=>{const data=(await api.storage.local.get(SECTION_KEY))[SECTION_KEY];const sub=data?.subscriptions?.find(s=>s.id===id.slice('mt_section_'.length));if(sub)await api.tabs.create({url:api.runtime.getURL('ui/workspace.html?sectionMonitor='+encodeURIComponent(sub.profileId)+'#complaints')});await api.notifications.clear(id);})().catch(()=>{});return;}
   if(id.startsWith(NOTIFICATION_PREFIX)) {
     void api.tabs.create({url:api.runtime.getURL('ui/workspace.html#timers')}).catch(error=>console.warn('MajesticToolkit: таймеры',error));
     void api.notifications.clear(id).catch(()=>{});
@@ -128,7 +130,7 @@ async function checkDeadlines() {
     }catch(error){console.warn('MajesticToolkit: уведомление о сроке',error);}
   }
 }
-async function tick() { try { await scanTabs(); await checkDeadlines(); } catch(error) { console.warn('MajesticToolkit: периодическая проверка',error); } }
+async function tick() { try { await scanTabs(); await checkDeadlines(); await scanSections(); } catch(error) { console.warn('MajesticToolkit: периодическая проверка',error); } }
 let pendingSync=Promise.resolve();
 function scheduleSyncScripts(){
   // Two permission events may fire before Chrome has persisted the first registration.
@@ -174,6 +176,7 @@ api.runtime.onMessage.addListener((message,sender,sendResponse) => {
   async function task() {
     validatePayloadSize(message,isTrustedExtension&&message.type==='RP_NEXUS_CASE_MUTATE'&&message.action==='moderation'?350000:65536);
     if(isForum && message.type!=='RP_NEXUS_FORUM_DATA' && !await api.permissions.contains({origins:[`https://${new URL(sender.url).hostname}/*`]}))throw Error('Доступ к форуму отозван');
+    if(message.type==='MT_SECTION_MONITOR'){if(!isTrustedExtension)throw Error('Недоверенный источник');if(message.action==='list')return sectionView(message.profileId);if(message.action==='scan')return scanSections(message.profileId,message.input?.id??null);return sectionAction(message.profileId,message.action,message.input);}
     if (message.type === 'RP_NEXUS_OPEN_WORKSPACE') {
       if (!isForum && !isVideo && !isTrustedExtension) throw Error('Недоверенный источник');
       if(message.view==='calculator'){
@@ -337,7 +340,7 @@ api.runtime.onMessage.addListener((message,sender,sendResponse) => {
     }
     throw Error('Неизвестный запрос');
   }
-  if (!['RP_NEXUS_OPEN_WORKSPACE','RP_NEXUS_SCAN_OPEN_TABS','RP_NEXUS_TRACK_CURRENT_THREAD','RP_NEXUS_THREAD_OBSERVED','RP_NEXUS_VIDEO_ADD','RP_NEXUS_CASE_MUTATE','RP_NEXUS_FORUM_DATA','RP_NEXUS_VIDEO_CASES','MAJESTIC_SAVE_PUBLIC_PLAYER','MAJESTIC_TIMER','MT_BINDER_ACTION','MT_NAVIGATION_ACTION','MT_FORUM_READING','MT_PUNISHMENT_OVERLAY'].includes(message.type)) return;
+  if (!['RP_NEXUS_OPEN_WORKSPACE','RP_NEXUS_SCAN_OPEN_TABS','RP_NEXUS_TRACK_CURRENT_THREAD','RP_NEXUS_THREAD_OBSERVED','RP_NEXUS_VIDEO_ADD','RP_NEXUS_CASE_MUTATE','RP_NEXUS_FORUM_DATA','RP_NEXUS_VIDEO_CASES','MAJESTIC_SAVE_PUBLIC_PLAYER','MAJESTIC_TIMER','MT_BINDER_ACTION','MT_NAVIGATION_ACTION','MT_FORUM_READING','MT_PUNISHMENT_OVERLAY','MT_SECTION_MONITOR'].includes(message.type)) return;
   void task().then(value => sendResponse({ok:true,value})).catch(error => sendResponse({ok:false,error:error?.message || 'Ошибка'}));
   return true;
 });
