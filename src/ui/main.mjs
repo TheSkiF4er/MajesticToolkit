@@ -1,3 +1,5 @@
+import {NAV_GROUPS,FORUM_TABS,dashboardShell,dashboardWidgets,loadDashboard} from './workspace-page.mjs';
+import {changeWidget,workspacePreferences} from '../lib/workspace-preferences.mjs';
 import {mountCustomization} from './customization-page.mjs';
 import {updateForumSettings,FORUM_DEFAULTS} from '../lib/forum-settings.mjs';
 import '../lib/safe-dom.js';
@@ -49,6 +51,14 @@ const popup = mode === 'popup';
 let state;
 let productivity = defaultProductivity();
 let view = 'home';
+let forumPane='binder', dashboardEpoch=0, dashboardTimer, dashboardConfigOpen=false;
+function readForumPane(){const pane=new URLSearchParams(location.search).get('section');return FORUM_TABS.some(([id])=>id===pane)?pane:'binder';}
+function setForumPane(pane){if(!FORUM_TABS.some(([id])=>id===pane))return;forumPane=pane;if(!popup&&view==='forum'){const url=new URL(location.href);url.searchParams.set('section',pane);url.hash='forum';history.replaceState(null,'',url.href);}}
+async function refreshDashboard(){const root=document.getElementById('ws-widgets');if(!root||!state)return;const epoch=++dashboardEpoch, snapshot=state;try{const data=await loadDashboard(snapshot);if(epoch===dashboardEpoch&&root.isConnected&&view==='home'&&state.activeProfileId===snapshot.activeProfileId)replaceHtml(root,dashboardWidgets(state,data));}catch(err){if(epoch===dashboardEpoch&&root.isConnected)root.textContent='Не удалось загрузить рабочий стол: '+err.message;}}
+function scheduleDashboard(){clearTimeout(dashboardTimer);dashboardTimer=setTimeout(()=>{void refreshDashboard();},100);}
+async function updateWidgets(fn){state=await modifyState(current=>savePreferences(current,{workspace:fn(current.preferences.workspace)}));dashboardConfigOpen=true;render();feedback('Рабочий стол сохранён');}
+function profileSelect(id='workspace-profile'){return `<label class="ws-profile">Активный профиль<select id="${id}" aria-label="Активный профиль">${state.profiles.map(p=>`<option value="${e(p.id)}" ${p.id===state.activeProfileId?'selected':''}>${e(p.name)} · ${e(p.server)}</option>`).join('')}</select></label>`;}
+function groupedNav(){return NAV_GROUPS.map(([label,ids])=>`<div class="ws-nav-group"><p class="ws-nav-label">${e(label)}</p>${ids.map(id=>{const [,name,icon]=NAV.find(x=>x[0]===id);return `<button type="button" data-action="nav" data-view="${id}" class="${view===id?'active':''}" ${view===id?'aria-current="page"':''}><span aria-hidden="true">${icon}</span>${e(name)}</button>`;}).join('')}</div>`).join('');}
 let permissionGranted = false;
 let russiaPermissionGranted = false;
 let videoPermissionGranted = false;
@@ -63,10 +73,10 @@ function feedback(message, isError = false) {
   clearTimeout(timeout);
   timeout = setTimeout(() => { notice.textContent = ''; notice.className = ''; }, isError ? 7000 : 4500);
 }
-function navigateTo(target) {
+function navigateTo(target,pane) {
   if (!NAV.some(([id])=>id===target)) return false;
   view=target;
-  if(!popup && location.hash!=='#'+view) history.replaceState(null,'','#'+view);
+  if(!popup){const url=new URL(location.href);url.hash=view;if(view==='forum'){if(pane&&FORUM_TABS.some(([id])=>id===pane))forumPane=pane;url.searchParams.set('section',forumPane);}else url.searchParams.delete('section');if(url.href!==location.href)history.replaceState(null,'',url.href);}
   return true;
 }
 function tag(text) { return `<span class="tag">${e(text)}</span>`; }
@@ -75,13 +85,8 @@ function profileRow(p) {
   return `<article class="card profile-card ${active ? 'active' : ''}"><div class="profile-title"><strong>${e(p.name)}</strong>${active ? tag('Активный') : ''}</div><p class="subtle">${e(projectLabel(p.project))} · ${e(p.server)}</p><div class="row">${!active ? `<button class="button primary" data-action="activate" data-id="${e(p.id)}">Выбрать</button>` : ''}<button class="button secondary" data-action="edit" data-id="${e(p.id)}">Изменить</button><button class="button danger" data-action="delete" data-id="${e(p.id)}" ${state.profiles.length === 1 ? 'disabled' : ''}>Удалить</button></div></article>`;
 }
 function sectionHome() {
-  const active = getActiveProfile(state);
-  let activeForumHost='';
-  try { activeForumHost=new URL(active.forumUrl).hostname.toLowerCase(); } catch {}
-  const siteGranted=activeForumHost==='forum.majestic-rp.ru' ? permissionGranted :
-    activeForumHost==='forum.russia.online' ? russiaPermissionGranted : false;
-  const siteName=activeForumHost==='forum.russia.online' ? 'Russia Online' : 'Majestic RP';
-  return `<div class="stack"><section class="card hero"><div class="eyebrow">Активный профиль</div><h3>${e(active.name)}</h3><p>${e(projectLabel(active.project))} · ${e(active.server)}</p><div class="row" style="margin-top:17px"><button class="button" data-action="edit" data-id="${e(active.id)}">Настроить профиль</button>${active.forumUrl ? `<button class="button" data-url="${e(active.forumUrl)}">Открыть форум ↗</button>` : ''}</div></section><div class="grid"><section class="card"><p class="eyebrow">Профили</p><div class="stat">${state.profiles.length}</div><p class="subtle">Отдельные RP-проекты и серверы</p><button class="button secondary" data-action="nav" data-view="profiles">Управлять профилями</button></section><section class="card"><p class="eyebrow">Интеграция с форумом</p><div class="stat">${siteGranted ? 'Включена' : 'Выключена'}</div><p class="subtle">Кнопка MajesticToolkit на официальном форуме ${e(siteName)}</p><button class="button secondary" data-action="nav" data-view="sites">Настроить доступ</button></section></div><section class="card"><h3>Forum Toolkit · Economy · Law Codex · Government Tools · Document Studio · Integrations 1.5.9</h3><p class="lead">Биндер, жалобы, доказательства, экономика, законодательство, процессуальные решения и ведомства.</p><div class="row"><button class="button primary" data-action="nav" data-view="search">Единый поиск</button><button class="button primary" data-action="nav" data-view="forum">Открыть биндер</button><button class="button secondary" data-action="nav" data-view="monitor">Мониторинг серверов</button><button class="button secondary" data-action="nav" data-view="complaints">Менеджер жалоб</button><button class="button secondary" data-action="nav" data-view="timers">Таймеры</button><button class="button secondary" data-action="nav" data-view="economy">Экономика и аналитика</button><button class="button secondary" data-action="nav" data-view="law">Law Codex</button><button class="button secondary" data-action="nav" data-view="government">Government Tools</button><button class="button secondary" data-action="nav" data-view="documents">Document Studio</button><button class="button secondary" data-action="nav" data-view="integrations">Интеграции Google</button><button class="button primary" data-action="nav" data-view="knowledge">Центр знаний</button></div></section><section class="card"><h3>Быстрый доступ</h3><p class="subtle">Переход на сайты без автоматического сбора данных</p><div class="row">${BOOKMARKS.map(link => `<button class="button secondary" data-url="${e(link.url)}">${e(link.name)} ↗</button>`).join('')}</div></section></div>`;
+  const active=getActiveProfile(state);let host='';try{host=new URL(active.forumUrl).hostname;}catch{}
+  return dashboardShell(state,host==='forum.majestic-rp.ru'?permissionGranted:host==='forum.russia.online'?russiaPermissionGranted:false);
 }
 function sectionProfiles() {
   return `<div class="stack"><div class="row spread"><p class="lead">Храните разные игровые профили локально. Сервер и ссылка на форум задаются отдельно.</p><button class="button primary" data-action="create">+ Новый профиль</button></div>${state.profiles.map(profileRow).join('')}</div>`;
@@ -96,7 +101,7 @@ function sectionSettings() {
 function sectionBackup() {
   return `<div class="stack"><section class="card"><h3>Скачать резервную копию</h3><p class="lead">JSON-файл с профилями, шаблонами, жалобами, экономическими операциями, сделками, результатами игроков локальной базой законов и Government Tools и документами Document Studio. Авторизационные данные сайтов и содержимое страниц не сохраняются.</p><div class="row" style="margin-top:14px"><button class="button primary" data-action="export">Скачать JSON</button></div></section><section class="card"><h3>Восстановить из файла</h3><p class="lead">Данные проверяются до применения. Импорт заменит текущие профили и настройки. Максимальный размер — 48 МиБ. Поддерживаются копии v1–v14. Формат v14 также сохраняет этапы рассмотрения жалоб, журнал действий, связи Центра знаний, ссылки и закладки Navigation 2.0, Server Monitor и импортированные статьи. История посещений не экспортируется. При импорте старой копии новые записи сохраняются, если профили совместимы.</p><div style="margin-top:14px"><label class="field">Выберите .json<input id="backup-file" type="file" accept=".json,application/json"></label></div></section><section class="card"><h3>Точка восстановления после импорта</h3><p class="lead">Перед импортом создаётся проверенный снимок текущих данных (не более 20 МиБ). Он переживает закрытие браузера. OAuth-токены и данные других расширений в снимок не входят.</p><div class="row" style="margin-top:12px"><button class="button secondary" data-action="restore-point">Восстановить предыдущие данные</button><button class="button danger" data-action="discard-point">Удалить точку</button></div></section><section class="card"><h3>Где хранятся данные</h3><p class="lead">В локальном хранилище браузерного расширения. MajesticToolkit не имеет аккаунта, собственного сервера и телеметрии. Перед удалением расширения скачайте копию.</p></section></div>`;
 }
-const titles = {knowledge:['Центр знаний','Связи документов, законов, шаблонов и внешних справочников'],search:['Поиск и локальный помощник','Быстрый индекс всех локальных разделов, ответы с указанием источников'],integrations:['Интеграции','Google Docs, Sheets, Drive, Fletcher Wiki и Docossum'],documents:['Document Studio','Редактор, формы, шаблоны, история локальных версий и PDF'],government:['Government Tools','Конструктор решений, правовые основания, процессуальные шаблоны и ведомства'],law:['Law Codex','Законы, неизменяемые редакции, статьи, избранное и памятки'],economy:['Экономика и аналитика','Сделки, денежные операции, калькуляторы, игроки и семьи'],complaints:['Жалобы и доказательства','Отслеживание тем, сроки, черновики и таймкоды'],timers:['Таймеры','Локальные таймеры с системными уведомлениями'],monitor:['Server Monitor','Официальный каталог серверов и сохранённые публичные карточки игроков'],forum:['Forum Toolkit','Шаблоны ответов, BBCode и инструменты на форуме'],home:['Обзор','Рабочая среда под ваши RP-проекты'],profiles:['Профили','Переключение между игровыми серверами'],sites:['Сайты и разрешения','Вы контролируете, где работает расширение'],settings:['Настройки','Настройте интерфейс под себя'],backup:['Резервные копии','Перенос данных между браузерами']};
+const titles = {knowledge:['Центр знаний','Связи документов, законов, шаблонов и внешних справочников'],search:['Поиск и локальный помощник','Быстрый индекс всех локальных разделов, ответы с указанием источников'],integrations:['Интеграции','Google Docs, Sheets, Drive, Fletcher Wiki и Docossum'],documents:['Document Studio','Редактор, формы, шаблоны, история локальных версий и PDF'],government:['Government Tools','Конструктор решений, правовые основания, процессуальные шаблоны и ведомства'],law:['Law Codex','Законы, неизменяемые редакции, статьи, избранное и памятки'],economy:['Экономика и аналитика','Сделки, денежные операции, калькуляторы, игроки и семьи'],complaints:['Жалобы и доказательства','Отслеживание тем, сроки, черновики и таймкоды'],timers:['Таймеры','Локальные таймеры с системными уведомлениями'],monitor:['Server Monitor','Официальный каталог серверов и сохранённые публичные карточки игроков'],forum:['Forum Experience','Биндер, персональная навигация и оформление в едином пространстве'],home:['Обзор','Рабочая среда под ваши RP-проекты'],profiles:['Профили','Переключение между игровыми серверами'],sites:['Сайты и разрешения','Вы контролируете, где работает расширение'],settings:['Настройки','Настройте интерфейс под себя'],backup:['Резервные копии','Перенос данных между браузерами']};
 function moduleWarning() {
   if (!moduleErrors.length) return '';
   return `<section class="card stack" role="alert"><h3>Часть разделов временно недоступна</h3><p class="subtle">${e(moduleErrors.map(x=>x.name).join(', '))}. Остальные разделы и локальные данные доступны.</p><button type="button" class="button secondary" data-action="retry-modules">Повторить загрузку</button></section>`;
@@ -114,7 +119,7 @@ async function refreshAllModules() {
 }
 function renderPopup() {
   const p = getActiveProfile(state);
-  return `<div class="popup-shell stack"><div class="brand"><span class="logo" aria-label="Логотип MajesticToolkit">MT</span><div><h1>MajesticToolkit</h1><p>Версия 1.5.9</p></div></div><div class="card stack"><div class="row spread"><strong>Активный профиль</strong>${tag(projectLabel(p.project))}</div><select aria-label="Выбрать профиль" id="popup-profile">${state.profiles.map(x => `<option value="${e(x.id)}" ${x.id === state.activeProfileId ? 'selected' : ''}>${e(x.name)} · ${e(x.server)}</option>`).join('')}</select><p class="subtle">${e(p.server)}</p>${p.forumUrl ? `<button class="button secondary" data-url="${e(p.forumUrl)}">Открыть форум ↗</button>` : ''}</div><div class="row"><button class="button primary" data-action="panel">Боковая панель</button><button class="button secondary" data-action="workspace">Рабочее пространство ↗</button></div><div class="row"><button class="button link" data-action="popup-search">Поиск</button><button class="button link" data-action="popup-forum">Шаблоны форума</button><button class="button link" data-action="popup-monitor">Серверы и игроки</button><button class="button link" data-action="popup-complaints">Жалобы</button><button class="button link" data-action="popup-timers">Таймеры</button><button class="button link" data-action="popup-economy">Экономика</button><button class="button link" data-action="popup-law">Законы</button><button class="button link" data-action="popup-government">Ведомства</button><button class="button link" data-action="popup-documents">Документы</button><button class="button link" data-action="popup-integrations">Интеграции</button><button class="button link" data-action="popup-knowledge">Центр знаний</button><button class="button link" data-action="popup-settings">Настройки и профили</button><button class="button link" data-url="https://docossum.com/">Docossum ↗</button><button class="button link" data-url="https://fletcher-wiki.com/">Fletcher ↗</button></div><footer class="copyright">© <a href="https://github.com/TheSkiF4er" target="_blank" rel="noopener noreferrer">SkiF4er</a></footer></div>`;
+  return `<div class="popup-shell stack ws-popup"><div class="brand"><span class="logo" aria-label="Логотип MajesticToolkit">MT</span><div><h1>MajesticToolkit</h1><p>Forum Experience · 1.6.0</p></div></div><div class="card stack"><div class="row spread"><strong>Активный профиль</strong>${tag(projectLabel(p.project))}</div><select aria-label="Выбрать профиль" id="popup-profile">${state.profiles.map(x => `<option value="${e(x.id)}" ${x.id === state.activeProfileId ? 'selected' : ''}>${e(x.name)} · ${e(x.server)}</option>`).join('')}</select><p class="subtle">${e(p.server)}</p>${p.forumUrl ? `<button class="button secondary" data-url="${e(p.forumUrl)}">Открыть форум ↗</button>` : ''}</div><div class="row"><button class="button primary" data-action="panel">Боковая панель</button><button class="button secondary" data-action="workspace">Рабочее пространство ↗</button></div><div class="ws-popup-grid"><button class="button secondary" data-action="popup-search">Поиск</button><button class="button secondary" data-action="popup-forum">Биндер</button><button class="button secondary" data-action="popup-navigation">Навигация</button><button class="button secondary" data-action="popup-customization">Оформление</button><button class="button secondary" data-action="popup-monitor">Серверы и игроки</button><button class="button secondary" data-action="popup-complaints">Жалобы</button><button class="button secondary" data-action="popup-timers">Таймеры</button><button class="button secondary" data-action="popup-economy">Экономика</button><button class="button secondary" data-action="popup-law">Законы</button><button class="button secondary" data-action="popup-government">Ведомства</button><button class="button secondary" data-action="popup-documents">Документы</button><button class="button secondary" data-action="popup-integrations">Интеграции</button><button class="button secondary" data-action="popup-knowledge">Центр знаний</button><button class="button secondary" data-action="popup-settings">Настройки и профили</button><button class="button link" data-url="https://docossum.com/">Docossum ↗</button><button class="button link" data-url="https://fletcher-wiki.com/">Fletcher ↗</button></div><footer class="copyright">© <a href="https://github.com/TheSkiF4er" target="_blank" rel="noopener noreferrer">SkiF4er</a></footer></div>`;
 }
 function render() {
   if (!state) return;
@@ -124,8 +129,14 @@ function render() {
   if (popup) { replaceHtml(app, moduleWarning() + renderPopup()); return; }
   const title = titles[view];
   const contents = { home: sectionHome, timers: timersSection, search: () => productivitySection(state), forum: () => forumSection(state), monitor: () => monitorSection(state), complaints: () => complaintsSection(state), economy: () => economySection(state), law: () => lawSection(state), government: () => governmentSection(state), documents: () => documentSection(state), integrations: () => integrationsSection(state), knowledge:()=>knowledgeSection(state), profiles: sectionProfiles, sites: sectionSites, settings: sectionSettings, backup: sectionBackup };
-  replaceHtml(app, `<div class="layout"><aside class="side"><div class="brand"><div class="logo" aria-label="Логотип MajesticToolkit">MT</div><div><h1>MajesticToolkit</h1><p>Версия 1.5.9</p></div></div><nav class="nav" aria-label="Разделы">${NAV.map(([id, label, icon]) => `<button type="button" data-action="nav" data-view="${id}" class="${view === id ? 'active' : ''}" ${view === id ? 'aria-current="page"' : ''}><span aria-hidden="true">${icon}</span>${e(label)}</button>`).join('')}</nav><div class="side-footer">Локальные данные · Без облачной регистрации<div class="copyright">© <a href="https://github.com/TheSkiF4er" target="_blank" rel="noopener noreferrer">SkiF4er</a></div></div></aside><main class="main"><header class="topline"><div><p class="eyebrow">MajesticToolkit / ${e(title[0])}</p><h2>${e(title[0])}</h2><p class="lead">${e(title[1])}</p></div>${mode === 'sidebar' ? '' : '<span class="tag">v1.5.9</span>'}</header>${moduleWarning()}${contents[view]()}</main></div>`);
-  if(view==='forum')mountCustomization(document.getElementById('forum-customization'),state,next=>{state=next;render();},feedback);
+  const wasOpen=document.querySelector('.ws-dashboard details')?.open; if(wasOpen!==undefined)dashboardConfigOpen=wasOpen;
+  replaceHtml(app, `<div class="layout ws-layout"><aside class="side"><div class="brand"><div class="logo" aria-label="Логотип MajesticToolkit">MT</div><div><h1>MajesticToolkit</h1><p>Forum Experience · 1.6.0</p></div></div>${profileSelect()}<nav class="nav" aria-label="Разделы">${groupedNav()}</nav><div class="side-footer">Локальные данные · Без облачной регистрации<div class="copyright">© <a href="https://github.com/TheSkiF4er" target="_blank" rel="noopener noreferrer">SkiF4er</a></div></div></aside><main class="main" id="workspace-main"><header class="topline"><div><p class="eyebrow">MajesticToolkit / ${e(title[0])}</p><h2>${e(title[0])}</h2><p class="lead">${e(title[1])}</p></div><button class="button secondary ws-search" data-action="nav" data-view="search" aria-label="Единый поиск">⌕ Поиск <kbd>Ctrl K</kbd></button></header>${moduleWarning()}${view==='forum'?`<nav class="ws-forum-tabs" aria-label="Разделы форума">${FORUM_TABS.map(([id,label])=>`<button class="button ${forumPane===id?'primary':'secondary'}" data-action="forum-pane" data-pane="${id}" aria-pressed="${forumPane===id}">${label}</button>`).join('')}</nav>`:''}${contents[view]()}</main></div>`);
+  if(view==='forum'){
+    for(const el of document.querySelectorAll('[data-forum-pane]'))el.hidden=el.dataset.forumPane!==forumPane;
+    if(forumPane==='customization')mountCustomization(document.getElementById('forum-customization'),state,next=>{state=next;render();},feedback);
+  }
+  if(view==='home'){const details=document.querySelector('.ws-dashboard details');if(details)details.open=dashboardConfigOpen;void refreshDashboard();}
+
 }
 async function refreshPermission() {
   try { permissionGranted = await api.permissions.contains({ origins: [FORUM_SITE.origin] }); }
@@ -160,7 +171,7 @@ async function exportBackup() {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
-  anchor.download = `majestictoolkit-backup-v1.5.9-${new Date().toISOString().slice(0,10)}.json`;
+  anchor.download = `majestictoolkit-backup-v1.6.0-${new Date().toISOString().slice(0,10)}.json`;
   document.body.appendChild(anchor); anchor.click(); anchor.remove();
   setTimeout(() => URL.revokeObjectURL(url), 30000);
   feedback(`Копия: ${templates.length} шаблонов, ${cases.length} жалоб, ${economy.length} операций/матчей, ${laws.length} записей законодательства, ${government.length} ведомственных записей, ${documents.length} документов/шаблонов, ${externalLinks().length} внешних закладок`);
@@ -192,9 +203,16 @@ async function changePermission(site = FORUM_SITE.origin) {
 async function executeAction(button) {
   if (button.dataset.url) { await openTab(button.dataset.url); return; }
   const { action, id } = button.dataset;
+  if(action==='forum-pane'){setForumPane(button.dataset.pane);render();document.querySelector(`[data-action="forum-pane"][data-pane="${forumPane}"]`)?.focus();return;}
+  if(action==='dashboard-refresh'){await refreshDashboard();return;}
+  if(action==='widget-order'){await updateWidgets(v=>changeWidget(v,id,button.dataset.direction));return;}
+  if(action==='widget-reset'){await updateWidgets(()=>workspacePreferences());return;}
+  if(action==='dashboard-template'){const t=(await listTemplates()).find(x=>x.id===id&&['*',state.activeProfileId].includes(x.profileId));if(!t)throw Error('Шаблон недоступен');await refreshForum();await handleForumAction({dataset:{forumAction:'copy',id}},state,render,feedback);return;}
+  if(action==='dashboard-bookmark'){const p=getActiveProfile(state),host=globalThis.MTXenForo.domain(p.forumUrl);const row=globalThis.MTXenForo.selectNavigation(await listXenForoLinks(),p.id,host).find(x=>x.id===id&&x.kind==='bookmark');if(!row)throw Error('Закладка недоступна');await refreshForum();await handleForumAction({dataset:{forumAction:'open-link',id}},state,render,feedback);return;}
+  if(action==='popup-navigation'||action==='popup-customization'){await api.tabs.create({url:api.runtime.getURL('ui/workspace.html?section='+(action==='popup-navigation'?'navigation':'customization')+'#forum')});return;}
   if (action === 'retry-modules') { await refreshBinderProfile(state.activeProfileId);
   await refreshAllModules(); render(); if(!moduleErrors.length)feedback('Разделы загружены'); else feedback('Не все разделы удалось загрузить',true); return; }
-  if (action === 'nav') { if(!navigateTo(button.dataset.view))throw Error('Раздел не найден'); if (view === 'search') await refreshProductivitySearch(); if(view==='knowledge')await refreshKnowledge(state.profiles.map(p=>p.id)); if (view === 'forum') {await refreshBinderProfile(state.activeProfileId);await refreshForum();} if(view==='monitor') await refreshMonitor(); if(view==='complaints') await refreshComplaints(); if(view==='timers') await refreshTimers(); if(view==='economy') await refreshEconomy(); if(view==='law') await refreshLaw(); if(view==='government') await refreshGovernment(); if(view==='documents') await refreshDocuments(); if(view==='integrations') await refreshIntegrations(); render(); return; }
+  if (action === 'nav') { if(!navigateTo(button.dataset.view,button.dataset.pane))throw Error('Раздел не найден'); if (view === 'search') await refreshProductivitySearch(); if(view==='knowledge')await refreshKnowledge(state.profiles.map(p=>p.id)); if (view === 'forum') {await refreshBinderProfile(state.activeProfileId);await refreshForum();} if(view==='monitor') await refreshMonitor(); if(view==='complaints') await refreshComplaints(); if(view==='timers') await refreshTimers(); if(view==='economy') await refreshEconomy(); if(view==='law') await refreshLaw(); if(view==='government') await refreshGovernment(); if(view==='documents') await refreshDocuments(); if(view==='integrations') await refreshIntegrations(); render(); return; }
   if (action === 'popup-monitor') {await api.tabs.create({url:api.runtime.getURL('ui/workspace.html#monitor')});return;}
   if (action === 'popup-search') {await api.tabs.create({url:api.runtime.getURL('ui/workspace.html#search')});return;}
   if (action === 'create') { openEditor(null); return; }
@@ -284,7 +302,8 @@ async function executeAction(button) {
   if (action === 'popup-timers') {await api.tabs.create({url:api.runtime.getURL('ui/workspace.html#timers')});return;}
   if (action === 'popup-complaints') {await api.tabs.create({url:api.runtime.getURL('ui/workspace.html#complaints')});return;}
   if (action === 'popup-forum') { await api.tabs.create({ url: api.runtime.getURL('ui/workspace.html#forum') }); return; }
-  if (action === 'workspace' || action === 'popup-settings') { await openWorkspace(); return; }
+  if (action === 'popup-settings') { await api.tabs.create({url:api.runtime.getURL('ui/workspace.html#settings')}); return; }
+  if (action === 'workspace') { await openWorkspace(); return; }
 }
 document.addEventListener('click', event => {
   const button = event.target.closest('button[data-timer-action],button[data-productivity-action],button[data-action],button[data-url],button[data-forum-action],button[data-case-action],button[data-economy-action],button[data-law-action],button[data-government-action],button[data-document-action],button[data-integration-action],button[data-monitor-action],button[data-knowledge-action],button[data-source-action]');
@@ -302,12 +321,12 @@ document.addEventListener('click', event => {
     void task.catch(err=>feedback(err.message,true));return;
   }
   if(button.dataset.productivityAction){
-    void handleProductivityAction(button,state,target=>{view=target;render();},feedback).catch(err=>feedback(err.message,true));return;
+    void handleProductivityAction(button,state,target=>{navigateTo(target);render();},feedback).catch(err=>feedback(err.message,true));return;
   }
   if(button.dataset.forumAction==='reset-settings'){
     const scope=button.dataset.id;void modifyState(current=>savePreferences(current,{forum:updateForumSettings(current.preferences.forum,scope,scope==='global'?FORUM_DEFAULTS:null)})).then(next=>{state=next;render();feedback('Настройки форума сброшены');}).catch(err=>feedback(err.message,true));return;
   }
-  const task = button.dataset.knowledgeAction ? handleKnowledgeAction(button,state,render,feedback,target=>{view=target;render();}) : button.dataset.monitorAction ? handleMonitorAction(button,state,render,feedback) : button.dataset.integrationAction ? handleIntegrationAction(button,state,render,feedback,createBackupText) : button.dataset.forumAction
+  const task = button.dataset.knowledgeAction ? handleKnowledgeAction(button,state,render,feedback,target=>{navigateTo(target);render();}) : button.dataset.monitorAction ? handleMonitorAction(button,state,render,feedback) : button.dataset.integrationAction ? handleIntegrationAction(button,state,render,feedback,createBackupText) : button.dataset.forumAction
     ? handleForumAction(button, state, render, feedback)
     : button.dataset.caseAction ? handleComplaintAction(button,state,render,feedback)
     : button.dataset.economyAction ? handleEconomyAction(button,state,render,feedback)
@@ -347,8 +366,9 @@ document.addEventListener('change', event => {
   if (el.id === 'law-import-file' && el.files?.[0]) {void importLawFile(el.files[0],state,render,feedback).catch(error=>feedback(error.message,true));return;}
   if (el.id === 'complaint-filter') {setComplaintFilter(el.value);return;}
   if (el.id === 'economy-filter') {setEconomyFilter(el.value);render();return;}
-  if (el.id === 'popup-profile') {
-    void modifyState(s => selectProfile(s, el.value)).then(next => { state = next; render(); feedback('Профиль выбран'); }).catch(err => feedback(err.message, true));
+  if(el.dataset.widgetToggle){void updateWidgets(v=>changeWidget(v,el.dataset.widgetToggle,'toggle')).catch(err=>feedback(err.message,true));return;}
+  if (el.id === 'popup-profile'||el.id==='workspace-profile') {
+    void modifyState(s => selectProfile(s, el.value)).then(next => { state = next; void refreshBinderProfile(state.activeProfileId).then(refreshForum).then(render).catch(err=>feedback(err.message,true)); feedback('Профиль выбран'); }).catch(err => feedback(err.message, true));
   } else if (el.dataset.setting) {
     const value = el.type === 'checkbox' ? el.checked : el.value;
     void modifyState(s => savePreferences(s, { [el.dataset.setting]: value })).then(next => { state = next; render(); feedback('Настройки сохранены'); }).catch(err => feedback(err.message, true));
@@ -481,6 +501,7 @@ document.addEventListener('keydown', event => {
   }
 });
 api.storage.onChanged.addListener((changes, area) => {
+  if(area==='local'&&view==='home'&&state&&!popup&&Object.keys(changes).some(k=>[STORAGE_KEY,TIMERS_KEY,MONITOR_KEY].includes(k)||/^(rpnForumTemplateV2:|mtBinderUsage:|majesticToolkitXfNavV11:|rpnComplaintV3:|majesticDocumentV7:)/.test(k)))scheduleDashboard();
   if(area==='local' && changes[PRODUCTIVITY_KEY]?.newValue){
     try{productivity=validateProductivity(changes[PRODUCTIVITY_KEY].newValue);if(view==='settings')render();else document.documentElement.dataset.accent=productivity.accent;}
     catch(err){feedback(err.message,true);}
@@ -510,7 +531,7 @@ api.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local' || !changes[STORAGE_KEY]?.newValue) return;
   void loadState().then(async next => { state = next; await refreshBinderProfile(state.activeProfileId);render(); }).catch(err => feedback(err.message, true));
 });
-if(!popup)setInterval(()=>{if(view==='timers')tickTimers();},1000);
+if(!popup)setInterval(()=>{if(view==='timers'||view==='home')tickTimers();},1000);
 if(!popup)setInterval(()=>{if(view==='monitor')void tickMonitor().then(changed=>{if(changed)render();}).catch(err=>feedback(err.message,true));},60000);
 api.permissions.onAdded.addListener(() => { void refreshPermission().then(render); });
 api.permissions.onRemoved.addListener(() => { void refreshPermission().then(render); });
@@ -523,14 +544,15 @@ try {
   await refreshAllModules();
   if (productivityError) moduleErrors.push(productivityError);
   await refreshPermission();
+  forumPane=readForumPane();
   view = NAV.some(([id])=>location.hash==='#'+id) ? location.hash.slice(1) : state.preferences.startPage;
-  window.addEventListener('hashchange',()=>{if(!popup&&NAV.some(([id])=>location.hash==='#'+id)){navigateTo(location.hash.slice(1));void (async()=>{if(view==='complaints')await refreshComplaints();if(view==='timers')await refreshTimers();render();})().catch(err=>feedback(err.message,true));}});
+  window.addEventListener('hashchange',()=>{if(!popup&&NAV.some(([id])=>location.hash==='#'+id)){forumPane=readForumPane();navigateTo(location.hash.slice(1));void (async()=>{if(view==='complaints')await refreshComplaints();if(view==='timers')await refreshTimers();render();})().catch(err=>feedback(err.message,true));}});
   if (view === 'search') {
     try { await refreshProductivitySearch(); }
     catch (error) { moduleErrors.push({name:'Локальный поиск',reason:error.message}); }
   }
   render();
-  if(view==='forum'&&new URLSearchParams(location.search).get('section')==='customization')document.getElementById('forum-customization')?.scrollIntoView({block:'start'});
+  
 }
 catch (err) {
   app.textContent = '';

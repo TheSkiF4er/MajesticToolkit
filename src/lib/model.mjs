@@ -1,3 +1,4 @@
+import {workspacePreferences} from './workspace-preferences.mjs';
 import {validateForumSettings} from './forum-settings.mjs';
 export const SCHEMA_VERSION = 1;
 export const BACKUP_FORMAT = 'rp-nexus-backup';
@@ -65,7 +66,7 @@ export function validateState(data) {
   const updatedAt = string(data.updatedAt, 'Дата состояния', 40);
   if (!Number.isFinite(Date.parse(updatedAt))) throw new Error('Некорректная дата данных');
   // Whitelist all fields: imported objects cannot append scripts, tokens or unexpected configuration.
-  return { schemaVersion: SCHEMA_VERSION, activeProfileId, profiles, preferences: { theme: prefs.theme, compact: prefs.compact, startPage: prefs.startPage, ...(prefs.forum===undefined?{}:{forum:validateForumSettings(prefs.forum,profiles.map(p=>p.id))}) }, updatedAt };
+  return { schemaVersion: SCHEMA_VERSION, activeProfileId, profiles, preferences: { theme: prefs.theme, compact: prefs.compact, startPage: prefs.startPage, ...(prefs.workspace===undefined?{}:{workspace:workspacePreferences(prefs.workspace)}), ...(prefs.forum===undefined?{}:{forum:validateForumSettings(prefs.forum,profiles.map(p=>p.id))}) }, updatedAt };
 }
 function changed(state, patch) { return { ...state, ...patch, updatedAt: now() }; }
 export function addProfile(state, input) {

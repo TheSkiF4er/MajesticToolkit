@@ -148,7 +148,7 @@ api.runtime.onInstalled.addListener(start);
 api.runtime.onStartup?.addListener(start);
 api.storage.onChanged.addListener((changes,area) => {
   if(area==='local'&&Object.keys(changes).some(k=>!k.startsWith('mtNavigationHistory:')))invalidateSearch();
-  if (area !== 'local' || !Object.keys(changes).some(k=> k==='rpNexusStateV1'||k.startsWith('rpnForumTemplateV2:')||k.startsWith('majesticToolkitXfNavV11:')||k.startsWith('mtNavigationHistory:'))) return;
+  if (area !== 'local' || !Object.keys(changes).some(k=> k==='rpNexusStateV1'||k.startsWith('rpnForumTemplateV2:')||k.startsWith('majesticToolkitXfNavV11:')||k.startsWith('mtNavigationHistory:')||k.startsWith('rpnComplaintV3:'))) return;
   void api.tabs.query({}).then(tabs=>Promise.allSettled(tabs.filter(t=>t.id&&FORUMS.some(f=>t.url?.startsWith(f.origin.slice(0,-1)))).map(t=>api.tabs.sendMessage(t.id,{type:'RP_NEXUS_REFRESH_FORUM_DATA'})))).catch(()=>{});
 });
 api.permissions.onAdded.addListener(() => {void scheduleSyncScripts();});
@@ -170,7 +170,7 @@ api.runtime.onMessage.addListener((message,sender,sendResponse) => {
     if(isForum && message.type!=='RP_NEXUS_FORUM_DATA' && !await api.permissions.contains({origins:[`https://${new URL(sender.url).hostname}/*`]}))throw Error('Доступ к форуму отозван');
     if (message.type === 'RP_NEXUS_OPEN_WORKSPACE') {
       if (!isForum && !isVideo && !isTrustedExtension) throw Error('Недоверенный источник');
-      await api.tabs.create({url:api.runtime.getURL('ui/workspace.html' + (message.view==='customization'?'?section=customization#forum':['home','forum','complaints','search','knowledge','profiles','timers','monitor','economy','law','government','documents','integrations','settings'].includes(message.view) ? '#'+message.view : ''))});
+      await api.tabs.create({url:api.runtime.getURL('ui/workspace.html' + (['customization','navigation','binder'].includes(message.view)?'?section='+message.view+'#forum':['home','forum','complaints','search','knowledge','profiles','timers','monitor','economy','law','government','documents','integrations','settings'].includes(message.view) ? '#'+message.view : ''))});
       return true;
     }
     if(message.type === 'MAJESTIC_TIMER') {
@@ -210,7 +210,8 @@ api.runtime.onMessage.addListener((message,sender,sendResponse) => {
       const links = globalThis.MTXenForo.selectNavigation(await importedXenForo.listXenForoLinks(),profile.id,host);
       const navigationHistory=settings.navigationEnabled&&settings.navigationHistory?await importedXenForo.navigationHistory(profile.id):[];
       const forumProfiles=state.profiles.filter(p=>globalThis.MTXenForo.domain(p.forumUrl)===host).map(({id,name,server})=>({id,name,server}));
-      return {profile:{id:profile.id,name:profile.name,project:profile.project,server:profile.server},templates,links,settings,navigationHistory,forumProfiles,usage:await binderUsage(profile.id)};
+      let currentCase=null;try{const key=globalThis.RPNComplaints.threadKey(sender.url),store=await storePromise;const match=(await store.listCases()).find(c=>c.profileId===profile.id&&c.threadKey===key);if(match)currentCase={id:match.id,title:match.title,status:match.status,deadline:match.deadline};}catch{}
+      return {profile:{id:profile.id,name:profile.name,project:profile.project,server:profile.server},templates,links,settings,navigationHistory,forumProfiles,currentCase,usage:await binderUsage(profile.id)};
     }
     if(message.type==='MT_FORUM_READING'){
       if(!isForum)throw Error('Недоверенный источник');
@@ -226,7 +227,7 @@ api.runtime.onMessage.addListener((message,sender,sendResponse) => {
       const state=(await api.storage.local.get('rpNexusStateV1')).rpNexusStateV1;
       const XF=globalThis.MTXenForo,host=XF.domain(sender.url),profile=XF.matchingProfile(state?.profiles,state?.activeProfileId,sender.url);
       const settings=forumSettingsFor(state?.preferences?.forum,host,profile?.id);
-      if(!profile||!settings.enabled||!settings.navigationEnabled||message.profileId!==profile.id)throw Error('Навигация отключена или профиль изменился');
+      if(!profile||!settings.enabled||(!settings.navigationEnabled&&message.action!=='switch-profile')||message.profileId!==profile.id)throw Error('Навигация отключена или профиль изменился');
       if(message.action==='opened')return importedXenForo.markNavigationOpened(message.id,profile.id,host);
       if(message.action==='bookmark')return importedXenForo.saveCurrentBookmark(profile.id,sender.url,message.title);
       if(message.action==='visit'){if(!settings.navigationHistory)return [];return importedXenForo.recordNavigationVisit(profile.id,sender.url,message.title);}

@@ -423,6 +423,7 @@ async def exercise(browser):
     await page.locator('[data-mt-fold-button]').first.click()
     assert await page.locator('[data-mt-fold-button]').first.get_attribute('aria-expanded')=='true'
     await page.locator('#rp-nexus-forum-020').evaluate("x=>x.shadowRoot.querySelector('.launcher').click()")
+    await page.locator('[data-nav-act=design]').click()
     assert await page.locator('#rpn-reading select option').count()==3
     await page.locator('#rpn-reading').get_by_text('Запомнить место',exact=True).click()
     await page.wait_for_function("window.__reading==='js-post-100' || window.__reading==='js-post-200'")
@@ -443,6 +444,86 @@ async def exercise(browser):
     await context.close()
     return count
 
+async def experience_workspace(browser):
+    context=await browser.new_context(viewport={'width':1250,'height':850})
+    page=await context.new_page()
+    errors=[]
+    page.on('pageerror',lambda err:errors.append(str(err)))
+    import base64, json, re
+    modules={}
+    def add_module(path):
+        path=path.resolve();key='mt:'+path.relative_to(ROOT/'src').as_posix()
+        if key in modules:return key
+        modules[key]=''
+        def rewrite(match):return match.group(1)+add_module((path.parent/match.group(2)).resolve())+match.group(1)
+        source=re.sub(r"(['\"])(\.{1,2}/[^'\"\n]+\.m?js)\1",rewrite,path.read_text())
+        modules[key]='data:text/javascript;base64,'+base64.b64encode(source.encode()).decode()
+        return key
+    add_module(ROOT/'src/ui/main.mjs')
+    html=(ROOT/'src/ui/workspace.html').read_text().replace('<link rel="stylesheet" href="styles.css">','').replace('<script type="module" src="main.mjs"></script>','')
+    html=html.replace('</head>','<script type="importmap">'+json.dumps({'imports':modules})+'</script></head>')
+    mock='''(seed) => {
+      const date='2026-11-15T00:00:00.000Z';
+      const p1={id:'profile_majest',name:'Majestic QA',project:'majestic',server:'Alpha',forumUrl:'https://forum.majestic-rp.ru/',createdAt:date,updatedAt:date};
+      const p2={id:'profile_russia',name:'Russia QA',project:'russia-online',server:'Beta',forumUrl:'https://forum.russia.online/',createdAt:date,updatedAt:date};
+      const initial={rpNexusStateV1:{schemaVersion:1,activeProfileId:p1.id,profiles:[p1,p2],preferences:{theme:'dark',compact:false,startPage:'home'},updatedAt:date}};
+      const data=seed||initial;window.__data=data;window.__tabs=[];const listeners=[];
+      const notify=changes=>{queueMicrotask(()=>listeners.forEach(fn=>fn(changes,'local')));};
+      const event={addListener(){},removeListener(){}};
+      window.browser={runtime:{id:'fixture',getURL:path=>'http://localhost:8765/'+path,onMessage:event,async sendMessage(){return {ok:true,value:[]};}},permissions:{async contains(){return false;},onAdded:event,onRemoved:event},tabs:{async create(x){window.__tabs.push(x);return x;},async query(){return[];}},storage:{onChanged:{addListener(fn){listeners.push(fn);}},local:{async get(k){if(k===null)return structuredClone(data);if(Array.isArray(k))return Object.fromEntries(k.map(x=>[x,data[x]]));if(typeof k==='object')return {...k,...Object.fromEntries(Object.keys(k).filter(x=>x in data).map(x=>[x,data[x]]))};return {[k]:data[k]};},async set(x){const changes={};for(const [k,v] of Object.entries(x)){changes[k]={oldValue:data[k],newValue:v};data[k]=structuredClone(v);}notify(changes);},async remove(keys){const changes={};for(const k of Array.isArray(keys)?keys:[keys]){changes[k]={oldValue:data[k]};delete data[k];}notify(changes);}}}};
+      window.confirm=()=>true;
+      if(!crypto.randomUUID)crypto.randomUUID=()=>Array.from(crypto.getRandomValues(new Uint8Array(16)),x=>x.toString(16).padStart(2,'0')).join('');
+    }'''
+    async def boot(page,seed=None,route='about:blank'):
+        await page.set_content(html)
+        await page.add_style_tag(content=(ROOT/'src/ui/styles.css').read_text())
+        await page.evaluate(mock,seed)
+        await page.evaluate('route=>history.replaceState(null,"",route)',route)
+        await page.evaluate("import('mt:ui/main.mjs')")
+    await boot(page)
+    await page.locator('.ws-widgets').wait_for(timeout=8000)
+    assert await page.locator('.ws-widget').count()==6
+    assert await page.locator('.ws-nav-group').count()==4
+    # Actual stores, not mocked dashboard counts.
+    await page.evaluate('''async()=>{const f=await import('mt:lib/forum-store.mjs'),x=await import('mt:lib/xenforo-store.mjs');await f.upsertTemplate({label:'QA Majestic binder',text:'Hello',format:'plain',category:'QA',profileId:'profile_majest',shortcut:0,favorite:true});await f.upsertTemplate({label:'QA Russia binder',text:'Other',format:'plain',category:'QA',profileId:'profile_russia',shortcut:0,favorite:true});await x.saveCurrentBookmark('profile_majest','https://forum.majestic-rp.ru/threads/test.42/','QA bookmark');}''')
+    await page.get_by_text('QA Majestic binder',exact=True).wait_for(timeout=5000)
+    assert not await page.get_by_text('QA Russia binder',exact=True).count()
+    await page.get_by_text('QA bookmark',exact=True).wait_for()
+    await page.locator('[data-action=dashboard-bookmark]').click()
+    await page.wait_for_function("window.__tabs.some(x=>x.url==='https://forum.majestic-rp.ru/threads/test.42/')")
+    await page.locator('.ws-dashboard details summary').click()
+    await page.locator('[data-widget-toggle=timers]').uncheck()
+    await page.wait_for_function("window.__data.rpNexusStateV1.preferences.workspace.hidden.includes('timers')")
+    await page.wait_for_function("document.querySelectorAll('.ws-widget').length===5")
+    await page.locator('[data-action=widget-order][data-id=bookmarks][data-direction=up]').click()
+    await page.wait_for_function("window.__data.rpNexusStateV1.preferences.workspace.order[0]==='bookmarks'")
+    await page.locator('#workspace-profile').select_option('profile_russia')
+    await page.get_by_text('QA Russia binder',exact=True).wait_for()
+    assert not await page.get_by_text('QA Majestic binder',exact=True).count()
+    assert not await page.get_by_text('QA bookmark',exact=True).count()
+    await page.locator('.ws-tile[data-pane=customization]').click()
+    await page.locator('#forum-customization').wait_for(state='visible')
+    assert not await page.locator('#forum-search').is_visible()
+    await page.locator('[data-action=forum-pane][data-pane=navigation]').click()
+    assert await page.locator('#navigation-2').is_visible()
+    await page.locator('[data-action=forum-pane][data-pane=binder]').click()
+    assert await page.locator('#forum-search').is_visible()
+    await page.locator('[data-action=forum-pane][data-pane=settings]').click()
+    assert await page.locator('[data-forum-settings=global]').is_visible()
+    saved=await page.evaluate('window.__data');route=page.url
+    await page.close();page=await context.new_page();page.on('pageerror',lambda err:errors.append(str(err)));await boot(page,saved,route)
+    await page.locator('[data-forum-settings=global]').wait_for(state='visible')
+    assert await page.locator('#workspace-profile').input_value()=='profile_russia'
+    await page.locator('.nav [data-view=home]').click()
+    await page.wait_for_function("document.querySelectorAll('.ws-widget').length===5")
+    assert await page.locator('.ws-widget h3').first.inner_text()=='Закладки'
+    await page.set_viewport_size({'width':375,'height':780})
+    assert await page.evaluate('document.documentElement.scrollWidth<=window.innerWidth+1')
+    assert not errors,errors
+    await context.close()
+    return 1
+
+
 async def main():
     names=os.environ.get('MAJESTIC_E2E_BROWSERS','chromium').split(',')
     async with async_playwright() as p:
@@ -458,6 +539,7 @@ async def main():
             browser=await engine.launch(headless=True,**kwargs)
             try:
                 cases=await exercise(browser)
+                cases+=await experience_workspace(browser)
                 print(f'{name} browser E2E: {cases} scenarios passed (offline XenForo DOM fixtures)')
             finally:await browser.close()
 
