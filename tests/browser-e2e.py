@@ -465,6 +465,8 @@ async def exercise(browser):
     await page.keyboard.press('Alt+Shift+P')
     overlay=page.locator('#rpn-punishment-panel')
     await overlay.locator('#rpn-punishment-search').wait_for()
+    await overlay.get_by_role('button',name='Калькулятор ↗').click()
+    assert await page.evaluate("window.__sent.some(m=>m.type==='RP_NEXUS_OPEN_WORKSPACE'&&m.view==='calculator')")
     await overlay.locator('#rpn-punishment-search').fill('Power Gaming')
     assert await overlay.locator('[data-punishment-rule]').count()==1
     await overlay.locator('[data-punishment-rule=rule_pg_123]').click()
@@ -666,11 +668,46 @@ async def experience_workspace(browser):
     await page.locator('#rules-list article').get_by_text('5.5 — QA PG',exact=True).wait_for()
     await page.locator('#rules-list [data-rules-action=open]').click()
     await page.locator('#rules-detail').get_by_text('Связанный бинд: QA PG · bind_qa01',exact=True).wait_for()
+    # Real calculator UI, rule-backed selections, policy, overlay draft, and history.
+    calc=page.locator('#punishment-calculator')
+    await calc.get_by_role('button',name='Рассчитать',exact=True).wait_for()
+    await calc.get_by_label('ID игрока',exact=True).fill('12345')
+    await calc.get_by_label('Правило',exact=True).select_option(label='5.1 — QA DM')
+    await calc.get_by_label('Срок',exact=True).fill('60')
+    await calc.get_by_role('button',name='Добавить санкцию').click()
+    await calc.get_by_label('Правило',exact=True).select_option(label='5.5 — QA PG')
+    await calc.get_by_label('Срок',exact=True).fill('60')
+    await calc.get_by_role('button',name='Добавить санкцию').click()
+    await calc.get_by_role('button',name='Рассчитать',exact=True).click()
+    await calc.locator('[data-calc-result]').get_by_text('не завершён, ручная проверка',exact=False).wait_for()
+    await calc.get_by_text('Политика объединения и преобразования',exact=True).click()
+    await calc.get_by_label('Режим политики').select_option('custom')
+    await calc.get_by_label('Метод Demorgan').select_option('sum')
+    await calc.get_by_label('Предел Demorgan').fill('100')
+    await calc.get_by_role('button',name='Сохранить политику').click()
+    await page.wait_for_function("Object.keys(window.__data).some(k=>k.startsWith('mtPunishmentCalculatorV1:')&&window.__data[k].policy.strategies.demorgan.cap===100)")
+    await calc.get_by_role('button',name='Рассчитать',exact=True).click()
+    await calc.locator('[data-calc-result]').get_by_text('120 → 100',exact=False).wait_for()
+    await calc.get_by_role('button',name='+ Участник').click()
+    await calc.get_by_label('ID игрока',exact=True).fill('67890')
+    await page.evaluate("()=>{const r=window.__data.majesticToolkitRulesV1.find(r=>r.revisions[0].title==='QA PG');window.__data['mtPunishmentDraftV1:profile_majest']=[{thread:'forum.majestic-rp.ru:42',items:[{ruleId:r.id,revisionId:r.activeRevisionId,index:0,amount:35}]}];}")
+    await calc.get_by_role('button',name='Обновить правила и черновики').click()
+    await calc.get_by_label('Черновик оверлея').select_option('forum.majestic-rp.ru:42')
+    await calc.get_by_role('button',name='Загрузить черновик').click()
+    await calc.get_by_text('5.5 — QA PG: Demorgan 35 мин.',exact=True).wait_for()
+    await calc.get_by_role('button',name='Сохранить расчёт').click()
+    await page.wait_for_function("Object.keys(window.__data).some(k=>k.startsWith('mtPunishmentCalculatorV1:')&&window.__data[k].history.length===1)")
+    assert await page.evaluate("Object.values(window.__data).find(x=>x?.history?.[0]?.result)?.history[0].result.players.map(p=>p.totals[0].amount)")==[100,35]
+    await page.locator('.nav [data-view=home]').click()
+    await page.locator('.nav [data-view=rules]').click()
+    await calc.get_by_text('История расчётов · 1',exact=True).click()
+    await calc.get_by_role('button',name='Просмотреть').click()
+    await calc.locator('[data-calc-result]').get_by_text('Участник 67890',exact=False).wait_for()
     await page.set_viewport_size({'width':375,'height':780})
     assert await page.evaluate('document.documentElement.scrollWidth<=window.innerWidth+1')
     assert not errors,errors
     await context.close()
-    return 3
+    return 4
 
 
 async def main():

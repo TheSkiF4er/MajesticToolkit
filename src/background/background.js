@@ -1,4 +1,4 @@
-import {punishmentOverlay,OVERLAY_PREFIX} from '../lib/punishment-overlay-store.mjs';
+import {punishmentOverlay,OVERLAY_PREFIX,overlayThread} from '../lib/punishment-overlay-store.mjs';
 import {RULES_KEY} from '../lib/rules-core.mjs';
 import {readingPosition} from '../lib/forum-reading-store.mjs';
 import {getLocalIndex,invalidateSearch} from '../lib/productivity-search.mjs';
@@ -176,6 +176,11 @@ api.runtime.onMessage.addListener((message,sender,sendResponse) => {
     if(isForum && message.type!=='RP_NEXUS_FORUM_DATA' && !await api.permissions.contains({origins:[`https://${new URL(sender.url).hostname}/*`]}))throw Error('Доступ к форуму отозван');
     if (message.type === 'RP_NEXUS_OPEN_WORKSPACE') {
       if (!isForum && !isVideo && !isTrustedExtension) throw Error('Недоверенный источник');
+      if(message.view==='calculator'){
+        const params=new URLSearchParams({calculator:'1'});
+        if(isForum){const state=(await api.storage.local.get('rpNexusStateV1')).rpNexusStateV1;const profile=globalThis.MTXenForo.matchingProfile(state?.profiles,state?.activeProfileId,sender.url);const thread=overlayThread(sender.url);if(profile&&thread){params.set('thread',thread);params.set('calcProfile',profile.id);}}
+        await api.tabs.create({url:api.runtime.getURL('ui/workspace.html?'+params+'#rules')});return true;
+      }
       await api.tabs.create({url:api.runtime.getURL('ui/workspace.html' + (['customization','navigation','binder'].includes(message.view)?'?section='+message.view+'#forum':['home','forum','complaints','search','knowledge','profiles','timers','monitor','economy','rules','law','government','documents','integrations','settings'].includes(message.view) ? '#'+message.view : ''))});
       return true;
     }

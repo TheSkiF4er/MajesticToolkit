@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 const registrations=[];
 const executions=[];
 const messages=[];
+const openedTabs=[];
 const data={};
 const listeners={};
 const granted=new Set();
@@ -18,7 +19,7 @@ globalThis.browser={
   async executeScript({target,files}){executions.push({target,files});}
  },
  permissions:{async contains({origins}){return origins.every(x=>granted.has(x));},onAdded:event('added'),onRemoved:event('removed')},
- tabs:{async query({url}={}){if(!url||url?.includes('https://forum.majestic-rp.ru/*'))return [{id:42,url:'https://forum.majestic-rp.ru/threads/test.100/'}];return [];},async sendMessage(id,message){messages.push({id,message});},async create(){}},
+ tabs:{async query({url}={}){if(!url||url?.includes('https://forum.majestic-rp.ru/*'))return [{id:42,url:'https://forum.majestic-rp.ru/threads/test.100/'}];return [];},async sendMessage(id,message){messages.push({id,message});},async create(x){openedTabs.push(x);return x;}},
  notifications:{onClicked:event('clicked'),async clear(){},async create(){}},
  alarms:{onAlarm:event('alarm'),async create(){}},
  storage:{local,onChanged:event('storage')}
@@ -113,4 +114,11 @@ test('Punishment Overlay authorizes rules, validates selections and keeps drafts
  assert.equal((await act('add',select)).ok,false);
  state.preferences.forum={schemaVersion:1,global:{punishmentEnabled:false},sites:{},profiles:{}};
  assert.equal((await act('list')).ok,false);granted.delete(origin);assert.equal((await act('list')).ok,false);
+});
+
+
+test('Calculator workspace route uses trusted forum thread/profile and rejects revoked permission',async()=>{
+ const {defaultState}=await import('../src/lib/model.mjs');const state=defaultState();data.rpNexusStateV1=state;const origin='https://forum.majestic-rp.ru/*',url='https://forum.majestic-rp.ru/threads/test.100/page-2?secret=1#post-3';granted.add(origin);
+ const res=await send(url,{type:'RP_NEXUS_OPEN_WORKSPACE',view:'calculator',thread:'forged',calcProfile:'forged'});assert.equal(res.ok,true);const opened=new URL(openedTabs.at(-1).url);assert.equal(opened.hash,'#rules');assert.equal(opened.searchParams.get('thread'),'forum.majestic-rp.ru:100');assert.equal(opened.searchParams.get('calcProfile'),state.activeProfileId);assert.equal(opened.searchParams.get('calculator'),'1');assert.ok(!opened.href.includes('secret'));
+ granted.delete(origin);assert.equal((await send(url,{type:'RP_NEXUS_OPEN_WORKSPACE',view:'calculator'})).ok,false);
 });

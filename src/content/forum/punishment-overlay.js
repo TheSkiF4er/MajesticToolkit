@@ -27,7 +27,7 @@
   }
   async function preview(mode){if(busy)return;busy=true;const e=epoch;try{const text=await request('preview');if(text===null)return;if(mode==='copy'){await options.copy(text);}else if(mode==='insert'){options.insert(text);}else{const pre=target.querySelector('[data-punishment-preview]');pre.textContent=text;pre.hidden=false;}status(mode==='insert'?'Черновик вставлен. Отправка только вручную.':mode==='copy'?'Черновик скопирован.':'Предпросмотр обновлён.');}catch(err){if(e===epoch)status(err.message);}finally{if(e===epoch)busy=false;}}
   function render(){if(!active())return;target.replaceChildren();target.append(el('b','Правила и наказания'),el('p','Выберите нарушение и одну санкцию. Черновик не назначает наказания и не объединяет сроки.','sub'));
-   const top=actions();top.append(button('База правил ↗',options.openRules),button('Обновить',()=>void load(),busy));target.append(top);
+   const top=actions();top.append(button('База правил ↗',options.openRules),button('Калькулятор ↗',options.openCalculator),button('Обновить',()=>void load(),busy));target.append(top);
    const statusNode=el('p',message,'sub');statusNode.dataset.punishmentStatus='';statusNode.setAttribute('role','status');target.append(statusNode);
    if(!data){target.append(el('p','Загрузка базы правил…','sub'));return;}
    const search=field('input','Поиск нарушений');search.type='search';search.id='rpn-punishment-search';search.maxLength=200;search.placeholder='Номер, DM, PG, название…';search.value=query;search.addEventListener('input',()=>{query=search.value;page=30;renderList();});target.append(search);
