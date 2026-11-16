@@ -34,6 +34,14 @@
     if(obj.favorite!==undefined)out.favorite=obj.favorite===true;
     if(obj.order!==undefined){if(!Number.isSafeInteger(obj.order)||obj.order<0||obj.order>1000000)throw Error('Неверный порядок');out.order=obj.order;}
     if(obj.variables!==undefined)out.variables=cleanVariables(obj.variables,text);
+    if(obj.legacy!==undefined){
+      const l=obj.legacy, p=l?.punish;
+      if(!l||typeof l.externalId!=='string'||typeof l.folderId!=='string'||!/^[-\w]{1,90}$/.test(l.externalId)||!/^[-\w]{1,90}$/.test(l.folderId)||typeof l.originalText!=='string'||l.originalText.length>16000||typeof l.color!=='string'||l.color.length>40||!p||typeof p.on!=='boolean'||(l.ruleId!==null&&(typeof l.ruleId!=='string'||!/^[a-zA-Z0-9_-]{8,128}$/.test(l.ruleId))))throw Error('Некорректные данные импорта');
+      const punish={on:p.on};
+      if(p.on){const reasonText=trim(p.reasonText,'Причина',500),link=trim(p.link,'Источник',8192);let url;try{url=new URL(link);}catch{throw Error('Некорректный источник');}if(url.protocol!=='https:'||url.hostname!=='forum.majestic-rp.ru'||url.username||url.password||url.port)throw Error('Некорректный источник');
+        if(!p.t||typeof p.t!=='object'||Array.isArray(p.t))throw Error('Некорректные санкции');const t={};for(const [k,v] of Object.entries(p.t)){if(k==='warn'){if(typeof v!=='boolean')throw Error('Некорректный WARN');t[k]=v;continue;}if(!['ban','hardban','demorgan','gunban','mute'].includes(k)||!Number.isSafeInteger(v?.min)||!Number.isSafeInteger(v?.max)||v.min<1||v.max<v.min||v.max>1000000)throw Error('Некорректный диапазон');t[k]={min:v.min,max:v.max};}if(p.warn!==undefined&&typeof p.warn!=='boolean')throw Error('Некорректный WARN');Object.assign(punish,{reasonText,link,t,...(p.warn===undefined?{}:{warn:p.warn})});}
+      out.legacy={externalId:l.externalId,folderId:l.folderId,color:l.color,originalText:l.originalText,punish,ruleId:l.ruleId};
+    }
     return out;
   }
   const cleanTemplate = (obj) => {
@@ -194,7 +202,7 @@
       });links=pack.customLinks.map(l=>({title:l.name,url:l.url}));
     }else throw Error('Неподдерживаемый формат набора Binder');
     if(!Array.isArray(rows)||rows.length>MAX_TEMPLATES||!Array.isArray(links)||links.length>60)throw Error('Некорректный набор Binder');
-    const seen=new Set(),templates=rows.map(t=>{const row=cleanTemplate({...t,profileId});if(seen.has(row.id))throw Error('Повторяющийся ID');seen.add(row.id);return row;});
+    const seen=new Set(),templates=rows.map(t=>{const row=cleanTemplate({...t,profileId, ...(source==='native'?{legacy:undefined}: {})});if(seen.has(row.id))throw Error('Повторяющийся ID');seen.add(row.id);return row;});
     links=links.map(l=>{const title=trim(l.title,'Название ссылки',70),url=trim(l.url,'Ссылка',2048);const safe=safeURL(url);if(!safe||!safe.startsWith('https://')||new URL(safe).port)throw Error('Разрешены только HTTPS-ссылки');return {title,url:safe};});
     return {templates,links,source};
   }

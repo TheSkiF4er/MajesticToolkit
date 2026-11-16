@@ -1,3 +1,9 @@
+# 1.6.2 — Rules & Binds Import
+
+- Structured legacy import: bind IDs, original text, folders, sanctions, source URLs, calculator settings and linked rules.
+- Merge preserves edited templates and rules; replace creates revisions; profile isolation and recovery.
+- Calculator settings are editable but formulas are not activated.
+
 # История изменений
 
 ## 1.6.1 — Rules Database

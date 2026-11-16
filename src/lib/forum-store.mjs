@@ -1,4 +1,7 @@
 import './forum-core.js';
+import {parseRulesImport,planRulesImport} from './rules-import.mjs';
+import {loadState} from './state.mjs';
+import {listRules,withRulesWriteLock} from './rules-store.mjs';
 import './xenforo-core.js';
 import {listXenForoLinks} from './xenforo-store.mjs';
 import {createRestorePoint,completeRestorePoint} from './recovery.mjs';
@@ -27,6 +30,7 @@ export async function upsertTemplate(input, id = null) {
     const old = id ? records.find(x => x.id === id) : null;
     if (id && !old) throw new Error('Шаблон не найден или повреждён');
     if (!old && records.length >= C.MAX_TEMPLATES) throw new Error('Достигнут лимит шаблонов');
+    if(old?.legacy&&old.profileId!==input.profileId)throw Error('Связанный бинд нельзя переносить между профилями. Импортируйте набор в целевой профиль.');
     let item = C.createTemplate(input, old);
     if(item.shortcut&&records.some(t=>t.id!==item.id&&t.profileId===item.profileId&&t.shortcut===item.shortcut))throw Error('Сочетание клавиш уже занято в этом профиле');
     if(old&&['label','category','text','format','shortcut','variables','tags'].some(k=>JSON.stringify(old[k])!==JSON.stringify(item[k]))){
@@ -144,3 +148,12 @@ export function bulkBinderTemplates(ids,profileId,action,folder=''){return seria
   const writes=action==='move'?Object.fromEntries(rows.map(t=>{const {id,profileId,createdAt,history,...snapshot}=t;const item=C.cleanTemplate({...t,category:folder,updatedAt:new Date().toISOString(),history:[snapshot,...(history??[])].slice(0,10)});return [prefix+t.id,item];})):null;
   await createRestorePoint(api.storage.local);if(writes)await api.storage.local.set(writes);else await api.storage.local.remove(ids.map(id=>prefix+id));await completeRestorePoint(api.storage.local);return rows.length;
 });}
+
+// One validated batch covers profiles, templates, rules and navigation; recovery precedes writes.
+export function importStructuredBinder(raw,profileId,mode='merge'){return serialize(()=>withRulesWriteLock(async()=>{
+ const state=await loadState(),profile=state.profiles.find(p=>p.id===profileId);
+ const pack=parseRulesImport(raw,profile);
+ const plan=await planRulesImport(pack,state,profileId,await listTemplates(),await listRules(),await listXenForoLinks(),mode);
+ if(Object.keys(plan.writes).length){await createRestorePoint(api.storage.local);await api.storage.local.set(plan.writes);await completeRestorePoint(api.storage.local);}
+ return plan.report;
+}));}

@@ -2,6 +2,7 @@ import {api} from './browser.mjs';
 import {RULES_KEY,validateRules,createRule,reviseRule,updateRule} from './rules-core.mjs';
 let queue=Promise.resolve();
 function serial(fn){const run=()=>globalThis.navigator?.locks?.request?globalThis.navigator.locks.request(RULES_KEY,fn):fn();const job=queue.then(run);queue=job.catch(()=>{});return job;}
+export const withRulesWriteLock=serial;
 export async function listRules(){const data=(await api.storage.local.get(RULES_KEY))[RULES_KEY];return data===undefined?[]:validateRules(data);}
 async function write(rows,profiles){const clean=validateRules(rows,profiles);await api.storage.local.set({[RULES_KEY]:clean});return clean;}
 export function replaceRules(rows,profiles){return serial(()=>write(rows,profiles));}

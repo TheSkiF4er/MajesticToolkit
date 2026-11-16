@@ -1,3 +1,4 @@
+import {validateImportSettings} from './rules-import-settings.mjs';
 import {workspacePreferences} from './workspace-preferences.mjs';
 import {validateForumSettings} from './forum-settings.mjs';
 export const SCHEMA_VERSION = 1;
@@ -57,7 +58,8 @@ export function validateState(data) {
     const createdAt = string(p.createdAt, 'Дата создания', 40);
     const updatedAt = string(p.updatedAt, 'Дата изменения', 40);
     if (!Number.isFinite(Date.parse(createdAt)) || !Number.isFinite(Date.parse(updatedAt))) throw new Error('Некорректная дата профиля');
-    return { id, ...form, createdAt, updatedAt };
+    if(p.rulesImport!==undefined&&form.project!=='majestic')throw Error('Импорт правил относится к Majestic RP');
+    return { id, ...form, createdAt, updatedAt, ...(p.rulesImport===undefined?{}:{rulesImport:validateImportSettings(p.rulesImport)}) };
   });
   const activeProfileId = string(data.activeProfileId, 'Активный профиль', 128);
   if (!ids.has(activeProfileId)) throw new Error('Активный профиль отсутствует в списке');

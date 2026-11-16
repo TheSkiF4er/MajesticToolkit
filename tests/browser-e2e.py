@@ -473,8 +473,12 @@ async def experience_workspace(browser):
       window.browser={runtime:{id:'fixture',getURL:path=>'http://localhost:8765/'+path,onMessage:event,async sendMessage(){return {ok:true,value:[]};}},permissions:{async contains(){return false;},onAdded:event,onRemoved:event},tabs:{async create(x){window.__tabs.push(x);return x;},async query(){return[];}},storage:{onChanged:{addListener(fn){listeners.push(fn);}},local:{async get(k){if(k===null)return structuredClone(data);if(Array.isArray(k))return Object.fromEntries(k.map(x=>[x,data[x]]));if(typeof k==='object')return {...k,...Object.fromEntries(Object.keys(k).filter(x=>x in data).map(x=>[x,data[x]]))};return {[k]:data[k]};},async set(x){const changes={};for(const [k,v] of Object.entries(x)){changes[k]={oldValue:data[k],newValue:v};data[k]=structuredClone(v);}notify(changes);},async remove(keys){const changes={};for(const k of Array.isArray(keys)?keys:[keys]){changes[k]={oldValue:data[k]};delete data[k];}notify(changes);}}}};
       window.confirm=()=>true;
       if(!crypto.randomUUID)crypto.randomUUID=()=>Array.from(crypto.getRandomValues(new Uint8Array(16)),x=>x.toString(16).padStart(2,'0')).join('');
+      if(!crypto.subtle)Object.defineProperty(crypto,'subtle',{value:{async digest(algorithm,bytes){if(algorithm!=='SHA-256')throw Error('Unexpected algorithm');return Uint8Array.from(await window.__fixtureSha256(Array.from(new Uint8Array(bytes)))).buffer;}}});
     }'''
     async def boot(page,seed=None,route='about:blank'):
+        # about:blank is not a secure extension origin; use actual SHA-256 through the test host.
+        import hashlib
+        await page.expose_function('__fixtureSha256',lambda data:list(hashlib.sha256(bytes(data)).digest()))
         await page.set_content(html)
         await page.add_style_tag(content=(ROOT/'src/ui/styles.css').read_text())
         await page.evaluate(mock,seed)
@@ -561,11 +565,44 @@ async def experience_workspace(browser):
     await page.locator('#workspace-profile').select_option('profile_majest')
     await page.locator('#rules-list article').wait_for()
     assert await page.locator('#rules-list article').count()==1
+    # Structured import through the actual file chooser and confirmation dialog.
+    await page.locator('#rules-root [data-action=nav][data-view=forum]').click()
+    await page.locator('#forum-search').wait_for(state='visible')
+    legacy={'bindFolders':[{'id':'folder_qa','name':'QA правила','color':'blue'}],
+        'binds':[{'id':'bind_qa01','folderId':'folder_qa','color':'blue','titelOutput':'QA PG','textOutput':'','punish':{'on':True,'reasonText':'PG','link':'https://forum.majestic-rp.ru/threads/test.42/#:~:text=5.5%20PG','t':{'demorgan':{'min':35,'max':90}},'warn':True}}],
+        'customLinks':[{'name':'QA ссылка','url':'https://forum.majestic-rp.ru/forums/test.42/'}],
+        'calcSettings':{'banDays':2,'idColor':'#9365b8','idColorOn':True,'limit':135,'stepEvery':60,'stepFrom':200,'warnBanDays':2}}
+    async def import_legacy():
+        async with page.expect_file_chooser() as chooser:
+            await page.locator('[data-forum-action=import-pack]').click()
+        await (await chooser.value).set_files({'name':'binds_and_links.json','mimeType':'application/json','buffer':json.dumps(legacy).encode()})
+        dlg=page.locator('dialog.binder-task-dialog')
+        await dlg.get_by_text('Rules & Binds Import',exact=True).wait_for()
+        await dlg.locator('[name=mode]').select_option('merge')
+        await dlg.locator('button[type=submit]').click()
+        await dlg.wait_for(state='detached')
+    await import_legacy()
+    await page.wait_for_function("window.__data.majesticToolkitRulesV1.length===2 && !!window.__data.rpNexusStateV1.profiles[0].rulesImport")
+    await page.locator('[data-forum-action=open-rule]').wait_for()
+    await page.locator('[data-forum-action=open-rule]').click()
+    assert await page.evaluate("window.__tabs.at(-1).url.includes('?rule=legacy_rule_')")
+    await import_legacy()
+    await page.wait_for_function("window.__data.majesticToolkitRecoveryV1.status==='ready'")
+    assert await page.evaluate("window.__data.majesticToolkitRulesV1.length===2")
+    await page.locator('.nav [data-view=rules]').click()
+    await page.locator('#rules-import-settings').wait_for()
+    await page.locator('#rules-import-settings [name=limit]').fill('150')
+    await page.locator('#rules-import-settings button[type=submit]').click()
+    await page.wait_for_function("window.__data.rpNexusStateV1.profiles[0].rulesImport.calcSettings.limit===150")
+    await page.locator('#rules-query').fill('QA PG')
+    await page.locator('#rules-list article').get_by_text('5.5 — QA PG',exact=True).wait_for()
+    await page.locator('#rules-list [data-rules-action=open]').click()
+    await page.locator('#rules-detail').get_by_text('Связанный бинд: QA PG · bind_qa01',exact=True).wait_for()
     await page.set_viewport_size({'width':375,'height':780})
     assert await page.evaluate('document.documentElement.scrollWidth<=window.innerWidth+1')
     assert not errors,errors
     await context.close()
-    return 2
+    return 3
 
 
 async def main():
