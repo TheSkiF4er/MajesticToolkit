@@ -207,3 +207,19 @@ body[data-mode=sidebar] .ws-layout .side{height:auto;position:static;overflow:vi
 .moderation-audit{max-height:430px;overflow:auto}
 .moderation-analytics .grid{align-items:start}
 @media(max-width:560px){.moderation-analytics .grid{grid-template-columns:1fr}.moderation-analytics .case-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Advanced Moderation 1.8.0: unified live workbench. Existing forms are reused. */
+.mc-center{min-width:0}
+.mc-intro{position:relative}
+.mc-tabs{display:flex;flex-wrap:wrap;gap:8px}
+.mc-tabs .button[aria-selected="true"]{font-weight:700}
+.mc-center [data-mc-panel][hidden]{display:none!important}
+.mc-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.mc-metric{display:flex;flex-direction:column;text-align:left;gap:6px;padding:16px;min-width:0;border:1px solid var(--border,#45526a);border-radius:12px;background:var(--surface,#1c273c);color:inherit;cursor:pointer;font:inherit}
+.mc-metric:hover,.mc-metric:focus-visible{outline:2px solid var(--accent,#657dcc);outline-offset:2px}
+.mc-metric strong{font-size:1.5rem;font-variant-numeric:tabular-nums}
+.mc-metric span{font-size:.87rem;opacity:.86}
+.mc-overview-lists{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.mc-overview-lists .button{width:100%;text-align:left;white-space:normal}
+@media(max-width:1050px){.mc-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:650px){.mc-overview-lists{grid-template-columns:minmax(0,1fr)}.mc-tabs .button{flex:1 1 130px}.mc-metric{padding:10px}}

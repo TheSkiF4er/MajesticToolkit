@@ -211,7 +211,7 @@ api.runtime.onMessage.addListener((message,sender,sendResponse) => {
         if(isForum){const state=(await api.storage.local.get('rpNexusStateV1')).rpNexusStateV1;const profile=globalThis.MTXenForo.matchingProfile(state?.profiles,state?.activeProfileId,sender.url);const thread=overlayThread(sender.url);if(profile&&thread){params.set('thread',thread);params.set('calcProfile',profile.id);const c=(await importedStore.listCases()).find(c=>c.profileId===profile.id&&c.threadKey===thread);if(c)params.set('caseId',c.id);}}
         await api.tabs.create({url:api.runtime.getURL('ui/workspace.html?'+params+'#rules')});return true;
       }
-      await api.tabs.create({url:api.runtime.getURL('ui/workspace.html' + (['customization','navigation','binder'].includes(message.view)?'?section='+message.view+'#forum':['home','forum','complaints','search','knowledge','profiles','timers','monitor','economy','rules','law','government','documents','integrations','settings'].includes(message.view) ? '#'+message.view : ''))});
+      await api.tabs.create({url:api.runtime.getURL('ui/workspace.html' + (['customization','navigation','binder'].includes(message.view)?'?section='+message.view+'#forum':['home','forum','complaints','moderation','search','knowledge','profiles','timers','monitor','economy','rules','law','government','documents','integrations','settings'].includes(message.view) ? '#'+message.view : ''))});
       return true;
     }
     if(message.type === 'MAJESTIC_TIMER') {

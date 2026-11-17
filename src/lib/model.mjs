@@ -1,4 +1,5 @@
 import {cleanModerationBatch} from './moderation-batch.mjs';
+import {cleanModerationCenter} from './moderation-center-prefs.mjs';
 import {cleanSavedViews} from './complaint-queue.mjs';
 import {validateImportSettings} from './rules-import-settings.mjs';
 import {workspacePreferences} from './workspace-preferences.mjs';
@@ -8,7 +9,7 @@ export const BACKUP_FORMAT = 'rp-nexus-backup';
 export const MAX_PROFILES = 100;
 export const PROJECTS = Object.freeze({ majestic: 'Majestic RP', 'russia-online': 'Russia Online', other: 'Другой проект' });
 export const THEMES = Object.freeze(['system', 'dark', 'light', 'sepia', 'contrast']);
-export const VIEWS = Object.freeze(['home', 'search', 'forum', 'monitor', 'complaints', 'timers', 'economy', 'rules', 'law', 'government', 'documents', 'integrations', 'knowledge', 'profiles', 'sites', 'settings', 'backup']);
+export const VIEWS = Object.freeze(['home', 'search', 'forum', 'monitor', 'complaints', 'moderation', 'timers', 'economy', 'rules', 'law', 'government', 'documents', 'integrations', 'knowledge', 'profiles', 'sites', 'settings', 'backup']);
 
 function string(value, field, max = 90, allowEmpty = false) {
   if (typeof value !== 'string') throw new Error(`Неверное поле «${field}»`);
@@ -61,7 +62,7 @@ export function validateState(data) {
     const updatedAt = string(p.updatedAt, 'Дата изменения', 40);
     if (!Number.isFinite(Date.parse(createdAt)) || !Number.isFinite(Date.parse(updatedAt))) throw new Error('Некорректная дата профиля');
     if(p.rulesImport!==undefined&&form.project!=='majestic')throw Error('Импорт правил относится к Majestic RP');
-    return { id, ...form, createdAt, updatedAt, ...(p.rulesImport===undefined?{}:{rulesImport:validateImportSettings(p.rulesImport)}), ...(p.complaintViews===undefined?{}:{complaintViews:cleanSavedViews(p.complaintViews)}), ...(p.moderationBatch===undefined?{}:{moderationBatch:cleanModerationBatch(p.moderationBatch)}) };
+    return { id, ...form, createdAt, updatedAt, ...(p.rulesImport===undefined?{}:{rulesImport:validateImportSettings(p.rulesImport)}), ...(p.complaintViews===undefined?{}:{complaintViews:cleanSavedViews(p.complaintViews)}), ...(p.moderationBatch===undefined?{}:{moderationBatch:cleanModerationBatch(p.moderationBatch)}), ...(p.moderationCenter===undefined?{}:{moderationCenter:cleanModerationCenter(p.moderationCenter)}) };
   });
   const activeProfileId = string(data.activeProfileId, 'Активный профиль', 128);
   if (!ids.has(activeProfileId)) throw new Error('Активный профиль отсутствует в списке');

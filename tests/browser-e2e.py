@@ -570,7 +570,7 @@ async def experience_workspace(browser):
     await boot(page)
     await page.locator('.ws-widgets').wait_for(timeout=8000)
     assert await page.locator('.ws-widget').count()==9
-    assert await page.locator('.ws-nav-group').count()==4
+    assert await page.locator('.ws-nav-group').count()==5
     # Actual stores, not mocked dashboard counts.
     await page.evaluate('''async()=>{const f=await import('mt:lib/forum-store.mjs'),x=await import('mt:lib/xenforo-store.mjs');await f.upsertTemplate({label:'QA Majestic binder',text:'Hello',format:'plain',category:'QA',profileId:'profile_majest',shortcut:0,favorite:true});await f.upsertTemplate({label:'QA Russia binder',text:'Other',format:'plain',category:'QA',profileId:'profile_russia',shortcut:0,favorite:true});await x.saveCurrentBookmark('profile_majest','https://forum.majestic-rp.ru/threads/test.42/','QA bookmark');}''')
     await page.get_by_text('QA Majestic binder',exact=True).wait_for(timeout=5000)
@@ -918,9 +918,40 @@ async def experience_workspace(browser):
     assert await page.locator('[data-case-action=moderation-batch-done]').count()==0
     await page.locator('#workspace-profile').select_option('profile_majest')
     await page.locator('[data-case-action=moderation-batch-reset]').wait_for()
+    # Advanced Moderation 1.8: unified working components and real profile-scoped summary.
+    await page.locator('.nav [data-view=moderation]').click()
+    center=page.locator('#moderation-center')
+    await center.locator('#mc-summary .mc-metric').first.wait_for(timeout=10000)
+    assert await center.locator('.mc-metric').count()==8
+    assert await center.locator('#mc-panel-overview').is_visible()
+    assert 'QA urgent case' in await center.locator('#mc-summary').inner_text()
+    await center.get_by_label('Период статистики').select_option('14')
+    await page.wait_for_function("window.__data.rpNexusStateV1.profiles[0].moderationCenter?.days===14")
+    await center.locator('[data-mc-tab=registry]').click()
+    await center.locator('#punishment-registry [data-registry-id]').wait_for()
+    assert await center.locator('#mc-panel-registry').is_visible()
+    await center.locator('[data-mc-tab=inbox]').click()
+    assert await center.locator('#section-monitor-root').is_visible()
+    await center.locator('#section-monitor-root').get_by_text('Мониторинг разделов',exact=False).first.wait_for()
+    await center.locator('[data-mc-tab=analytics]').click()
+    assert await center.locator('.moderation-analytics').is_visible()
+    await center.locator('[data-case-action=ops-tab][data-tab=audit]').click()
+    await center.locator('.moderation-audit').wait_for()
+    await center.locator('[data-mc-tab=overview]').click()
+    await center.locator('#mc-summary').get_by_role('button',name='QA urgent case',exact=False).first.click()
+    assert await center.locator('#mc-panel-cases').is_visible()
+    assert await center.locator('[data-case-card]').filter(has_text='QA urgent case').count()==1
+    await page.wait_for_function("window.__data.rpNexusStateV1.profiles[0].moderationCenter?.tab==='cases'")
+    await page.locator('#workspace-profile').select_option('profile_russia')
+    await center.locator('#mc-panel-overview .mc-metric').first.wait_for()
+    assert not await center.locator('#mc-summary').get_by_text('QA urgent case').count()
+    assert not await center.locator('#mc-panel-registry [data-registry-id]').count()
+    await page.locator('#workspace-profile').select_option('profile_majest')
+    await center.locator('[data-mc-tab=overview]').click()
+    await center.locator('#mc-summary .mc-metric').first.wait_for()
     assert not errors,errors
     await context.close()
-    return 10
+    return 11
 
 
 async def main():

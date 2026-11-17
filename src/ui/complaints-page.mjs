@@ -125,6 +125,13 @@ function formatDatetime(iso) {
 }
 export function filterComplaintUI() {if(activeState){const list=document.getElementById('complaint-list');if(list)replaceHtml(list,rowsMarkup(visible(activeState)));}}
 export function setComplaintQuery(value) {query=value;page=0;filterComplaintUI();}
+export function focusComplaintCase(id){
+ if(!activeState)throw Error('Список жалоб не загружен');
+ const c=cases.find(c=>c.id===id&&c.profileId===activeState.activeProfileId);
+ if(!c)throw Error('Жалоба недоступна в активном профиле');
+ criteria=cleanFilter();query=id;filter=c.triage?.queue==='archived'?'archived':'all';page=0;selected=id;
+ filterComplaintUI();
+}
 export function setComplaintFilter(value) {filter=value;page=0;filterComplaintUI();document.querySelectorAll('[data-case-action=queue-filter]').forEach(b=>{b.classList.toggle('primary',b.dataset.queue===filter);b.classList.toggle('secondary',b.dataset.queue!==filter);});}
 export function handleComplaintQueueChange(el,state,render){
  if(el.id==='moderation-period'){const period=Number(el.value);if(!PERIODS.includes(period))throw Error('Неизвестный период');opsDays=period;render();return true;}
