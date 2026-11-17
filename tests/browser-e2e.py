@@ -553,7 +553,7 @@ async def experience_workspace(browser):
       const data=seed||initial;window.__data=data;window.__tabs=[];const listeners=[];
       const notify=changes=>{queueMicrotask(()=>listeners.forEach(fn=>fn(changes,'local')));};
       const event={addListener(){},removeListener(){}};
-      window.browser={runtime:{id:'fixture',getURL:path=>'http://localhost:8765/'+path,onMessage:event,async sendMessage(m){if(m.type==='MT_SECTION_MONITOR'){try{const s=await import('mt:lib/section-monitor-store.mjs');const value=m.action==='list'?await s.sectionView(m.profileId):m.action==='scan'?await s.scanSections(m.profileId,m.input?.id??null):await s.sectionAction(m.profileId,m.action,m.input);return {ok:true,value};}catch(e){return {ok:false,error:e.message};}}if(m.type==='RP_NEXUS_CASE_MUTATE'){try{const s=await import('mt:lib/complaints-store.mjs');const value=m.action==='registry'?await (await import('mt:lib/punishment-registry-store.mjs')).registryAction(m.profileId,m.operation,m.input):m.action==='moderation'?await s.mutateModeration(m.id,m.operation,m.input):m.action==='queue'?await s.mutateComplaintQueue(m.profileId,m.ids,m.operation,m.input):m.action==='create'?await s.createComplaint(m.input):m.action==='update'?await s.editComplaint(m.id,m.patch):m.action==='workflow'?await s.mutateCaseWorkflow(m.id,m.workflowAction,m.payload):null;return {ok:true,value};}catch(e){return {ok:false,error:e.message};}}return {ok:true,value:[]};}},permissions:{async contains(){return !!window.__sectionGranted;},onAdded:event,onRemoved:event},tabs:{async create(x){window.__tabs.push(x);return x;},async query(){return window.__sectionGranted?[{id:91,url:'https://forum.majestic-rp.ru/forums/qa.12/'}]:[];},async sendMessage(id,m){return {ok:true,rows:window.__sectionRows};}},notifications:{async create(id,value){(window.__sectionNotifications??=[]).push({id,value});}},storage:{onChanged:{addListener(fn){listeners.push(fn);}},local:{async get(k){if(k===null)return structuredClone(data);if(Array.isArray(k))return Object.fromEntries(k.map(x=>[x,data[x]]));if(typeof k==='object')return {...k,...Object.fromEntries(Object.keys(k).filter(x=>x in data).map(x=>[x,data[x]]))};return {[k]:data[k]};},async set(x){const changes={};for(const [k,v] of Object.entries(x)){changes[k]={oldValue:data[k],newValue:v};data[k]=structuredClone(v);}notify(changes);},async remove(keys){const changes={};for(const k of Array.isArray(keys)?keys:[keys]){changes[k]={oldValue:data[k]};delete data[k];}notify(changes);}}}};
+      window.browser={runtime:{id:'fixture',getURL:path=>'http://localhost:8765/'+path,onMessage:event,async sendMessage(m){if(m.type==='MT_SECTION_MONITOR'){try{const s=await import('mt:lib/section-monitor-store.mjs');const value=m.action==='list'?await s.sectionView(m.profileId):m.action==='scan'?await s.scanSections(m.profileId,m.input?.id??null):await s.sectionAction(m.profileId,m.action,m.input);return {ok:true,value};}catch(e){return {ok:false,error:e.message};}}if(m.type==='RP_NEXUS_CASE_MUTATE'){try{const s=await import('mt:lib/complaints-store.mjs');const value=m.action==='registry'?await (await import('mt:lib/punishment-registry-store.mjs')).registryAction(m.profileId,m.operation,m.input):m.action==='moderation'?await s.mutateModeration(m.id,m.operation,m.input):m.action==='queue'?await s.mutateComplaintQueue(m.profileId,m.ids,m.operation,m.input):m.action==='moderation-ops'?(m.operation==='apply-sla'?await s.applyPolicyToUnscheduled(m.profileId):m.operation==='run-overdue'?await s.runOverdueAutomations(m.profileId):await s.mutateModerationOperations(m.profileId,m.operation,m.input)):m.action==='create'?await s.createComplaint(m.input):m.action==='update'?await s.editComplaint(m.id,m.patch):m.action==='workflow'?await s.mutateCaseWorkflow(m.id,m.workflowAction,m.payload):null;return {ok:true,value};}catch(e){return {ok:false,error:e.message};}}return {ok:true,value:[]};}},permissions:{async contains(){return !!window.__sectionGranted;},onAdded:event,onRemoved:event},tabs:{async create(x){window.__tabs.push(x);return x;},async query(){return window.__sectionGranted?[{id:91,url:'https://forum.majestic-rp.ru/forums/qa.12/'}]:[];},async sendMessage(id,m){return {ok:true,rows:window.__sectionRows};}},notifications:{async create(id,value){(window.__sectionNotifications??=[]).push({id,value});}},storage:{onChanged:{addListener(fn){listeners.push(fn);}},local:{async get(k){if(k===null)return structuredClone(data);if(Array.isArray(k))return Object.fromEntries(k.map(x=>[x,data[x]]));if(typeof k==='object')return {...k,...Object.fromEntries(Object.keys(k).filter(x=>x in data).map(x=>[x,data[x]]))};return {[k]:data[k]};},async set(x){const changes={};for(const [k,v] of Object.entries(x)){changes[k]={oldValue:data[k],newValue:v};data[k]=structuredClone(v);}notify(changes);},async remove(keys){const changes={};for(const k of Array.isArray(keys)?keys:[keys]){changes[k]={oldValue:data[k]};delete data[k];}notify(changes);}}}};
       window.confirm=()=>true;
       if(!crypto.randomUUID)crypto.randomUUID=()=>Array.from(crypto.getRandomValues(new Uint8Array(16)),x=>x.toString(16).padStart(2,'0')).join('');
       if(!crypto.subtle)Object.defineProperty(crypto,'subtle',{value:{async digest(algorithm,bytes){if(algorithm!=='SHA-256')throw Error('Unexpected algorithm');return Uint8Array.from(await window.__fixtureSha256(Array.from(new Uint8Array(bytes)))).buffer;}}});
@@ -827,6 +827,49 @@ async def experience_workspace(browser):
     await page.locator('#workspace-profile').select_option('profile_majest')
     await page.locator('#section-monitor-root').get_by_text('QA section',exact=True).wait_for()
     assert await page.evaluate('document.documentElement.scrollWidth<=window.innerWidth+1')
+    # Moderation Analytics 1.7.5: genuine UI, local SLA, rule, audit and pause/resume persistence.
+    await page.locator('[data-case-action=ops-tab][data-tab=sla]').click()
+    sla=page.locator('#moderation-policy-form')
+    await sla.locator('[name=enabled]').check()
+    await sla.locator('[name=hours-urgent]').fill('2')
+    await sla.locator('[name=categories]').fill('QA=4')
+    await sla.get_by_role('button',name='Сохранить политику').click()
+    await page.wait_for_function("window.__data['mtModerationOpsV175:profile_majest']?.policy?.categories?.[0]?.hours===4")
+    await page.locator('[data-case-action=ops-tab][data-tab=rules]').click()
+    form=page.locator('#moderation-rule-form')
+    await form.locator('[name=name]').fill('QA tag rule')
+    await form.locator('[name=trigger]').select_option('create')
+    await form.locator('[name=field]').select_option('category')
+    await form.locator('[name=equals]').fill('QA')
+    await form.locator('[name=action]').select_option('tag')
+    await form.locator('[name=value]').fill('Audit QA')
+    await form.get_by_role('button',name='Добавить правило').click()
+    await page.wait_for_function("window.__data['mtModerationOpsV175:profile_majest']?.rules?.length===1")
+    await page.get_by_role('button',name='+ Добавить жалобу').click()
+    form=page.locator('#complaint-form')
+    await form.locator('[name=title]').fill('QA SLA new case')
+    await form.locator('[name=url]').fill('https://forum.majestic-rp.ru/threads/sla.992/')
+    await form.locator('[name=category]').fill('QA')
+    await form.get_by_role('button',name='Сохранить',exact=True).click()
+    await page.wait_for_function("Object.values(window.__data).some(x=>x?.title==='QA SLA new case'&&x?.sla?.managed===true&&x?.triage?.tags?.includes('Audit QA'))")
+    sla_id=await page.evaluate("Object.values(window.__data).find(x=>x?.title==='QA SLA new case').id")
+    await page.evaluate("id=>{const row=window.__data['rpnComplaintV3:'+id];window.__slaDeadline=row.deadline}",sla_id)
+    await page.evaluate("window.prompt=()=> 'Waiting for evidence'")
+    await page.locator('[data-case-card]').filter(has_text='QA SLA new case').get_by_role('button',name='Ожидание',exact=True).click()
+    await page.wait_for_function("id=>window.__data['rpnComplaintV3:'+id]?.sla?.pausedAt!==null",arg=sla_id)
+    assert await page.evaluate("id=>window.__data['rpnComplaintV3:'+id].deadline===null",sla_id)
+    await page.locator('[data-case-card]').filter(has_text='QA SLA new case').get_by_role('button',name='Продолжить',exact=True).click()
+    await page.wait_for_function("id=>window.__data['rpnComplaintV3:'+id]?.sla?.pausedAt===null&&!!window.__data['rpnComplaintV3:'+id]?.deadline",arg=sla_id)
+    await page.locator('[data-case-action=ops-tab][data-tab=overview]').click()
+    assert await page.locator('.moderation-analytics .case-stats strong').count()==6
+    await page.locator('#moderation-period').select_option('14')
+    await page.locator('[data-case-action=ops-tab][data-tab=audit]').click()
+    assert await page.locator('.moderation-audit').get_by_text('QA tag rule',exact=False).count()>=1
+    await page.locator('#workspace-profile').select_option('profile_russia')
+    await page.locator('[data-case-action=ops-tab][data-tab=rules]').click()
+    assert await page.locator('.moderation-rule').count()==0
+    await page.locator('#workspace-profile').select_option('profile_majest')
+    # Moderation Analytics & Workflow E2E completed.
     # Register a completed case through the actual stores and UI.
     await page.evaluate("""async id=>{const s=await import('mt:lib/complaints-store.mjs');let c=await s.getCase(id);c=await s.mutateCaseWorkflow(id,'decision',{kind:'satisfied'});const m=c.moderation;c=await s.mutateModeration(id,'save',{expected:m.revision,players:m.players,policy:JSON.parse(m.policy),note:m.note,calculate:true,review:true});c=await s.mutateModeration(id,'decision',{expected:c.moderation.revision,expectedDraft:c.draft});while(c.workflow.stage!=='closed'){c=await s.mutateCaseWorkflow(id,'check',{stage:c.workflow.stage,done:true});c=await s.mutateCaseWorkflow(id,'next',{confirm:true});}}""",case_id)
     await page.locator('.nav [data-view=rules]').click()
@@ -877,7 +920,7 @@ async def experience_workspace(browser):
     await page.locator('[data-case-action=moderation-batch-reset]').wait_for()
     assert not errors,errors
     await context.close()
-    return 9
+    return 10
 
 
 async def main():

@@ -1,3 +1,4 @@
+import {moderationOpsFor} from '../lib/moderation-ops-store.mjs';
 import {registryAction} from '../lib/punishment-registry-store.mjs';
 import {sectionAction,sectionView,scanSections,SECTION_KEY} from '../lib/section-monitor-store.mjs';
 import {punishmentOverlay,OVERLAY_PREFIX,overlayThread} from '../lib/punishment-overlay-store.mjs';
@@ -115,20 +116,32 @@ async function scanTabs() {
 }
 async function checkDeadlines() {
   const store=await storePromise;
-  const core=await corePromise;
-  const now=Date.now();
-  const levels={ '24h':'менее суток до срока','1h':'менее часа до срока','15m':'менее 15 минут до срока',overdue:'срок истёк' };
+  const now=Date.now(),savedState=(await api.storage.local.get('rpNexusStateV1')).rpNexusStateV1;
+  const profiles=savedState?.profiles??[];
+  const ops=await Promise.all(profiles.map(async p=>[p.id,await moderationOpsFor(p)]));
+  const policies=new Map(ops);
   for(const item of await store.listCases()){
     if(!item.deadline||item.status==='done')continue;
-    const tier=core.deadlineTier(item.deadline,now);
-    if(!tier)continue;
+    const policy=policies.get(item.profileId)?.policy;
+    if(policy?.notifications===false)continue;
+    const remaining=(Date.parse(item.deadline)-now)/60000;
+    const levels=policy?.alerts??[1440,60,15,0];
+    const tier=levels.filter(m=>remaining<=m).sort((a,b)=>a-b)[0];
+    if(tier===undefined)continue;
     const key=`majesticDeadlineV14:${item.id}`;
     const saved=(await api.storage.local.get(key))[key];
     if(saved?.deadline===item.deadline && saved?.tier===tier)continue;
+    const description=tier===0?'срок истёк':`до срока осталось не более ${tier} минут`;
     try {
-      await api.notifications.create(`rpn_deadline_${item.id}`,{type:'basic',iconUrl:'assets/icon-128.png',title:'MajesticToolkit · Срок жалобы',message:`${item.title.slice(0,110)}: ${levels[tier]}.`});
+      await api.notifications.create(`rpn_deadline_${item.id}`,{type:'basic',iconUrl:'assets/icon-128.png',title:'MajesticToolkit · Срок жалобы',message:`${item.title.slice(0,110)}: ${description}.`});
       await api.storage.local.set({[key]:{deadline:item.deadline,tier}});
+      await store.recordDeadlineNotification(item.id,tier).catch(err=>console.warn('MajesticToolkit: журнал уведомлений',err));
     }catch(error){console.warn('MajesticToolkit: уведомление о сроке',error);}
+  }
+  // Local rules are idempotent; they never send actions to XenForo.
+  for(const [id,config] of ops)if(config.rules.some(r=>r.enabled&&r.trigger==='overdue')){
+    try{await store.runOverdueAutomations(id,now);}
+    catch(error){console.warn('MajesticToolkit: автоматизация срока',error);}
   }
 }
 async function tick() { try { await scanTabs(); await checkDeadlines(); await scanSections(); } catch(error) { console.warn('MajesticToolkit: периодическая проверка',error); } }
@@ -342,6 +355,11 @@ api.runtime.onMessage.addListener((message,sender,sendResponse) => {
       switch(message.action) {
         case 'registry': return registryAction(message.profileId,message.operation,message.input);
         case 'queue': return store.mutateComplaintQueue(message.profileId,message.ids,message.operation,message.input);
+        case 'moderation-ops': {
+          if(message.operation==='apply-sla')return store.applyPolicyToUnscheduled(message.profileId);
+          if(message.operation==='run-overdue')return store.runOverdueAutomations(message.profileId);
+          return store.mutateModerationOperations(message.profileId,message.operation,message.input);
+        }
         case 'create': return store.createComplaint(message.input);
         case 'update': return store.editComplaint(message.id,message.patch);
         case 'delete': return store.removeComplaint(message.id);

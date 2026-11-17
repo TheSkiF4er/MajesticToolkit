@@ -9,12 +9,16 @@ import {listRules} from '../lib/rules-store.mjs';
 import {QUEUES,SORTS,cleanFilter,cleanSavedViews,selectCases,matchesQueue} from '../lib/complaint-queue.mjs';
 import {modifyState,loadState} from '../lib/state.mjs';
 import {BATCH_STATES,buildModerationBatch,batchTransition} from '../lib/moderation-batch.mjs';
+import {renderModerationAnalytics,TABS,PERIODS} from './moderation-analytics-page.mjs';
+import {moderationOpsKey} from '../lib/moderation-ops-store.mjs';
+import {cleanOperations} from '../lib/moderation-ops-core.mjs';
 import { listCases, getCase } from '../lib/complaints-store.mjs';
 import { escapeHtml as e } from '../lib/sites.mjs';
 const C = globalThis.RPNComplaints;
 const LABELS = {new:'Новая', 'in-progress':'В работе', waiting:'Ожидает', done:'Завершена'};
 let cases = [], rules=[], query = '', filter = 'all', selected = null, activeState, currentProfile, page=0, savedViewId='';
 let criteria=cleanFilter(), checked=new Set(), batchBusy=false;
+let opsByProfile={},opsTab='overview',opsDays=7;
 const PAGE_SIZE=25;
 const pendingDrafts=new Map();
 const esc = value => e(value ?? '');
@@ -24,7 +28,7 @@ const request = async (action, data = {}) => {
   if (!response?.ok) throw Error(response?.error || 'Операция не завершена');
   return response.value;
 };
-export async function refreshComplaints() { cases = await listCases(); rules=await listRules().catch(()=>[]); }
+export async function refreshComplaints() { cases = await listCases(); rules=await listRules().catch(()=>[]);opsByProfile=await api.storage.local.get(null); }
 function visible(state) {return selectCases(cases,state.activeProfileId,{...criteria,query,queue:filter},rules);}
 function opts(map,value){return Object.entries(map).map(([id,label])=>`<option value="${esc(id)}" ${id===value?'selected':''}>${esc(label)}</option>`).join('');}
 function triageFields(t={}){return `<div class="grid"><label>Приоритет<select name="priority">${opts(C.PRIORITY_LABELS,t.priority??'normal')}</select></label><label>Категория<input name="category" maxlength="80" value="${esc(t.category)}" placeholder="STATE / CRIME"></label><label>Раздел<input name="section" maxlength="180" value="${esc(t.section)}"></label><label>Ответственный (локально)<input name="assignee" maxlength="100" value="${esc(t.assignee)}"></label></div><label>Теги через запятую<input name="tags" maxlength="819" value="${esc(t.tags?.join(', '))}"></label>`;}
@@ -63,7 +67,7 @@ export function complaintsSection(state) {
   const rows = visible(state);
   const totals = {count:own.length, open:own.filter(c => c.status !== 'done').length, unread:own.filter(c => c.unread).length, due:own.filter(c => c.deadline && c.status !== 'done' && Date.parse(c.deadline) <= Date.now()+15*60000).length};
   return `<div class="stack"><section class="card"><div class="row spread"><div><h3>Complaint Manager 2.0 · 1.7.1</h3><p class="lead">Жалобы, черновики и доказательства для активного профиля. Данные сохраняются только в вашем браузере.</p></div><button class="button primary" data-case-action="create">+ Добавить жалобу</button></div><div class="case-stats"><div><strong>${totals.count}</strong><small>Всего</small></div><div><strong>${totals.open}</strong><small>Активных</small></div><div><strong>${totals.unread}</strong><small>Новые сообщения</small></div><div><strong>${totals.due}</strong><small>Срок ≤15 мин</small></div></div><div class="row"><input style="flex:1;min-width:185px" id="complaint-search" type="search" aria-label="Поиск жалоб" maxlength="240" placeholder="Тема, игрок, правило, тег…" value="${esc(query)}"><select id="complaint-filter" aria-label="Статус жалоб" style="max-width:165px">${opts(QUEUES,filter)}</select><button class="button secondary" data-case-action="scan">Проверить открытые вкладки</button></div><p class="subtle">Проверка выполняется при открытии темы и периодически в открытых вкладках форума. Мониторинг разделов ниже использует открытую вкладку соответствующего форума.</p></section>
-  <div id="section-monitor-root"></div>${queueControls(state)}${moderationBatchPanel(state)}<div id="complaint-list" class="stack">${rowsMarkup(rows)}</div></div>`;
+  <div id="section-monitor-root"></div>${renderModerationAnalytics(state,cases,(opsByProfile[moderationOpsKey(state.activeProfileId)]?.project===getActiveProfile(state).project&&opsByProfile[moderationOpsKey(state.activeProfileId)]?.server===getActiveProfile(state).server?opsByProfile[moderationOpsKey(state.activeProfileId)]:undefined),{tab:opsTab,days:opsDays})}${queueControls(state)}${moderationBatchPanel(state)}<div id="complaint-list" class="stack">${rowsMarkup(rows)}</div></div>`;
 }
 function rowsMarkup(all){
  const pages=Math.max(1,Math.ceil(all.length/PAGE_SIZE));page=Math.min(page,pages-1);const rows=all.slice(page*PAGE_SIZE,(page+1)*PAGE_SIZE);
@@ -123,6 +127,7 @@ export function filterComplaintUI() {if(activeState){const list=document.getElem
 export function setComplaintQuery(value) {query=value;page=0;filterComplaintUI();}
 export function setComplaintFilter(value) {filter=value;page=0;filterComplaintUI();document.querySelectorAll('[data-case-action=queue-filter]').forEach(b=>{b.classList.toggle('primary',b.dataset.queue===filter);b.classList.toggle('secondary',b.dataset.queue!==filter);});}
 export function handleComplaintQueueChange(el,state,render){
+ if(el.id==='moderation-period'){const period=Number(el.value);if(!PERIODS.includes(period))throw Error('Неизвестный период');opsDays=period;render();return true;}
  if(el.dataset.caseSelect){if(el.checked){if(checked.size>=100){el.checked=false;return true;}checked.add(el.dataset.caseSelect);}else checked.delete(el.dataset.caseSelect);document.getElementById('case-selection-count').textContent=checked.size;return true;}
  const fields={'case-priority-filter':'priority','case-sort':'sort','case-category-filter':'category','case-assignee-filter':'assignee','case-tag-filter':'tag'};
  if(fields[el.id]){criteria=cleanFilter({...criteria,[fields[el.id]]:el.value});page=0;filterComplaintUI();return true;}
@@ -131,6 +136,20 @@ export function handleComplaintQueueChange(el,state,render){
 function batchDialog(){let dlg=document.getElementById('case-batch-dialog');if(!dlg){dlg=document.createElement('dialog');dlg.id='case-batch-dialog';document.body.append(dlg);}replaceHtml(dlg,`<form id="case-batch-form"><h2>Пакетные локальные операции · ${checked.size}</h2><p class="subtle">Применяется только выбранное поле. Не отправляет действия на форум.</p><label>Операция<select name="operation"><option value="priority">Приоритет</option><option value="category">Категория</option><option value="section">Раздел</option><option value="assignee">Ответственный</option><option value="tags">Заменить теги</option><option value="watching-on">Включить отслеживание</option><option value="watching-off">Выключить отслеживание</option><option value="finish">Завершить проверенные дела</option><option value="archive">В архив (завершённые)</option><option value="restore">Из архива</option></select></label><label>Приоритет<select name="priority">${opts(C.PRIORITY_LABELS,'normal')}</select></label><label>Текстовое значение (для категории, раздела, ответственного, тегов)<input name="text" maxlength="819"></label><div class="dialog-actions"><button type="button" class="button secondary" data-case-action="batch-cancel">Отмена</button><button class="button primary" type="submit">Применить</button></div></form>`);return dlg;}
 export async function handleComplaintAction(button, state, render, feedback) {
   const action = button.dataset.caseAction, id = button.dataset.id;
+  if(action==='ops-tab'){if(!Object.hasOwn(TABS,button.dataset.tab))throw Error('Неизвестная вкладка аналитики');opsTab=button.dataset.tab;render();return;}
+  if(action==='ops-rule-delete'||action==='ops-rule-toggle'||action==='ops-audit-clear'||action==='ops-apply-sla'||action==='ops-run-overdue'||action==='ops-audit-export'){
+    if(action==='ops-audit-export'){
+      const ops=cleanOperations(opsByProfile[moderationOpsKey(state.activeProfileId)],getActiveProfile(state));
+      const url=URL.createObjectURL(new Blob([JSON.stringify({profileId:ops.profileId,exportedAt:new Date().toISOString(),audit:ops.audit},null,2)],{type:'application/json'}));
+      const a=document.createElement('a');a.href=url;a.download='moderation-audit-'+new Date().toISOString().slice(0,10)+'.json';document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);feedback('Журнал экспортирован');return;
+    }
+    if(action==='ops-rule-delete'&&!confirm('Удалить локальное правило автоматизации?'))return;
+    if(action==='ops-audit-clear'&&!confirm('Очистить локальный журнал? Это действие нельзя отменить без резервной копии.'))return;
+    if(action==='ops-apply-sla'&&!confirm('Установить локальные сроки для открытых жалоб без ручного дедлайна?'))return;
+    const operation=action==='ops-rule-delete'?'rule-delete':action==='ops-rule-toggle'?'rule-toggle':action==='ops-audit-clear'?'audit-clear':action==='ops-apply-sla'?'apply-sla':'run-overdue';
+    const value=await request('moderation-ops',{profileId:state.activeProfileId,operation,input:{id:button.dataset.ruleId,confirm:true}});
+    await refreshComplaints();render();feedback(typeof value==='number'?`Обработано жалоб: ${value}`:'Настройки модерации обновлены');return;
+  }
   if(action.startsWith('moderation-batch-')){const work=()=>handleModerationBatch(action.slice(17),id,state,render,feedback);if(globalThis.navigator?.locks?.request)await navigator.locks.request('mt-moderation-batch:'+state.activeProfileId,work);else await work();return;}
   if(action==='queue-filter'){filter=button.dataset.queue;page=0;render();return;}
   if(action==='page-prev'||action==='page-next'){page=Math.max(0,page+(action==='page-next'?1:-1));filterComplaintUI();return;}
@@ -245,6 +264,17 @@ export async function handleComplaintSubmit(event, state, render, feedback) {
     const operation=['archive','restore','finish'].includes(op)?op:'triage';if(op==='finish')input.confirm=true;await request('queue',{profileId:state.activeProfileId,ids:[...checked],operation,input});checked.clear();document.getElementById('case-batch-dialog')?.close();await refreshComplaints();render();feedback('Пакетная операция завершена');return;
   }
 
+  if(event.target.getAttribute('id')==='moderation-policy-form'){
+    const get=k=>form.namedItem(k),categories=get('categories').value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean).map(line=>{const m=/^([^=]+)=(\d+)$/.exec(line);if(!m)throw Error('Категория: используйте формат STATE=8');return {name:m[1].trim(),hours:Number(m[2])};});
+    const alerts=get('alerts').value.split(',').map(x=>Number(x.trim()));
+    const policy={enabled:get('enabled').checked,defaultHours:24,priorityHours:Object.fromEntries(C.PRIORITIES.map(k=>[k,Number(get('hours-'+k).value)])),categories,pauseWaiting:get('pauseWaiting').checked,notifications:get('notifications').checked,alerts};
+    await request('moderation-ops',{profileId:state.activeProfileId,operation:'policy',input:{policy}});await refreshComplaints();render();feedback('Политика SLA сохранена');return;
+  }
+  if(event.target.getAttribute('id')==='moderation-rule-form'){
+    const get=k=>form.namedItem(k).value;
+    await request('moderation-ops',{profileId:state.activeProfileId,operation:'rule-add',input:{rule:{id:crypto.randomUUID(),name:get('name'),trigger:get('trigger'),field:get('field'),equals:get('equals'),action:get('action'),value:get('value'),enabled:true}}});
+    await refreshComplaints();render();feedback('Правило автоматизации добавлено');return;
+  }
   if (event.target.getAttribute('id') === 'complaint-form') {
     const id = form.namedItem('id').value;
     const input = {title:form.title.value, url:form.url.value, status:form.status.value, note:form.note.value,

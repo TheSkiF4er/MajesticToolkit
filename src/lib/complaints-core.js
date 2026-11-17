@@ -185,6 +185,11 @@
     if(!value||typeof value!=='object'||!['unknown','open','closed'].includes(value.state))throw Error('Некорректное состояние темы');
     const observedAt=date(value.observedAt??null,'Дата наблюдения',true);if(value.state!=='unknown'&&!observedAt)throw Error('Нет времени наблюдения');return {state:value.state,observedAt};
   }
+  function cleanSla(value){
+    if(value==null)return undefined;
+    if(value.managed!==true||!(value.pausedAt===null||(typeof value.pausedAt==='string'&&Number.isFinite(Date.parse(value.pausedAt))))||!(value.remainingMs===null||(Number.isSafeInteger(value.remainingMs)&&value.remainingMs>=0&&value.remainingMs<=7776000000))||Boolean(value.pausedAt)!==Number.isInteger(value.remainingMs))throw Error('Некорректный SLA жалобы');
+    return {managed:true,pausedAt:value.pausedAt?new Date(value.pausedAt).toISOString():null,remainingMs:value.remainingMs};
+  }
   function cleanCase(data) {
     if (!data || typeof data !== 'object' || Array.isArray(data)) throw Error('Некорректная жалоба');
     if (!/^[\w-]{8,120}$/.test(data.id)) throw Error('Некорректный ID жалобы');
@@ -206,7 +211,7 @@
       deadline: date(data.deadline, 'Срок', true), watching: data.watching,
       lastSeenPostId: data.lastSeenPostId,
       lastCheckedAt: date(data.lastCheckedAt, 'Дата проверки', true),
-      unread: data.unread, evidence, triage, forumState:cleanForumState(data.forumState), ...(data.moderation==null?{}:{moderation:cleanModeration(data.moderation,evidence)}), workflow:cleanWorkflow(data.workflow,data.status),
+      unread: data.unread, evidence, triage, ...(data.sla==null?{}:{sla:cleanSla(data.sla)}), forumState:cleanForumState(data.forumState), ...(data.moderation==null?{}:{moderation:cleanModeration(data.moderation,evidence)}), workflow:cleanWorkflow(data.workflow,data.status),
       createdAt: date(data.createdAt, 'Дата создания'), updatedAt: date(data.updatedAt, 'Дата изменения')
     };
   }
@@ -227,7 +232,7 @@
       if(values.status==='done' && item.workflow.stage!=='closed')throw Error('Для завершения пройдите этапы процесса и подтвердите решение');
       else if(flow.stage==='closed'){flow={...flow,stage:'decision',checks:{...flow.checks,decision:false}};if(item.moderation)values.moderation={...item.moderation,status:'draft',revision:uuid(),decisionSnapshotId:null,updatedAt:new Date().toISOString()};values.triage=cleanTriage({...item.triage,...values.triage,queue:values.status==='waiting'?'waiting':'recheck'});}else if(values.status==='waiting'||item.status==='waiting'){values.triage=cleanTriage({...item.triage,...values.triage,queue:values.status==='waiting'?'waiting':'active'});}
     }
-    if(Object.hasOwn(values,'deadline')&&values.deadline!==item.deadline)flow=event(flow,'deadline',`Срок: ${values.deadline||'снят'}`);
+    if(Object.hasOwn(values,'deadline')&&values.deadline!==item.deadline){flow=event(flow,'deadline',`Срок: ${values.deadline||'снят'}`);values.sla=undefined;}
     if(Object.hasOwn(values,'draft')&&values.draft!==item.draft){flow=event(item.moderation?{...flow,checks:{...flow.checks,decision:false}}:flow,'draft','Черновик изменён (без публикации)');}
     return cleanCase({ ...item, ...values,workflow:flow, updatedAt: new Date().toISOString() });
   }
@@ -260,5 +265,5 @@
     if (!Number.isInteger(s) || s < 0) return '';
     return `${Math.floor(s/3600) ? Math.floor(s/3600) + ':' : ''}${String(Math.floor(s/60)%60).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
   }
-  root.RPNComplaints = Object.freeze({ PREFIX, MAX_CASES, MAX_EVIDENCE, STATUS, PRIORITIES, PRIORITY_LABELS, QUEUE_STATES, cleanTriage, triageAction, ALLOWED_HOSTS, VIDEO_HOSTS, cleanCase, cleanModeration, createCase, updateCase, addEvidence, removeEvidence, observeCase, canonicalThreadUrl, threadKey, cleanEvidence, videoLink, timecode, WORKFLOW_STAGES, WORKFLOW_LABELS, WORKFLOW_CHECKS, DECISION_KINDS, initialWorkflow, cleanWorkflow, workflowAction, draftDecision, deadlineTier });
+  root.RPNComplaints = Object.freeze({ PREFIX, MAX_CASES, MAX_EVIDENCE, STATUS, PRIORITIES, PRIORITY_LABELS, QUEUE_STATES, cleanTriage, cleanSla, triageAction, ALLOWED_HOSTS, VIDEO_HOSTS, cleanCase, cleanModeration, createCase, updateCase, addEvidence, removeEvidence, observeCase, canonicalThreadUrl, threadKey, cleanEvidence, videoLink, timecode, WORKFLOW_STAGES, WORKFLOW_LABELS, WORKFLOW_CHECKS, DECISION_KINDS, initialWorkflow, cleanWorkflow, workflowAction, draftDecision, deadlineTier });
 })(globalThis);

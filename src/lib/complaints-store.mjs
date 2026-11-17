@@ -4,11 +4,31 @@ import {loadState} from './state.mjs';
 import {getActiveProfile} from './model.mjs';
 import {listRules} from './rules-store.mjs';
 import {listTemplates} from './forum-store.mjs';
+import {moderationOpsFor,moderationOpsKey,changeOpsInternal,runOverdueAutomationsInternal} from './moderation-ops-store.mjs';
+import {applySla,applyRules,auditEvent,cleanOperations} from './moderation-ops-core.mjs';
 import {assertCaseScope,saveModerationRecord,prepareDecision,assertDecisionReady} from './moderation-core.mjs';
 const C = globalThis.RPNComplaints;
 export const CASE_PREFIX = C.PREFIX;
 let serial = Promise.resolve();
 function enqueue(fn) { const current = serial.then(fn); serial = current.catch(() => {}); return current; }
+async function profileForCase(id){const state=await loadState();return state.profiles.find(p=>p.id===id)??null;}
+async function withOperations(before,after,action,description,trigger=null){
+ const profile=await profileForCase(after.profileId);
+ if(!profile)return {[CASE_PREFIX+after.id]:after};
+ let ops=await moderationOpsFor(profile),item=after;
+ if(trigger){const result=applyRules(item,ops,trigger);item=result.item;ops=result.ops;}
+ item=applySla(before,item,ops.policy);
+ ops=auditEvent(ops,action,description,item.id);
+ return {[CASE_PREFIX+item.id]:item,[moderationOpsKey(profile.id)]:cleanOperations(ops,profile)};
+}
+export function mutateModerationOperations(profileId,operation,input={}){return enqueue(async()=>{
+ const profile=(await loadState()).profiles.find(p=>p.id===profileId);if(!profile)throw Error('Профиль не найден');
+ return changeOpsInternal(profile,operation,input);
+});}
+export function runOverdueAutomations(profileId,at=Date.now()){return enqueue(async()=>{
+ const profile=(await loadState()).profiles.find(p=>p.id===profileId);if(!profile)throw Error('Профиль не найден');
+ return runOverdueAutomationsInternal(profile,await listCases(),at);
+});}
 function itemsFromStorage(raw) {
   return Object.entries(raw).filter(([key]) => key.startsWith(CASE_PREFIX)).flatMap(([key, value]) => {
     try { const item = C.cleanCase(value); return key === CASE_PREFIX + item.id ? [item] : []; }
@@ -28,28 +48,28 @@ export function createComplaint(input) {
     if (cases.length >= C.MAX_CASES) throw Error('Лимит жалоб достигнут');
     const complaint = C.createCase(input);
     if (cases.some(c => c.profileId === complaint.profileId && c.threadKey === complaint.threadKey)) throw Error('Жалоба на эту тему уже добавлена для данного профиля');
-    await api.storage.local.set({ [CASE_PREFIX + complaint.id]: complaint });
+    await api.storage.local.set(await withOperations(null,complaint,'case','Жалоба создана','create'));
     return complaint;
   });
 }
 export function editComplaint(id, patch) {
   return enqueue(async () => {
-    const item = C.updateCase(await getCase(id), patch);
-    await api.storage.local.set({ [CASE_PREFIX + id]: item });
+    const before=await getCase(id),item=C.updateCase(before,patch);
+    await api.storage.local.set(await withOperations(before,item,'case','Данные жалобы изменены','update'));
     return item;
   });
 }
 export function addComplaintEvidence(id, input) {
   return enqueue(async () => {
-    const item = C.addEvidence(await getCase(id), input);
-    await api.storage.local.set({ [CASE_PREFIX + id]: item });
+    const before=await getCase(id),item=C.addEvidence(before,input);
+    await api.storage.local.set(await withOperations(before,item,'evidence','Добавлено доказательство'));
     return item;
   });
 }
 export function removeComplaintEvidence(id, evidenceId) {
   return enqueue(async () => {
-    const item = C.removeEvidence(await getCase(id), evidenceId);
-    await api.storage.local.set({ [CASE_PREFIX + id]: item });
+    const before=await getCase(id),item=C.removeEvidence(before,evidenceId);
+    await api.storage.local.set(await withOperations(before,item,'evidence','Удалено доказательство'));
     return item;
   });
 }
@@ -59,11 +79,11 @@ export function mutateCaseWorkflow(id,action,payload={}) {
     const current=await getCase(id);
     if(action==='next'&&current.workflow.stage==='decision'&&current.moderation){const profile=getActiveProfile(await loadState());if(current.moderation.status!=='reviewed')throw Error('Сначала подтвердите расчёт');if(assertDecisionReady(current,profile,await listRules()).result.players.some(x=>x.unresolved))throw Error('Расчёт содержит неоднозначности');}
     const updated=C.workflowAction(current,action,payload);
-    await api.storage.local.set({[CASE_PREFIX+id]:updated});
+    await api.storage.local.set(await withOperations(current,updated,'workflow',`Этап: ${action}`));
     return updated;
   });
 }
-export function removeComplaint(id) { return enqueue(async () => { await getCase(id); await api.storage.local.remove(CASE_PREFIX + id); }); }
+export function removeComplaint(id) { return enqueue(async () => { const current=await getCase(id),profile=await profileForCase(current.profileId);if(profile){const ops=auditEvent(await moderationOpsFor(profile),'case','Жалоба удалена',id);await api.storage.local.set({[moderationOpsKey(profile.id)]:cleanOperations(ops,profile)});}await api.storage.local.remove(CASE_PREFIX + id); }); }
 export function observeThread(url, postId, profileId = null, forumState = 'unknown') {
   return enqueue(async () => {
     const key = C.threadKey(url);
@@ -74,7 +94,8 @@ export function observeThread(url, postId, profileId = null, forumState = 'unkno
       const samePost=result.item.lastSeenPostId===c.lastSeenPostId;
       const lastCheck=c.lastCheckedAt?Date.parse(c.lastCheckedAt):0;
       // Suppress redundant full-record writes during repeated scans of an unchanged thread.
-      if(result.changed || !samePost || result.item.forumState.state!==c.forumState.state || Date.now()-lastCheck>=4*60000)await api.storage.local.set({ [CASE_PREFIX + c.id]: result.item });
+      if(result.changed)await api.storage.local.set(await withOperations(c,result.item,'case','Обнаружен новый ответ','reply'));
+      else if(!samePost || result.item.forumState.state!==c.forumState.state || Date.now()-lastCheck>=4*60000)await api.storage.local.set({ [CASE_PREFIX + c.id]: result.item });
       if (result.changed) changed.push(result.item);
     }
     return changed;
@@ -150,7 +171,7 @@ export function mutateModeration(id,action,input={}){
   }else throw Error('Неизвестное действие рассмотрения');
   const active=getActiveProfile(await loadState());assertCaseScope(next,active);
   if(active.id!==profile.id||active.server!==profile.server||active.project!==profile.project)throw Error('Активный профиль изменился');
-  await api.storage.local.set({[CASE_PREFIX+id]:next});return next;
+  await api.storage.local.set(await withOperations(c,next,'calculation',action==='save'?'Обновлён расчёт':'Подготовлен черновик решения'));return next;
  });
 }
 
@@ -164,6 +185,28 @@ export function mutateComplaintQueue(profileId,ids,operation,input={}){
   const rules=operation==='finish'?await listRules():[];
   const next=items.map(c=>{if(operation==='finish'){if(input.confirm!==true||c.workflow.stage!=='decision')throw Error('Каждая жалоба должна быть на этапе решения');if(c.moderation){if(c.moderation.status!=='reviewed')throw Error('Сначала подтвердите расчёт');if(assertDecisionReady(c,profile,rules).result.players.some(x=>x.unresolved))throw Error('Расчёт содержит неоднозначности');}return C.workflowAction(c,'next',{confirm:true});}if(operation==='triage'){const patch=Object.fromEntries(Object.entries(input).filter(([k])=>['priority','category','section','assignee','tags'].includes(k)));return C.updateCase(c,{triage:patch,...(typeof input.watching==='boolean'?{watching:input.watching}:{})});}return C.triageAction(c,operation,input);});
   const active=getActiveProfile(await loadState());if(active.id!==profileId||active.project!==profile.project||active.server!==profile.server)throw Error('Активный профиль изменился');
-  await api.storage.local.set(Object.fromEntries(next.map(c=>[CASE_PREFIX+c.id,c])));return next;
+  let ops=await moderationOpsFor(profile);const entries={};const finished=[];
+  for(let i=0;i<next.length;i++){
+   const result=applyRules(next[i],ops,'update');ops=result.ops;
+   const item=applySla(items[i],result.item,ops.policy);
+   ops=auditEvent(ops,'triage',`Пакетная операция: ${operation}`,item.id);
+   entries[CASE_PREFIX+item.id]=item;finished.push(item);
+  }
+  entries[moderationOpsKey(profile.id)]=cleanOperations(ops,profile);
+  await api.storage.local.set(entries);return finished;
  });
 }
+
+export function applyPolicyToUnscheduled(profileId){return enqueue(async()=>{
+ const profile=(await loadState()).profiles.find(p=>p.id===profileId);if(!profile)throw Error('Профиль не найден');
+ let ops=await moderationOpsFor(profile);if(!ops.policy.enabled)throw Error('Сначала включите SLA');
+ const records=(await listCases()).filter(c=>c.profileId===profileId&&c.status!=='done'&&!c.deadline&&!c.sla);
+ const patch={};for(const c of records){const n=applySla(null,c,ops.policy);patch[CASE_PREFIX+c.id]=n;ops=auditEvent(ops,'sla','Применён срок SLA к жалобе',c.id);}
+ if(records.length){patch[moderationOpsKey(profile.id)]=cleanOperations(ops,profile);await api.storage.local.set(patch);}return records.length;
+});}
+
+export function recordDeadlineNotification(caseId,threshold){return enqueue(async()=>{
+ const c=await getCase(caseId),profile=await profileForCase(c.profileId);if(!profile)return;
+ const ops=auditEvent(await moderationOpsFor(profile),'notification',`Уведомление о сроке: ${threshold===0?'просрочка':threshold+' минут'}`,c.id);
+ await api.storage.local.set({[moderationOpsKey(profile.id)]:cleanOperations(ops,profile)});
+});}

@@ -197,3 +197,13 @@ body[data-mode=sidebar] .ws-layout .side{height:auto;position:static;overflow:vi
 #rules-experience [hidden]{display:none!important}
 .rules-hub-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr));gap:10px}
 .rules-hub-grid .button{white-space:normal;min-height:48px;text-align:left}
+
+/* Moderation Analytics & Workflow 1.7.5 */
+.moderation-analytics .moderation-bars{display:flex;align-items:end;gap:6px;min-height:125px;padding:12px 4px 4px;border-bottom:1px solid var(--border,#808080);overflow:hidden}
+.moderation-bar{flex:1 1 0;min-width:0;height:110px;display:flex;flex-direction:column;justify-content:end;align-items:stretch;text-align:center;gap:4px}
+.moderation-bar span{display:block;min-height:3px;border-radius:4px 4px 0 0;background:var(--accent,#637fe5)}
+.moderation-bar small{font-size:10px;opacity:.7;white-space:nowrap}
+.moderation-rule{border-top:1px solid var(--border,#707070);padding:12px 0;gap:14px;flex-wrap:wrap}
+.moderation-audit{max-height:430px;overflow:auto}
+.moderation-analytics .grid{align-items:start}
+@media(max-width:560px){.moderation-analytics .grid{grid-template-columns:1fr}.moderation-analytics .case-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
