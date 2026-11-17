@@ -10,7 +10,7 @@ npm run verify
 cd release && sha256sum -c SHA256SUMS
 ```
 
-Команда создаёт `release/MajesticToolkit-1.8.0-{chromium,firefox,firefox-android,safari}.zip`, а также `release-manifest.json`, `SHA256SUMS`. Сборка не использует сеть или удалённые скрипты. `scripts/check-release.mjs` проверяет контрольные суммы, имена файлов и совпадение каждого извлечённого файла с `dist/`.
+Команда создаёт `release/MajesticToolkit-1.8.1-{chromium,firefox,firefox-android,safari}.zip`, а также `release-manifest.json`, `SHA256SUMS`. Сборка не использует сеть или удалённые скрипты. `scripts/check-release.mjs` проверяет контрольные суммы, имена файлов и совпадение каждого извлечённого файла с `dist/`.
 
 ## Предрелизные приёмочные испытания (обязательны для публичного статуса Stable)
 

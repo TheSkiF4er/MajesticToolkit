@@ -954,6 +954,111 @@ async def experience_workspace(browser):
     return 11
 
 
+
+async def evidence_vault_workspace(browser):
+    """Real Vault UI and mutation paths with deterministic IndexedDB/WebCrypto fixtures."""
+    import base64,json,re
+    modules={}
+    def add(path):
+        path=path.resolve();key='mt:'+path.relative_to(ROOT/'src').as_posix()
+        if key in modules:return key
+        modules[key]=''
+        def sub(m):return m.group(1)+add((path.parent/m.group(2)).resolve())+m.group(1)
+        source=re.sub(r"(['\"])(\.{1,2}/[^'\"\n]+\.m?js)\1",sub,path.read_text())
+        modules[key]='data:text/javascript;base64,'+base64.b64encode(source.encode()).decode()
+        return key
+    add(ROOT/'src/ui/evidence-vault-page.mjs')
+    origin='https://evidence-vault.fixture.invalid/'
+    html='<html><head><meta charset="utf-8"><script type="importmap">'+json.dumps({'imports':modules})+'</script></head><body><div id="vault"></div></body></html>'
+    context=await browser.new_context(accept_downloads=True)
+    await context.route('**/fixture.invalid/**',lambda route:route.fulfill(status=200,content_type='text/html',body=html))
+    page=await context.new_page()
+    errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
+    # Navigation to every http(s)/file origin is blocked by this runner. The
+    # fixture uses a deterministic IndexedDB shim and a SHA-256 test host.
+    import hashlib
+    await page.expose_function('__fixtureSha256',lambda data:list(hashlib.sha256(bytes(data)).digest()))
+    await page.set_content(html)
+    await page.evaluate("""()=>{
+      const tables=new Map();
+      const schedule=(fn)=>setTimeout(fn,0);
+      const factory={open(name){
+        const request={result:null};schedule(()=>{
+          const fresh=!tables.has(name);if(fresh)tables.set(name,new Map());const table=tables.get(name);
+          const db={createObjectStore(){return {createIndex(){}};},close(){},transaction(){
+            const tx={oncomplete:null,onerror:null,pending:0,finished:false};
+            const finish=()=>{if(tx.pending!==0||tx.finished)return;tx.finished=true;schedule(()=>tx.oncomplete?.());};
+            const wrap=(value)=>{const r={result:null};tx.pending++;schedule(()=>{try{r.result=value();r.onsuccess?.();}catch(error){window.__idbErr=String(error)+' '+error?.stack;r.error=error;tx.onerror?.();}finally{tx.pending--;finish();}});return r;};
+            const api={get(id){return wrap(()=>table.get(id));},add(value){return wrap(()=>{if(table.has(value.id))throw Error('ConstraintError');table.set(value.id,structuredClone(value));});},put(value){return wrap(()=>table.set(value.id,structuredClone(value)));},delete(id){return wrap(()=>table.delete(id));},index(){return {getAll(profile){return wrap(()=>[...table.values()].filter(x=>x.profileId===profile).map(x=>structuredClone(x)));},openCursor(profile){
+              const values=[...table.values()].filter(x=>profile==null||x.profileId===profile);let pos=0;
+              const r={result:null};const step=()=>{tx.pending++;schedule(()=>{r.result=pos<values.length?{value:values[pos],continue(){pos++;step();},delete(){table.delete(values[pos].id);}}:null;r.onsuccess?.();tx.pending--;finish();});};step();return r;
+            }};}};
+            api.openCursor=()=>api.index().openCursor(null);
+            tx.objectStore=()=>api;return tx;
+          }};request.result=db;if(fresh)request.onupgradeneeded?.();request.onsuccess?.();
+        });return request;
+      }};
+      Object.defineProperty(window,'indexedDB',{value:factory,configurable:true});
+      if(!crypto.randomUUID)crypto.randomUUID=()=>Array.from(crypto.getRandomValues(new Uint8Array(16)),b=>b.toString(16).padStart(2,'0')).join('');
+      if(!crypto.subtle)Object.defineProperty(crypto,'subtle',{value:{async digest(algorithm,buffer){if(algorithm!=='SHA-256')throw Error('SHA-256 expected');return Uint8Array.from(await window.__fixtureSha256(Array.from(new Uint8Array(buffer)))).buffer;}}});
+    }""")
+    await page.evaluate("""()=>{
+      const date='2026-11-17T19:56:00Z';
+      const p={id:'profile_majestic_01',name:'QA',project:'majestic',server:'Alpha',forumUrl:'https://forum.majestic-rp.ru/',createdAt:date,updatedAt:date};
+      const data={rpNexusStateV1:{schemaVersion:1,activeProfileId:p.id,profiles:[p],preferences:{theme:'dark',compact:false,startPage:'complaints'},updatedAt:date}};window.__vaultData=data;
+      const event={addListener(){},removeListener(){}};
+      window.browser={runtime:{id:'fixture',onMessage:event,async sendMessage(m){
+        if(m.type==='RP_NEXUS_CASE_MUTATE'&&m.action==='linkEvidence'){
+          try{const s=await import('mt:lib/complaints-store.mjs'),v=await import('mt:lib/evidence-vault.mjs');const c=await s.getCase(m.id);const item=await v.getVaultRecord(m.vaultId);const old=c.evidence.find(x=>x.id===m.evidenceId);if(!old||old.url!==item.meta.url||old.seconds!==item.meta.seconds||c.profileId!==item.meta.profileId)throw Error('Wrong legacy evidence');return {ok:true,value:await s.linkComplaintEvidence(c.id,old.id,item.meta.id)};}catch(e){return {ok:false,error:e.message};}
+        }
+        if(m.type==='RP_NEXUS_CASE_MUTATE'&&m.action==='addEvidence'){
+          try{const s=await import('mt:lib/complaints-store.mjs'),v=await import('mt:lib/evidence-vault.mjs');const c=await s.getCase(m.id);const item=await v.getVaultRecord(m.input.vaultId);if(item.meta.profileId!==c.profileId)throw Error('Wrong profile');if(item.meta.kind==='file')await v.verifyVaultFile(item.meta.id,c.profileId);const value=await s.addComplaintEvidence(m.id,{...item.meta,vaultId:item.meta.id});return {ok:true,value};}catch(e){return {ok:false,error:e.message};}
+        }
+        return {ok:true,value:null};
+      }},tabs:{async create(args){window.__opened=args.url;return args;}},storage:{onChanged:event,local:{async get(keys){if(keys===null)return structuredClone(data);if(typeof keys==='string')return {[keys]:data[keys]};if(Array.isArray(keys))return Object.fromEntries(keys.map(k=>[k,data[k]]));return {};},async set(values){for(const [k,v] of Object.entries(values))data[k]=structuredClone(v);},async remove(keys){for(const k of Array.isArray(keys)?keys:[keys])delete data[k];}}}};
+      window.confirm=()=>true;
+    }""")
+    assert await page.evaluate('!!crypto.subtle && !!indexedDB')
+    await page.evaluate("""async()=>{
+      await import('mt:lib/complaints-core.js');const store=await import('mt:lib/complaints-store.mjs');const p='profile_majestic_01';window.__vaultCase=await store.createComplaint({profileId:p,title:'Evidence QA Case',url:'https://forum.majestic-rp.ru/threads/evidence.181/'});
+      const ui=await import('mt:ui/evidence-vault-page.mjs');window.__vaultUI=ui;await ui.mountEvidenceVault(document.getElementById('vault'),{activeProfileId:p},(message,error)=>{window.__vaultNotice={message,error}},async()=>{});
+    }""")
+    await page.locator('#vault-items').get_by_text('Материалов нет').wait_for()
+    await page.locator('#vault-upload-form input[name=file]').set_input_files({'name':'sample.png','mimeType':'image/png','buffer':bytes([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a,1,2,3,4])})
+    await page.locator('#vault-upload-form input[name=title]').fill('Image QA')
+    await page.locator('#vault-upload-form button[type=submit]').click()
+    await page.locator('#vault-items').get_by_text('Image QA').wait_for(timeout=5000)
+    await page.locator('#vault-items [data-vault-action=verify]').click()
+    await page.wait_for_function("window.__vaultNotice?.message.includes('SHA-256 совпадает')")
+    await page.locator('#vault-case').select_option(''+await page.evaluate('window.__vaultCase.id'))
+    await page.locator('#vault-items [data-vault-action=attach]').click()
+    await page.wait_for_function("window.__vaultNotice?.message.includes('прикреплён')")
+    assert await page.evaluate("""async()=>{const s=await import('mt:lib/complaints-store.mjs');const c=await s.getCase(window.__vaultCase.id);return c.evidence.length===1&&c.evidence[0].kind==='file'&&c.evidence[0].sha256.length===64;}""")
+    await page.locator('#vault-items [data-vault-action=delete]').click()
+    await page.wait_for_function("window.__vaultNotice?.message.includes('прикреплён к жалобе')")
+    async with page.expect_download() as download_info:
+        await page.locator('#vault-items [data-vault-action=download]').click()
+    download=await download_info.value
+    assert download.suggested_filename=='sample.png'
+    # Mutate the stored bytes without changing the saved hash: verified access must fail.
+    await page.evaluate("""async()=>{
+      const v=await import('mt:lib/evidence-vault.mjs');const rows=await v.listVault('profile_majestic_01');const db=await v.openVault();
+      await new Promise((resolve,reject)=>{const tx=db.transaction('entries','readwrite'),store=tx.objectStore('entries');const req=store.get(rows[0].id);req.onsuccess=()=>{store.put({...req.result,blob:new Blob([Uint8Array.from([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a,1,2,3,99])],{type:'image/png'})});};tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);});db.close();
+    }""")
+    await page.locator('#vault-items [data-vault-action=verify]').click()
+    await page.wait_for_function("window.__vaultNotice?.error===true && window.__vaultNotice?.message.includes('SHA-256 не совпадает')")
+    assert await page.evaluate("""async()=>{const m=await import('mt:lib/evidence-vault.mjs');return (await m.listVault('profile_other_123')).length===0;}""")
+    await page.evaluate("""async()=>{const s=await import('mt:lib/complaints-store.mjs');const c=await s.getCase(window.__vaultCase.id);await s.removeComplaintEvidence(c.id,c.evidence[0].id);}""")
+    await page.locator('#vault-items [data-vault-action=delete]').click()
+    await page.locator('#vault-items').get_by_text('Материалов нет').wait_for()
+    await page.evaluate("""async()=>{const s=await import('mt:lib/complaints-store.mjs');const c=await s.addComplaintEvidence(window.__vaultCase.id,{title:'Legacy video',url:'https://youtu.be/example',seconds:42,note:'Before vault'});window.__legacyId=c.evidence[0].id;await window.__vaultUI.mountEvidenceVault(document.getElementById('vault'),{activeProfileId:c.profileId},(message,error)=>{window.__vaultNotice={message,error}},async()=>{});}""")
+    await page.locator('#vault-migrate').click()
+    await page.wait_for_function("window.__vaultNotice?.message.includes('Перенесено ссылок')")
+    assert await page.evaluate("""async()=>{const s=await import('mt:lib/complaints-store.mjs');const c=await s.getCase(window.__vaultCase.id);return c.evidence[0].id===window.__legacyId&&c.evidence[0].seconds===42&&!!c.evidence[0].vaultId;}""")
+    assert not errors,errors
+    await context.close()
+    return 1
+
 async def main():
     names=os.environ.get('MAJESTIC_E2E_BROWSERS','chromium').split(',')
     async with async_playwright() as p:
@@ -970,6 +1075,7 @@ async def main():
             try:
                 cases=await exercise(browser)
                 cases+=await experience_workspace(browser)
+                cases+=await evidence_vault_workspace(browser)
                 print(f'{name} browser E2E: {cases} scenarios passed (offline XenForo DOM fixtures)')
             finally:await browser.close()
 

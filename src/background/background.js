@@ -1,3 +1,4 @@
+import {getVaultRecord,verifyVaultFile} from '../lib/evidence-vault.mjs';
 import {moderationOpsFor} from '../lib/moderation-ops-store.mjs';
 import {registryAction} from '../lib/punishment-registry-store.mjs';
 import {sectionAction,sectionView,scanSections,SECTION_KEY} from '../lib/section-monitor-store.mjs';
@@ -6,7 +7,7 @@ import {RULES_KEY} from '../lib/rules-core.mjs';
 import {readingPosition} from '../lib/forum-reading-store.mjs';
 import {getLocalIndex,invalidateSearch} from '../lib/productivity-search.mjs';
 import {searchRecords,SECTION_FOR} from '../lib/productivity-core.mjs';
-import {modifyState} from '../lib/state.mjs';
+import {modifyState,loadState} from '../lib/state.mjs';
 import {selectProfile} from '../lib/model.mjs';
 import {forumSettingsFor} from '../lib/forum-settings.mjs';
 /* MajesticToolkit background: static ES module dependencies for all browsers. */
@@ -363,7 +364,26 @@ api.runtime.onMessage.addListener((message,sender,sendResponse) => {
         case 'create': return store.createComplaint(message.input);
         case 'update': return store.editComplaint(message.id,message.patch);
         case 'delete': return store.removeComplaint(message.id);
-        case 'addEvidence': return store.addComplaintEvidence(message.id,message.input);
+        case 'addEvidence': {
+          if(message.input?.vaultId){
+            const current=await store.getCase(message.id);
+            if((await loadState()).activeProfileId!==current.profileId)throw Error('Активный профиль изменился');
+            const vault=await getVaultRecord(message.input.vaultId);
+            if(vault.meta.profileId!==current.profileId)throw Error('Доказательство другого профиля');
+            if(vault.meta.kind==='file')await verifyVaultFile(vault.meta.id,current.profileId);
+            return store.addComplaintEvidence(message.id,{...vault.meta,vaultId:vault.meta.id});
+          }
+          if(message.input?.kind==='file')throw Error('Локальный файл можно прикрепить только из Evidence Vault');
+          return store.addComplaintEvidence(message.id,message.input);
+        }
+        case 'linkEvidence':{
+          const current=await store.getCase(message.id);
+          if((await loadState()).activeProfileId!==current.profileId)throw Error('Активный профиль изменился');
+          const record=await getVaultRecord(message.vaultId);
+          const existing=current.evidence.find(x=>x.id===message.evidenceId);
+          if(!existing||existing.kind==='file'||existing.vaultId||record.meta.kind!=='link'||record.meta.profileId!==current.profileId||existing.url!==record.meta.url||existing.seconds!==record.meta.seconds)throw Error('Ссылка не соответствует доказательству жалобы');
+          return store.linkComplaintEvidence(current.id,existing.id,record.meta.id);
+        }
         case 'removeEvidence': return store.removeComplaintEvidence(message.id,message.evidenceId);
         case 'replace': return store.replaceCases(message.cases);
         case 'workflow': return store.mutateCaseWorkflow(message.id,message.workflowAction,message.payload);

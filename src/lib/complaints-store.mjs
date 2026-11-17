@@ -66,6 +66,13 @@ export function addComplaintEvidence(id, input) {
     return item;
   });
 }
+export function linkComplaintEvidence(id,evidenceId,vaultId){
+ return enqueue(async()=>{
+  const before=await getCase(id),after=C.linkLegacyEvidence(before,evidenceId,vaultId);
+  await api.storage.local.set(await withOperations(before,after,'evidence','Связано с Evidence Vault'));
+  return after;
+ });
+}
 export function removeComplaintEvidence(id, evidenceId) {
   return enqueue(async () => {
     const before=await getCase(id),item=C.removeEvidence(before,evidenceId);

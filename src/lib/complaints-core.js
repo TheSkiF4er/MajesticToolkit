@@ -119,6 +119,10 @@
     if (!data || typeof data !== 'object' || Array.isArray(data)) throw Error('Некорректное доказательство');
     const seconds = data.seconds === null || data.seconds === undefined || data.seconds === '' ? null : Number(data.seconds);
     if (!/^[\w-]{8,120}$/.test(data.id)) throw Error('Некорректный ID доказательства');
+    if(data.kind==='file'){
+      if(typeof data.vaultId!=='string'||!/^[\w-]{8,120}$/.test(data.vaultId)||typeof data.sha256!=='string'||!/^[0-9a-f]{64}$/.test(data.sha256)||!Number.isSafeInteger(data.size)||data.size<1||data.size>32*1024*1024||typeof data.mime!=='string'||!['image/png','image/jpeg','image/webp','image/gif','application/pdf','text/plain','video/mp4','video/webm','application/vnd.openxmlformats-officedocument.wordprocessingml.document','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'].includes(data.mime))throw Error('Некорректная ссылка на файл доказательства');
+      return {id:str(data.id,'ID доказательства',120),kind:'file',vaultId:data.vaultId,sha256:data.sha256,size:data.size,mime:data.mime,url:null,seconds:null,title:str(data.title,'Название доказательства',180),note:str(data.note??'','Заметка к доказательству',1000,true),createdAt:date(data.createdAt,'Дата доказательства')};
+    }
     const result = {
       id: str(data.id, 'ID доказательства', 120),
       url: videoLink(data.url, seconds), seconds,
@@ -126,6 +130,10 @@
       note: str(data.note ?? '', 'Заметка к доказательству', 1000, true),
       createdAt: date(data.createdAt, 'Дата доказательства')
     };
+    if(data.vaultId!==undefined){
+      if(typeof data.vaultId!=='string'||!/^[\w-]{8,120}$/.test(data.vaultId))throw Error('Некорректный ID материала');
+      result.vaultId=data.vaultId;
+    }
     return result;
   }
   // The moderation record is part of the case, so backup/restore and case deletion are atomic.
@@ -239,8 +247,15 @@
   function addEvidence(old, input) {
     const item = cleanCase(old);
     if (item.evidence.length >= MAX_EVIDENCE) throw Error('Максимум доказательств достигнут');
-    const next = { id: uuid(), url: input.url, seconds: input.seconds ?? null, title: input.title || 'Доказательство', note: input.note ?? '', createdAt: new Date().toISOString() };
+    const next = { id: uuid(), ...(input.kind==='file'?{kind:'file',vaultId:input.vaultId,sha256:input.sha256,size:input.size,mime:input.mime,url:null,seconds:null}:{url:input.url,seconds:input.seconds??null,...(input.vaultId?{vaultId:input.vaultId}:{})}), title: input.title || 'Доказательство', note: input.note ?? '', createdAt: new Date().toISOString() };
     return cleanCase({ ...item, evidence: [...item.evidence, next],workflow:event(item.workflow,'evidence','Прикреплено доказательство: '+next.title.slice(0,90)), updatedAt: new Date().toISOString() });
+  }
+  function linkLegacyEvidence(old,evidenceId,vaultId){
+    const item=cleanCase(old);
+    if(typeof vaultId!=='string'||!/^[\w-]{8,120}$/.test(vaultId))throw Error('Неверный ID материала');
+    const prior=item.evidence.find(x=>x.id===evidenceId);
+    if(!prior||prior.kind==='file'||prior.vaultId)throw Error('Ссылка уже связана с хранилищем или не найдена');
+    return cleanCase({...item,evidence:item.evidence.map(x=>x.id===evidenceId?{...x,vaultId}:x),workflow:event(item.workflow,'evidence','Существующая ссылка включена в Evidence Vault'),updatedAt:new Date().toISOString()});
   }
   function removeEvidence(old, id) {
     const item = cleanCase(old);
@@ -265,5 +280,5 @@
     if (!Number.isInteger(s) || s < 0) return '';
     return `${Math.floor(s/3600) ? Math.floor(s/3600) + ':' : ''}${String(Math.floor(s/60)%60).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
   }
-  root.RPNComplaints = Object.freeze({ PREFIX, MAX_CASES, MAX_EVIDENCE, STATUS, PRIORITIES, PRIORITY_LABELS, QUEUE_STATES, cleanTriage, cleanSla, triageAction, ALLOWED_HOSTS, VIDEO_HOSTS, cleanCase, cleanModeration, createCase, updateCase, addEvidence, removeEvidence, observeCase, canonicalThreadUrl, threadKey, cleanEvidence, videoLink, timecode, WORKFLOW_STAGES, WORKFLOW_LABELS, WORKFLOW_CHECKS, DECISION_KINDS, initialWorkflow, cleanWorkflow, workflowAction, draftDecision, deadlineTier });
+  root.RPNComplaints = Object.freeze({ PREFIX, MAX_CASES, MAX_EVIDENCE, STATUS, PRIORITIES, PRIORITY_LABELS, QUEUE_STATES, cleanTriage, cleanSla, triageAction, ALLOWED_HOSTS, VIDEO_HOSTS, cleanCase, cleanModeration, createCase, updateCase, addEvidence, linkLegacyEvidence, removeEvidence, observeCase, canonicalThreadUrl, threadKey, cleanEvidence, videoLink, timecode, WORKFLOW_STAGES, WORKFLOW_LABELS, WORKFLOW_CHECKS, DECISION_KINDS, initialWorkflow, cleanWorkflow, workflowAction, draftDecision, deadlineTier });
 })(globalThis);

@@ -5,6 +5,7 @@ import {selectSanction} from './punishment-overlay-store.mjs';
 import {currentRevision,SANCTIONS,UNITS} from './rules-core.mjs';
 const C=globalThis.RPNComplaints,F=globalThis.RPNForumCore;
 const now=()=>new Date().toISOString();
+const evidenceSource=e=>e.kind==='file'?`Локальный файл · SHA-256 ${e.sha256} · ${e.size} байт (не передаётся на форум)` : e.url;
 export function assertCaseScope(c,p){
  const host=p?.project==='majestic'?'forum.majestic-rp.ru':p?.project==='russia-online'?'forum.russia.online':null;
  if(!host||c.profileId!==p.id||new URL(c.url).hostname!==host)throw Error('Жалоба не принадлежит активному профилю и проекту');
@@ -14,7 +15,7 @@ export function moderationReport(result,players,c){
  const lines=['Доказательства и замечания по нарушениям:'];
  for(const [i,p] of players.entries())for(const [j,item] of p.items.entries()){
   const entry=result.players[i].entries[j];lines.push(`${p.id} · ${entry.code} — ${entry.title}`);
-  for(const id of item.evidenceIds){const e=c.evidence.find(e=>e.id===id);lines.push(`${e.title}: ${e.url}${e.seconds===null?'':' (таймкод '+C.timecode(e.seconds)+')'}`);}
+  for(const id of item.evidenceIds){const e=c.evidence.find(e=>e.id===id);lines.push(`${e.title}: ${evidenceSource(e)}${e.seconds===null?'':' (таймкод '+C.timecode(e.seconds)+')'}`);}
   if(!item.evidenceIds.length)lines.push('Доказательства не привязаны.');if(item.note)lines.push('Комментарий: '+item.note);
  }
  return calculationText(result)+'\n\n'+lines.join('\n');
@@ -41,7 +42,7 @@ export function decisionContext(c,p,rows){
  assertCaseScope(c,p);const m=c.moderation;if(!m||m.status==='draft')throw Error('Сначала сохраните расчёт жалобы');
  const result=calculatePunishments(m.players,rows,p,JSON.parse(m.policy));
  const entries=result.players.flatMap(x=>x.entries),rules=eligibleRules(rows,p);
- const context={nickname:result.players.map(x=>x.nickname||x.id).join(', '),player_id:result.players.map(x=>x.id).join(', '),rule_code:entries.map(e=>e.code).join(', '),rule_title:entries.map(e=>e.title).join('; '),rule_text:entries.map(e=>currentRevision(rules.find(r=>r.id===e.ruleId)).text).join('\n'),rule_source:entries.map(e=>e.source).join('\n'),punishment:result.players.map(x=>x.id+': '+x.totals.map(t=>SANCTIONS[t.type]+' '+t.amount+' '+UNITS[t.unit]).join('; ')).join('\n'),punishment_reason:m.note||entries.map(e=>e.title).join('; '),evidence:[...new Set(m.players.flatMap(p=>p.items.flatMap(i=>i.evidenceIds)))].map(id=>{const e=c.evidence.find(x=>x.id===id);return e.title+' — '+e.url;}).join('\n'),decision:C.DECISION_KINDS[c.workflow.decision],server:p.server,project:p.name,thread:c.title,url:c.url,date:now().slice(0,10),time:now().slice(11,16),reason:m.note,selection:''};
+ const context={nickname:result.players.map(x=>x.nickname||x.id).join(', '),player_id:result.players.map(x=>x.id).join(', '),rule_code:entries.map(e=>e.code).join(', '),rule_title:entries.map(e=>e.title).join('; '),rule_text:entries.map(e=>currentRevision(rules.find(r=>r.id===e.ruleId)).text).join('\n'),rule_source:entries.map(e=>e.source).join('\n'),punishment:result.players.map(x=>x.id+': '+x.totals.map(t=>SANCTIONS[t.type]+' '+t.amount+' '+UNITS[t.unit]).join('; ')).join('\n'),punishment_reason:m.note||entries.map(e=>e.title).join('; '),evidence:[...new Set(m.players.flatMap(p=>p.items.flatMap(i=>i.evidenceIds)))].map(id=>{const e=c.evidence.find(x=>x.id===id);return e.title+' — '+evidenceSource(e);}).join('\n'),decision:C.DECISION_KINDS[c.workflow.decision],server:p.server,project:p.name,thread:c.title,url:c.url,date:now().slice(0,10),time:now().slice(11,16),reason:m.note,selection:''};
  return {context,result,report:moderationReport(result,m.players,c)};
 }
 export function prepareDecision(c,p,rows,template,supplied={}){
