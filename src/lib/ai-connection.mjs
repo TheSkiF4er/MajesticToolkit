@@ -39,6 +39,11 @@ export async function streamComplaintAI(question,token,context,options={}){
  if(!context||JSON.stringify(context).length>16000)throw Error('Слишком большой контекст жалобы');
  return streamAIPayload({mode:'complaint',question:assertQuestion(question),case:context},token,options);
 }
+/** Only validated, user-previewed status codes and the sanitized issue cross the gateway. */
+export async function streamSupportAI(question,token,diagnostics,options={}){
+ const {buildSupportWire}=await import('./ai-support-core.mjs');
+ return streamAIPayload(buildSupportWire(question,diagnostics),token,options);
+}
 async function streamAIPayload(payload,token,{fetchImpl=fetch,signal,onDelta=()=>{},onReady=()=>{},onComplete=()=>{}}={}){if(!token?.trim())throw Error('Введите токен локального шлюза');
  const res=await fetchImpl(`${AI_GATEWAY}/v1/chat`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token.trim()}`},body:JSON.stringify(payload),signal,cache:'no-store'});
  if(!res.ok){let error;try{error=(await res.json()).error;}catch{}throw Error(typeof error==='string'&&error.length<200?error:`AI Gateway: HTTP ${res.status}`);}

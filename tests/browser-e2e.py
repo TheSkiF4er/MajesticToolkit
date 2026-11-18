@@ -1306,6 +1306,8 @@ async def main():
                 cases+=await ai_rules_browser(browser)
                 from ai_browser_193 import ai_complaint_browser
                 cases+=await ai_complaint_browser(browser)
+                from ai_browser_194 import ai_support_browser
+                cases+=await ai_support_browser(browser)
                 cases+=await experience_workspace(browser)
                 cases+=await evidence_vault_workspace(browser)
                 cases+=await evidence_timeline_workspace(browser)

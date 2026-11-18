@@ -52,3 +52,11 @@ Run `node --test tests/ai-connection-191.test.mjs`. The tests exercise real HTTP
 ## AI Complaint Analysis (1.9.3)
 
 Mode `complaint` accepts a user-approved JSON body `{mode:"complaint",question,case}`. The gateway validates bounded case metadata and cross-references against the selected evidence/event/rule ID lists. It sends **no file bytes**, does not fetch forum URLs and does not store conversation content. The model is instructed to return structured JSON only; the extension validates all references, requires manual review, and only writes an edited draft after explicit confirmation. Keep the gateway bound to `127.0.0.1` and never expose the bearer token or OpenAI key in extension source or backups.
+
+## AI Technical Support (1.9.4)
+
+В Workspace **AI / Поддержка → AI Technical Support** доступны отдельные локальные проверки (в том числе при выключенном AI), встроенные инструкции и скачивание диагностического JSON с безопасными кодами статусов. Для необязательного AI объяснения предусмотрен `POST /v1/chat` c `mode:"support"` и строго проверенной структурой `diagnostics:{category,version,checks:[{id,status}]}`. Пользователь проверяет весь запрос и отдельно разрешает отправку. Файлы, дампы хранилища, приватные заметки, URL, API-ключи и токен шлюза в payload не включаются. Ответ модели — предварительная структурированная рекомендация, **не** команда к выполнению. Для ответов `store:false`, инструменты не доступны, автоматического исправления ошибок нет.
+
+Диагностический отчёт по кнопке скачивается локально и не передаётся на GitHub автоматически. При включённом AI действует существующая обработка тарифов OpenAI и лимиты локального шлюза. Приведённые ответы не подтверждают, что модель видела реальные файлы или браузер.
+
+Модель по умолчанию для шлюза в 1.9.4 — `gpt-4.1-mini` (вместо неподтверждённого имени в 1.9.3). При необходимости установите `OPENAI_MODEL` в окружении Node.js.
