@@ -6,13 +6,13 @@ import {upsertTemplate} from '../lib/forum-store.mjs';
 import {loadAIWorkspace,saveAIConversation,deleteAIConversation,saveAIContext,deleteAIContext,saveAIDraft,deleteAIDraft,resolveAIContext} from '../lib/ai-workspace-store.mjs';
 const el=(tag,text,cls)=>{const x=document.createElement(tag);if(text!==undefined)x.textContent=text;if(cls)x.className=cls;return x;};
 let preset=null;
-export function prefillAIWorkspace(kind,refId){if(!['rule','source','case'].includes(kind)||typeof refId!=='string')return;preset={kind,refId};}
+export function prefillAIWorkspace(kind,refId){if(!['rule','source','case','judicial'].includes(kind)||typeof refId!=='string')return;preset={kind,refId};}
 export function aiWorkspaceSection(){return `<section class="card stack" id="ai-workspace-root" aria-label="AI Workspace & Productivity">
 <h3>AI Assistant & Support · 2.0.0</h3><p class="subtle">Рабочие контексты сохраняются локально как ссылки на ваши записи. История AI и черновики сохраняются только по вашему нажатию. Токен шлюза, API-ключ, согласия и приватные файлы не записываются в историю или Backup v18. Диалоги входят в Backup v18 исключительно при отдельном выборе.</p>
 <div class="row"><button type="button" class="button secondary" id="ai-workspace-save-chat">Сохранить текущий диалог</button><button type="button" class="button secondary" id="ai-workspace-new-chat">Новый диалог</button></div>
 <div class="stack"><h4>Сохранённые диалоги</h4><div id="ai-workspace-conversations" class="stack"></div></div>
 <div class="divider"></div><h4>Контекст из рабочих модулей</h4><p class="subtle">В контексте хранятся только тип и ID. После выбора текст повторно читается из актуального профиля и отображается перед отправкой. Выберите конкретную запись и нажмите «Применить»; автоматически в AI ничего не передаётся.</p>
-<div class="row"><label class="field">Тип данных<select id="ai-workspace-context-kind" aria-label="Тип рабочего контекста"><option value="rule">Правило</option><option value="source">Статья Центра знаний</option><option value="case">Жалоба</option></select></label><label class="field">Материал<select id="ai-workspace-context-item" aria-label="Выбрать запись контекста"></select></label></div>
+<div class="row"><label class="field">Тип данных<select id="ai-workspace-context-kind" aria-label="Тип рабочего контекста"><option value="rule">Правило</option><option value="source">Статья Центра знаний</option><option value="case">Жалоба</option><option value="judicial">Судебное дело</option></select></label><label class="field">Материал<select id="ai-workspace-context-item" aria-label="Выбрать запись контекста"></select></label></div>
 <div class="row"><button type="button" class="button secondary" id="ai-workspace-apply">Применить контекст к чату</button><button type="button" class="button secondary" id="ai-workspace-pin">Сохранить ссылку</button><button type="button" class="button secondary" id="ai-workspace-unapply">Убрать из чата</button></div>
 <p id="ai-workspace-context-status" role="status" class="subtle">Контекст не выбран.</p><pre id="ai-workspace-context-preview" class="ai-preview" hidden></pre><h4>Избранные контексты</h4><div id="ai-workspace-contexts" class="stack"></div>
 <div class="divider"></div><h4>AI-черновики и Binder 2.0</h4><p class="subtle">Текст AI — предварительный. Перед сохранением в Binder проверьте факты, источники, имена и санкции. Автоматической публикации нет.</p>
@@ -20,7 +20,7 @@ export function aiWorkspaceSection(){return `<section class="card stack" id="ai-
 <label class="field">Редактируемый текст<textarea id="ai-workspace-draft-text" rows="6" maxlength="12000" placeholder="Скопируйте или отредактируйте текст ответа…"></textarea></label>
 <div class="row"><button type="button" class="button secondary" id="ai-workspace-from-reply">Вставить последний AI-ответ</button><button type="button" class="button secondary" id="ai-workspace-save-draft">Сохранить черновик локально</button><button type="button" class="button secondary" id="ai-workspace-to-binder">Сохранить в Binder 2.0</button></div><div id="ai-workspace-drafts" class="stack"></div><p id="ai-workspace-status" class="subtle" role="status"></p>
 </section>`;}
-const description=kind=>({rule:'Правило',source:'Источник',case:'Жалоба'}[kind]);
+const description=kind=>({rule:'Правило',source:'Источник',case:'Жалоба',judicial:'Судебное дело'}[kind]);
 export async function mountAIWorkspace(root,state,{getMessages,setMessages,clearMessages,setContext,clearContext}={}){
  if(!root)return;
  const profile=state.profiles?.find(x=>x.id===state.activeProfileId);if(!profile){root.querySelector('#ai-workspace-status').textContent='Активный профиль недоступен';return;}
@@ -40,11 +40,12 @@ export async function mountAIWorkspace(root,state,{getMessages,setMessages,clear
   if(!db.drafts.length)draftList.append(el('p','Черновиков нет.','subtle'));
   for(const d of db.drafts){const row=entry(d.title,`Изменён ${new Date(d.updatedAt).toLocaleDateString('ru')}`);row.append(actionButton('Редактировать',()=>{draftTitle.value=d.title;draftText.value=d.text;lastDraftId=d.id;notify('Черновик открыт для редактирования.');}),actionButton('Удалить',async()=>{if(!confirm('Удалить локальный черновик?'))return;await deleteAIDraft(id,d.id);if(lastDraftId===d.id)lastDraftId=null;await refresh();}));draftList.append(row);}
  }
- async function options(){const [rules,sources,cases]=await Promise.all([listRules(),listSources(),listCases()]);const ruleRows=rules.filter(r=>r.profileId===id&&r.project===profile.project&&!r.archived&&(!r.server||r.server===profile.server)).map(r=>({id:r.id,title:`${r.revisions.find(v=>v.id===r.activeRevisionId)?.code||''} — ${r.revisions.find(v=>v.id===r.activeRevisionId)?.title||'Правило'}`}));
+ async function options(){const [rules,sources,cases,government]=await Promise.all([listRules(),listSources(),listCases(),import('../lib/government-store.mjs').then(m=>m.listGovernment())]);const ruleRows=rules.filter(r=>r.profileId===id&&r.project===profile.project&&!r.archived&&(!r.server||r.server===profile.server)).map(r=>({id:r.id,title:`${r.revisions.find(v=>v.id===r.activeRevisionId)?.code||''} — ${r.revisions.find(v=>v.id===r.activeRevisionId)?.title||'Правило'}`}));
  const sourceItems=sources.filter(s=>s.profileId===id).map(s=>({id:s.id,title:s.title}));
  const host=profile.project==='majestic'?'forum.majestic-rp.ru':profile.project==='russia-online'?'forum.russia.online':null;
  const caseItems=cases.filter(c=>c.profileId===id&&(!host||new URL(c.url).hostname===host)).map(c=>({id:c.id,title:c.title}));
- sourceRows=kind.value==='rule'?ruleRows:kind.value==='source'?sourceItems:caseItems;
+ const judicialItems=government.filter(x=>x.type==='case'&&x.profileId===id).map(x=>({id:x.id,title:`№ ${x.number} · ${x.title}`}));
+ sourceRows=kind.value==='rule'?ruleRows:kind.value==='source'?sourceItems:kind.value==='judicial'?judicialItems:caseItems;
  item.replaceChildren();for(const x of sourceRows.slice(0,500)){const o=el('option',x.title.slice(0,120));o.value=x.id;item.append(o);}if(!sourceRows.length)item.append(el('option','Нет доступных записей'));}
  const selection=()=>{const row=sourceRows.find(x=>x.id===item.value);if(!row)throw Error('Выберите доступный материал');return {kind:kind.value,refId:row.id,title:row.title};};
  async function apply(ref){const resolved=await resolveAIContext(profile,ref);if(!root.isConnected||state.activeProfileId!==id)return;contextPreview.textContent=resolved.text;contextPreview.hidden=false;contextStatus.textContent=`Применён: ${resolved.title}. Прочитайте содержимое в предпросмотре запроса. Контекст будет отправлен только после отдельного согласия.`;setContext?.(resolved);notify('Контекст применён к общему AI-чату.');}

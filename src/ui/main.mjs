@@ -1,3 +1,4 @@
+import {handleJudgmentAction,handleJudgmentSubmit} from './court-decisions-page.mjs';
 import {prefillAIWorkspace} from './ai-workspace-page.mjs';
 import {prefillAIRules} from './ai-rules-page.mjs';
 import {aiSection,mountAI,stopAI} from './ai-page.mjs';
@@ -446,8 +447,9 @@ async function handleJusticeAction(button){
   }
 }
 document.addEventListener('click', event => {
-  const button = event.target.closest('button[data-court-evidence-action],button[data-proceeding-action],button[data-court-case-action],button[data-court-action],button[data-agency-action],button[data-timer-action],button[data-productivity-action],button[data-action],button[data-url],button[data-forum-action],button[data-case-action],button[data-economy-action],button[data-law-action],button[data-government-action],button[data-document-action],button[data-justice-action],button[data-integration-action],button[data-monitor-action],button[data-knowledge-action],button[data-source-action],button[data-library-action],button[data-graph-action]');
+  const button = event.target.closest('button[data-judgment-action],button[data-court-evidence-action],button[data-proceeding-action],button[data-court-case-action],button[data-court-action],button[data-agency-action],button[data-timer-action],button[data-productivity-action],button[data-action],button[data-url],button[data-forum-action],button[data-case-action],button[data-economy-action],button[data-law-action],button[data-government-action],button[data-document-action],button[data-justice-action],button[data-integration-action],button[data-monitor-action],button[data-knowledge-action],button[data-source-action],button[data-library-action],button[data-graph-action]');
   if (!button || button.disabled) return;
+  if(button.dataset.judgmentAction){void handleJudgmentAction(button,state,refreshGovernment,render,feedback).catch(err=>feedback(err.message,true));return;}
   if(button.dataset.proceedingAction){void handleProceedingAction(button,state,governmentRecords()).catch(err=>feedback(err.message,true));return;}
   if(button.dataset.courtEvidenceAction){void handleCourtEvidenceAction(button,state,refreshGovernment,render,feedback).catch(err=>feedback(err.message,true));return;}
   if(button.dataset.courtCaseAction){void handleCourtCaseAction(button,state,governmentRecords(),refreshGovernment,render,feedback).catch(err=>feedback(err.message,true));return;}
@@ -676,6 +678,7 @@ document.addEventListener('submit', event => {
     void modifyState(current=>savePreferences(current,{forum:updateForumSettings(current.preferences.forum,scope,patch)})).then(next=>{state=next;render();feedback('Настройки форума сохранены');}).catch(err=>feedback(err.message,true));return;
   }
   const formId = event.target.getAttribute('id');
+  if(['court-judgment-draft-form','court-appeal-file-form','court-appeal-resolution-form'].includes(formId)){event.preventDefault();void handleJudgmentSubmit(event.target,state,refreshGovernment,render,feedback,openCourtCase).catch(err=>feedback(err.message,true));return;}
   if(formId==='court-proceeding-form'){event.preventDefault();void handleProceedingSubmit(event.target,state,refreshGovernment,render,feedback).catch(err=>feedback(err.message,true));return;}
   if(['court-evidence-link-form','court-evidence-file-form','court-evidence-existing-form','court-evidence-edit-form'].includes(formId)){event.preventDefault();void handleCourtEvidenceSubmit(event.target,state,refreshGovernment,render,feedback).catch(err=>feedback(err.message,true));return;}
   if(['court-case-form','court-case-participant-form','court-case-participant-edit-form','court-case-document-form','court-case-status-form','court-case-note-form','procedural-generate-form'].includes(formId)){event.preventDefault();void handleCourtCaseSubmit(event.target,state,governmentRecords(),refreshGovernment,render,feedback).catch(err=>feedback(err.message,true));return;}

@@ -5,7 +5,7 @@ import {api} from './browser.mjs';
 export const AI_WORKSPACE_PREFIX='mtAiWorkspaceV195:';
 export const AI_WORKSPACE_LIMITS=Object.freeze({conversations:20,contexts:30,drafts:30,messages:40,message:12000,draft:12000});
 const ID=/^[A-Za-z0-9_-]{8,128}$/;
-const KINDS=['rule','source','case'];
+const KINDS=['rule','source','case','judicial'];
 const newId=()=>globalThis.crypto?.randomUUID?.()??'ai_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,16);
 const idCheck=(id)=>typeof id==='string'&&ID.test(id);
 const text=(value,max,label,nonempty=true)=>{if(typeof value!=='string'||value.length>max||(nonempty&&!value.trim()))throw Error('Недопустимое поле: '+label);return value;};
@@ -58,6 +58,17 @@ export async function resolveAIContext(profile,ref,{rules=null,sources=null,case
   if(!item)throw Error('Правило удалено, архивировано или недоступно в текущем профиле');
   const r=item.revisions.find(x=>x.id===item.activeRevisionId);if(!r)throw Error('Редакция правила отсутствует');
   return {kind:'rule',refId:item.id,title:`${r.code} — ${r.title}`,text:`Правило ${r.code}: ${r.title}\nРедакция: ${r.id}\nСтатус проверки: ${r.verification==='reviewed'?'проверено пользователем (не официальное подтверждение)':'непроверенная редакция'}\nОписание: ${r.text||''}\nУсловия: ${r.conditions||''}\nИсточник: ${r.sourceUrl||item.sourceUrl||''}`.slice(0,3200)};
+ }
+ if(ref.kind==='judicial'){
+  const {listGovernment}=await import('./government-store.mjs');
+  const {verifyJudgments}=await import('./judicial-decisions-core.mjs');
+  const rows=await listGovernment(),item=rows.find(r=>r.type==='case'&&r.id===ref.refId&&r.profileId===profile.id);
+  if(!item)throw Error('Судебное дело не найдено в активном профиле');
+  await verifyJudgments(item);
+  // No participant names, file contents, or evidence URLs are shared by default.
+  const judgment=item.judgments.at(-1);
+  const context=`Проверьте предпросмотр: текст обстоятельств и правовых оснований может содержать персональные сведения.\nСудебное дело №${item.number}: ${item.title}\nСтатус: ${item.status}\nСуд ID: ${item.courtId}\nКатегория: ${item.category}\nТерритория: ${item.territory}\nОбстоятельства: ${item.summary.slice(0,1200)}\nУчастников: ${item.participants.length}; доказательств: ${item.evidence.length}; документов: ${item.documents.length}\nПоследнее судебное решение: ${judgment?'Утверждено; SHA-256 '+judgment.sha256:'Не утверждено'}\nАпелляций: ${item.appeals.length}\nПравовые основания последнего решения (текст предоставлен пользователем): ${judgment?.draft.legalBasis.slice(0,800)??'Нет'}`;
+  return {kind:'judicial',refId:item.id,title:`Судебное дело № ${item.number}`,text:context.slice(0,3200)};
  }
  if(ref.kind==='source'){
   const {listSources,sourceDigest}=await import('./source-library.mjs');const all=sources??await listSources();const item=all.find(s=>s.id===ref.refId&&s.profileId===profile.id);

@@ -1,10 +1,12 @@
+import {saveJudgmentDraft,approveJudgment,fileCaseAppeal,resolveCaseAppeal} from './judicial-case-core.mjs';
+import {judgmentSnapshot,judgmentSealInput,digestJudgment,verifyJudgments} from './judicial-decisions-core.mjs';
 import {createJudicialCase,editJudicialCase,changeCaseStatus,mutateCaseParticipants,mutateCaseDocuments,noteJudicialCase,mutateCaseHearing,mutateCaseMotion,mutateCaseDeadline,mutateCaseEvidence,validateCaseRelations} from './judicial-case-core.mjs';
 import {listDocumentRecords} from './document-store.mjs';
 import {createDocument,validateDocuments,DOCUMENT_PREFIX} from './document-core.mjs';
 import {prepareProceduralDocument} from './procedural-document-core.mjs';
 import {api} from './browser.mjs';
 import {getVaultRecord,verifyVaultFile} from './evidence-vault.mjs';
-import { GOV_PREFIX,GOV_LIMITS,cleanGovernment,validateGovernment,createDepartment,editDepartment,createTemplate,editTemplate,createDecision,editDecision,finalizeDecision,cloneDecision,createAgencyUnit,editAgencyUnit,createAgencyPosition,editAgencyPosition,createAgencyCompetence,editAgencyCompetence,createAgencyAssignment,editAgencyAssignment,createCourt,editCourt,createCourtJurisdiction,editCourtJurisdiction } from './government-core.mjs';
+import { GOV_PREFIX,GOV_LIMITS,cleanGovernment,validateGovernment,createDepartment,editDepartment,createTemplate,editTemplate,createDecision,editDecision,finalizeDecision,cloneDecision,createAgencyUnit,editAgencyUnit,createAgencyPosition,editAgencyPosition,createAgencyCompetence,editAgencyCompetence,createAgencyAssignment,editAgencyAssignment,createCourt,editCourt,createCourtJurisdiction,editCourtJurisdiction,findCourtJurisdiction } from './government-core.mjs';
 let chain=Promise.resolve();const enqueue=fn=>{const p=chain.then(fn);chain=p.catch(()=>{});return p;};
 export function parseGovernmentStorage(raw){return Object.entries(raw).filter(([k])=>k.startsWith(GOV_PREFIX)).flatMap(([k,v])=>{try{const r=cleanGovernment(v);return k===GOV_PREFIX+r.id?[r]:[];}catch(err){console.warn('MajesticToolkit: повреждённая запись Government Tools',k,err);return [];}});}
 export async function listGovernment(){return parseGovernmentStorage(await api.storage.local.get(null)).sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt));}
@@ -26,7 +28,7 @@ export const updateCourtJurisdiction=(id,fields)=>enqueue(async()=>update(editCo
 // All case writes use the Government Tools queue; multi-tab updates are refreshed
 // from storage before mutation and every change appends a validated audit event.
 async function caseInsert(profile,fields){const row=createJudicialCase(profile,fields),records=await listGovernment();validateCaseRelations(row,[...records,row],await listDocumentRecords());return insert(row);}
-async function caseUpdate(id,operation){const current=await getGovernment(id);if(current.type!=='case')throw Error('Судебное дело не найдено');const row=operation(current),records=await listGovernment();validateCaseRelations(row,records.map(x=>x.id===id?row:x),await listDocumentRecords());if(row===current)return row;return update(row);}
+async function caseUpdate(id,operation){const current=await getGovernment(id);if(current.type!=='case')throw Error('Судебное дело не найдено');await verifyJudgments(current);const row=operation(current),records=await listGovernment();validateCaseRelations(row,records.map(x=>x.id===id?row:x),await listDocumentRecords());if(row===current)return row;return update(row);}
 /** Create a real Studio record AND link it to the case, including the case audit
  * event. A single storage write keeps both records together; rollback also
  * handles storage implementations that partially apply a failed set(). */
@@ -46,6 +48,44 @@ export const generateCourtCaseDocument=(caseId,kind,fields,profiles)=>enqueue(as
  try{await api.storage.local.set({[docKey]:document,[caseKey]:updated});}
  catch(error){try{await api.storage.local.set({[caseKey]:row});await api.storage.local.remove(docKey);}catch(rollback){throw new AggregateError([error,rollback],'Не удалось восстановить дело после ошибки создания документа');}throw error;}
  return {document,caseRecord:updated};
+});
+
+const uid=()=>globalThis.crypto?.randomUUID?.()??`jd_${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`;
+export const saveCourtJudgment=(caseId,fields)=>enqueue(()=>caseUpdate(caseId,row=>saveJudgmentDraft(row,fields)));
+export const approveCourtJudgment=caseId=>enqueue(async()=>{
+ const row=await getGovernment(caseId);await verifyJudgments(row);
+ if(row.status!=='closed'||!row.judgmentDraft)throw Error('Завершите дело и сохраните черновик судебного решения');
+ const approval={id:uid(),approvedAt:new Date().toISOString(),draft:row.judgmentDraft,snapshot:judgmentSnapshot(row)};
+ approval.sha256=await digestJudgment(judgmentSealInput(approval));
+ return caseUpdate(caseId,old=>approveJudgment(old,approval));
+});
+/** Create an appellate CASE at a configured higher court, not a placeholder.
+ * Source and child records are written together and rolled back if storage fails. */
+export const fileCourtAppeal=(caseId,fields)=>enqueue(async()=>{
+ const source=await getGovernment(caseId);if(source.type!=='case'||source.status!=='closed')throw Error('Обжаловать можно завершённое судебное дело');
+ await verifyJudgments(source);
+ if(!source.participants.some(p=>p.id===fields.appellantId))throw Error('Заявитель апелляции должен быть участником исходного дела');
+ const all=await listGovernment(),docs=await listDocumentRecords();
+ const possible=findCourtJurisdiction(all,source.profileId,{stage:'appeal',category:source.category,territory:source.territory,originCourtId:source.courtId});
+ const selected=possible.find(x=>x.court.id===fields.courtId);if(!selected)throw Error('Апелляционный суд не соответствует сохранённым правилам подсудности и судебной иерархии');
+ const num=String(fields.number??'').trim();if(!num||num.length>100)throw Error('Введите номер апелляционного дела');
+ const appealId=uid();const judgment=source.judgments.find(j=>j.id===fields.judgmentId);if(!judgment)throw Error('Выберите утверждённое судебное решение');
+ const child=createJudicialCase(source.profileId,{courtId:selected.court.id,number:num,title:`Апелляция: ${source.title}`.slice(0,200),category:source.category,territory:source.territory,summary:String(fields.grounds??'').slice(0,9000),participants:source.participants.map(x=>({...x})),origin:{caseId:source.id,appealId,judgmentId:judgment.id}});
+ const appeal={id:appealId,judgmentId:judgment.id,appellantId:fields.appellantId,caseId:child.id,courtId:child.courtId,filedAt:new Date().toISOString(),grounds:fields.grounds,status:'reviewing',resolution:'',resolvedAt:'',reviewJudgmentId:''};
+ const updated=fileCaseAppeal(source,appeal),next=all.map(r=>r.id===source.id?updated:r).concat(child);
+ validateGovernment(next);validateCaseRelations(updated,next,docs);validateCaseRelations(child,next,docs);
+ if(all.length>=GOV_LIMITS.records)throw Error('Лимит записей Government Tools');
+ const parentKey=GOV_PREFIX+source.id,childKey=GOV_PREFIX+child.id;
+ try{await api.storage.local.set({[parentKey]:updated,[childKey]:child});}
+ catch(error){try{await api.storage.local.set({[parentKey]:source});await api.storage.local.remove(childKey);}catch(rollback){throw new AggregateError([error,rollback],'Не удалось откатить создание апелляционного производства');}throw error;}
+ return {source:updated,caseRecord:child};
+});
+export const resolveCourtAppeal=(caseId,appealId,outcome,resolution)=>enqueue(async()=>{
+ const source=await getGovernment(caseId);if(source.type!=='case')throw Error('Исходное дело отсутствует');await verifyJudgments(source);
+ const appeal=source.appeals.find(x=>x.id===appealId);if(!appeal||appeal.status!=='reviewing')throw Error('Апелляция уже рассмотрена или отсутствует');
+ const child=await getGovernment(appeal.caseId);if(child.type!=='case'||child.profileId!==source.profileId||child.origin?.caseId!==caseId||child.status!=='closed')throw Error('Для результата требуется завершённое апелляционное производство');
+ await verifyJudgments(child);const approved=child.judgments.at(-1);if(!approved)throw Error('Сначала утвердите решение апелляционного суда');
+ return caseUpdate(caseId,row=>resolveCaseAppeal(row,appealId,outcome,resolution,approved.id));
 });
 export const addJudicialCase=(profile,fields)=>enqueue(()=>caseInsert(profile,fields));
 export const editCourtCase=(id,fields)=>enqueue(()=>caseUpdate(id,r=>editJudicialCase(r,fields)));
@@ -88,4 +128,4 @@ export function deleteGovernment(id){return enqueue(async()=>{const r=await getG
   const stored=await api.storage.local.get(null);
   if(Object.entries(stored).some(([key,doc])=>key.startsWith('majesticDocumentV7:') && doc?.profileId===r.profileId && (doc?.type==='template'&&doc.departmentId===id || doc?.type==='document'&&Array.isArray(doc.versions)&&doc.versions.some(v=>v.departmentId===id)))) throw Error('Сначала удалите или перенесите связанные документы Document Studio');
  }validateGovernment(entries.filter(x=>x.id!==id));await api.storage.local.remove(GOV_PREFIX+id);});}
-export function replaceGovernment(raw,profileIds){return enqueue(async()=>{const records=validateGovernment(raw,profileIds);const original=Object.fromEntries(Object.entries(await api.storage.local.get(null)).filter(([k])=>k.startsWith(GOV_PREFIX)));const next=Object.fromEntries(records.map(r=>[GOV_PREFIX+r.id,r]));try{if(Object.keys(next).length)await api.storage.local.set(next);const stale=Object.keys(original).filter(k=>!Object.hasOwn(next,k));if(stale.length)await api.storage.local.remove(stale);}catch(error){try{if(Object.keys(original).length)await api.storage.local.set(original);const extra=Object.keys(next).filter(k=>!Object.hasOwn(original,k));if(extra.length)await api.storage.local.remove(extra);}catch(rollback){throw new AggregateError([error,rollback],'Не удалось восстановить данные Government Tools после ошибки');}throw error;}});}
+export function replaceGovernment(raw,profileIds){return enqueue(async()=>{const records=validateGovernment(raw,profileIds);for(const row of records)if(row.type==='case'&&row.judgments.length)await verifyJudgments(row);const original=Object.fromEntries(Object.entries(await api.storage.local.get(null)).filter(([k])=>k.startsWith(GOV_PREFIX)));const next=Object.fromEntries(records.map(r=>[GOV_PREFIX+r.id,r]));try{if(Object.keys(next).length)await api.storage.local.set(next);const stale=Object.keys(original).filter(k=>!Object.hasOwn(next,k));if(stale.length)await api.storage.local.remove(stale);}catch(error){try{if(Object.keys(original).length)await api.storage.local.set(original);const extra=Object.keys(next).filter(k=>!Object.hasOwn(original,k));if(extra.length)await api.storage.local.remove(extra);}catch(rollback){throw new AggregateError([error,rollback],'Не удалось восстановить данные Government Tools после ошибки');}throw error;}});}

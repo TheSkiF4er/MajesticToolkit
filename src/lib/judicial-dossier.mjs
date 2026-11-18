@@ -1,6 +1,7 @@
 /** Portable judicial dossier assembled from the SAME Court Cases, Document Studio and Evidence Vault.
  * SHA-256 detects corruption, not authorship: this is not a cryptographic signature. */
 import {cleanJudicialCase,CASE_STATUSES,CASE_ROLES} from './judicial-case-core.mjs';
+import {verifyJudgments,APPEAL_OUTCOMES} from './judicial-decisions-core.mjs';
 import {cleanVaultMetadata,getVaultRecord,verifyVaultFile} from './evidence-vault.mjs';
 import {evidenceMatchesVault} from './judicial-evidence-core.mjs';
 import {cleanDocumentRecord,verifyProceduralApproval} from './document-core.mjs';
@@ -31,12 +32,15 @@ export function judicialDossierText(d){
  lines.push('','ЗАСЕДАНИЯ');for(const h of c.hearings)lines.push(`${h.startsAt} · ${h.title} · ${h.status}`,h.minutes||'',h.outcome||'');
  lines.push('','ХОДАТАЙСТВА');for(const m of c.motions)lines.push(`${m.title} · ${m.status}: ${m.request}`,m.resolution||'');
  lines.push('','ПРОЦЕССУАЛЬНЫЕ СРОКИ');for(const x of c.deadlines)lines.push(`${x.dueOn}: ${x.title} · ${x.status}`,x.result||'');
+ lines.push('','СУДЕБНЫЕ РЕШЕНИЯ');for(const j of c.judgments??[])lines.push(`Утверждено: ${j.approvedAt} · Подписант: ${j.draft.signer} · SHA-256: ${j.sha256}`,`Обстоятельства: ${j.draft.facts}`,`Правовые основания: ${j.draft.legalBasis}`,`Мотивировка: ${j.draft.reasoning}`,`Резолюция: ${j.draft.resolution}`);
+ lines.push('','АПЕЛЛЯЦИОННЫЕ ПРОИЗВОДСТВА');if(c.origin)lines.push(`Это апелляционное дело исходного производства: ${c.origin.caseId}, решение: ${c.origin.judgmentId}`);for(const a of c.appeals??[])lines.push(`Обжалуется ${a.judgmentId} · Дело пересмотра ${a.caseId} · ${a.status==='reviewing'?'На рассмотрении':APPEAL_OUTCOMES[a.status]}`,`Основания: ${a.grounds}`,a.resolution?`Результат: ${a.resolution} · Решение суда пересмотра: ${a.reviewJudgmentId}`:'');
  lines.push('','ЖУРНАЛ ДВИЖЕНИЯ ДЕЛА');for(const h of c.history)lines.push(`${h.at} · ${h.action}: ${h.description}`);
  return lines.join('\n');
 }
 export function judicialDossierHtml(d){return `<!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Судебное досье № ${escape(d.case.number)}</title><style>body{max-width:920px;margin:2rem auto;padding:0 1.5rem;font:16px/1.5 system-ui;color:#243044}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}</style></head><body><h1>Судебное досье № ${escape(d.case.number)}</h1><pre>${escape(judicialDossierText(d))}</pre></body></html>`;}
 export async function createJudicialDossierArchive(d,{includeFiles=true}={}){
  if(d?.format!=='majestictoolkit-judicial-dossier'||d.version!==1)throw Error('Некорректное судебное досье');
+ await verifyJudgments(cleanJudicialCase(d.case));
  for(const {link,record} of d.documents){if(link.kind==='document')for(const a of record.procedural?.approvals??[])if(!await verifyProceduralApproval(record,a.version))throw Error('Повреждена утверждённая версия документа '+record.id);}
  const entries=[['dossier.json',encodeJson(d)],['report.txt',judicialDossierText(d)],['report.html',judicialDossierHtml(d)]];
  const attachments=[];
@@ -62,7 +66,7 @@ export async function verifyJudicialDossierArchive(input){
  const names=new Set();for(const item of manifest.items){if(typeof item.name!=='string'||names.has(item.name)||!entries.has(item.name)||!Number.isSafeInteger(item.size)||!(/^[a-f0-9]{64}$/.test(item.sha256))||entries.get(item.name).length!==item.size||await digest(entries.get(item.name))!==item.sha256)throw Error('Повреждён файл судебного досье: '+item.name);names.add(item.name);}
  if(entries.size!==names.size+1||!names.has('dossier.json')||!names.has('report.html')||!names.has('report.txt'))throw Error('Архив содержит незаявленные или отсутствующие файлы');
  const dossier=decodeJson(entries.get('dossier.json'));if(dossier.format!=='majestictoolkit-judicial-dossier'||dossier.version!==1||dossier.case.id!==manifest.caseId||dossier.profileId!==manifest.profileId)throw Error('Досье не совпадает с манифестом');
- const row=cleanJudicialCase(dossier.case),seen=new Set();
+ const row=cleanJudicialCase(dossier.case),seen=new Set();await verifyJudgments(row);
  if(row.profileId!==manifest.profileId||dossier.court.profileId!==manifest.profileId||dossier.department.profileId!==manifest.profileId)throw Error('Подмена профиля в досье');
  for(const record of dossier.documents){const link=row.documents.find(x=>x.id===record.link.id&&x.kind===record.link.kind);if(!link||record.record.profileId!==manifest.profileId)throw Error('Нарушена связь документа');if(link.kind==='document'){cleanDocumentRecord(record.record);for(const a of record.record.procedural?.approvals??[])if(!await verifyProceduralApproval(record.record,a.version))throw Error('Повреждена утверждённая редакция документа');}else cleanGovernment(record.record);}
  if(dossier.documents.length!==row.documents.length)throw Error('Не все документы включены в досье');

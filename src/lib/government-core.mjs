@@ -58,7 +58,10 @@ export function validateGovernment(raw,profileIds){if(!Array.isArray(raw)||raw.l
  const unique=new Set();
  for(const r of records){
   if(r.departmentId){const dep=departments.get(r.departmentId);if(!dep||dep.profileId!==r.profileId)throw Error('Ведомство отсутствует или принадлежит другому профилю');}
-  if(r.type==='case'){validateCaseRelations(r,records);const key=`case:${r.profileId}:${r.number.toLocaleLowerCase('ru')}`;if(unique.has(key))throw Error('Номер судебного дела уже занят в этом профиле');unique.add(key);}
+  if(r.type==='case'){
+   if(r.origin){const parent=byId.get(r.origin.caseId);const appeal=parent?.appeals?.find(a=>a.id===r.origin.appealId);if(parent?.type!=='case'||parent.profileId!==r.profileId||!appeal||appeal.caseId!==r.id||appeal.judgmentId!==r.origin.judgmentId)throw Error('Исходное дело апелляции или связь с решением отсутствует');}
+   for(const appeal of r.appeals){const child=byId.get(appeal.caseId);if(child?.type!=='case'||child.profileId!==r.profileId||child.courtId!==appeal.courtId||child.origin?.caseId!==r.id||child.origin?.appealId!==appeal.id||child.origin?.judgmentId!==appeal.judgmentId)throw Error('Апелляционное производство отсутствует или повреждено');if(appeal.status!=='reviewing'&&!child.judgments.some(j=>j.id===appeal.reviewJudgmentId))throw Error('Не найдено судебное решение по апелляции');}
+   validateCaseRelations(r,records);const key=`case:${r.profileId}:${r.number.toLocaleLowerCase('ru')}`;if(unique.has(key))throw Error('Номер судебного дела уже занят в этом профиле');unique.add(key);}
   if(r.type==='unit'){
    if(r.parentUnitId){const parent=byId.get(r.parentUnitId);if(parent?.type!=='unit'||parent.profileId!==r.profileId||parent.departmentId!==r.departmentId)throw Error('Родительское подразделение отсутствует или принадлежит другому ведомству');}
    const key=`unit:${r.departmentId}:${r.code.toLocaleLowerCase('ru')}`;if(unique.has(key))throw Error('Код подразделения уже занят');unique.add(key);
