@@ -370,6 +370,7 @@ api.runtime.onMessage.addListener((message,sender,sendResponse) => {
           if(message.operation==='run-overdue')return store.runOverdueAutomations(message.profileId);
           return store.mutateModerationOperations(message.profileId,message.operation,message.input);
         }
+        case 'ai-draft': return store.saveComplaintAIDraft(message.id,message.profileId,message.expectedAt,message.text);
         case 'create': return store.createComplaint(message.input);
         case 'update': return store.editComplaint(message.id,message.patch);
         case 'delete': return store.removeComplaint(message.id);

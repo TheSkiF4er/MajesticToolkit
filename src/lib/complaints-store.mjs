@@ -102,6 +102,18 @@ export function mutateCaseWorkflow(id,action,payload={}) {
     return updated;
   });
 }
+/** Save a human-reviewed AI suggestion without forum actions; serialized optimistic locking. */
+export function saveComplaintAIDraft(id,profileId,expectedAt,text){return enqueue(async()=>{
+ const profile=getActiveProfile(await loadState()),before=await getCase(id);
+ if(!profile||profile.id!==profileId||before.profileId!==profileId||new URL(before.url).hostname!==(profile.project==='majestic'?'forum.majestic-rp.ru':'forum.russia.online'))throw Error('Жалоба другого профиля');
+ if(before.updatedAt!==expectedAt)throw Error('Жалоба изменена после AI-анализа; откройте её заново');
+ if(before.status==='done')throw Error('Завершённую жалобу сначала откройте повторно');
+ if(typeof text!=='string'||!text.trim()||text.length>12000)throw Error('Некорректный AI-черновик');
+ const updated=C.updateCase(before,{draft:text});
+ const after=C.cleanCase({...updated,updatedAt:new Date(Math.max(Date.now(),Date.parse(before.updatedAt)+1)).toISOString()});
+ await api.storage.local.set(await withOperations(before,after,'workflow','Сохранён проверенный пользователем AI-черновик'));
+ return after;
+});}
 export function removeComplaint(id) { return enqueue(async () => { const current=await getCase(id),profile=await profileForCase(current.profileId);if(profile){const ops=auditEvent(await moderationOpsFor(profile),'case','Жалоба удалена',id);await api.storage.local.set({[moderationOpsKey(profile.id)]:cleanOperations(ops,profile)});}await api.storage.local.remove(CASE_PREFIX + id); }); }
 export function observeThread(url, postId, profileId = null, forumState = 'unknown') {
   return enqueue(async () => {

@@ -47,3 +47,8 @@ Source retrieval and previews do not trigger network requests. Historical revisi
 ## Tests
 
 Run `node --test tests/ai-connection-191.test.mjs`. The tests exercise real HTTP request/response handling against a deterministic mocked OpenAI upstream, not a billable external API call. Run `npm run verify` and `npm run test:browser` for the complete extension regression suite.
+
+
+## AI Complaint Analysis (1.9.3)
+
+Mode `complaint` accepts a user-approved JSON body `{mode:"complaint",question,case}`. The gateway validates bounded case metadata and cross-references against the selected evidence/event/rule ID lists. It sends **no file bytes**, does not fetch forum URLs and does not store conversation content. The model is instructed to return structured JSON only; the extension validates all references, requires manual review, and only writes an edited draft after explicit confirmation. Keep the gateway bound to `127.0.0.1` and never expose the bearer token or OpenAI key in extension source or backups.
