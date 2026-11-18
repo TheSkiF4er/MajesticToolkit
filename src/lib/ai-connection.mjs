@@ -29,9 +29,13 @@ export async function aiHealth(token,{fetchImpl=fetch,signal}={}){
  if(!res.ok)throw Error(res.status===401?'Неверный токен шлюза':`Шлюз недоступен (HTTP ${res.status})`);
  const data=await res.json();if(!data?.ok||typeof data.model!=='string')throw Error('Некорректный ответ шлюза');return data;
 }
-export async function streamAI(question,token,{fetchImpl=fetch,signal,onDelta=()=>{},onReady=()=>{},onComplete=()=>{}}={}){
- const text=assertQuestion(question);if(!token?.trim())throw Error('Введите токен локального шлюза');
- const res=await fetchImpl(`${AI_GATEWAY}/v1/chat`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token.trim()}`},body:JSON.stringify({question:text}),signal,cache:'no-store'});
+export async function streamAI(question,token,options={}){return streamAIPayload({question:assertQuestion(question)},token,options);}
+export async function streamRulesAI(question,token,sources,options={}){
+ if(!Array.isArray(sources)||sources.length<1||sources.length>5)throw Error('Выберите до пяти локальных источников');
+ return streamAIPayload({mode:'rules',question:assertQuestion(question),sources},token,options);
+}
+async function streamAIPayload(payload,token,{fetchImpl=fetch,signal,onDelta=()=>{},onReady=()=>{},onComplete=()=>{}}={}){if(!token?.trim())throw Error('Введите токен локального шлюза');
+ const res=await fetchImpl(`${AI_GATEWAY}/v1/chat`,{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token.trim()}`},body:JSON.stringify(payload),signal,cache:'no-store'});
  if(!res.ok){let error;try{error=(await res.json()).error;}catch{}throw Error(typeof error==='string'&&error.length<200?error:`AI Gateway: HTTP ${res.status}`);}
  if(!res.body)throw Error('Шлюз не передал поток ответа');
  const reader=res.body.getReader(),decoder=new TextDecoder();let pending='',complete=false,total='';

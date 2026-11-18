@@ -573,6 +573,12 @@ async def experience_workspace(browser):
     await page.locator('.ws-widgets').wait_for(timeout=8000)
     assert await page.locator('.ws-widget').count()==9
     assert await page.locator('.ws-nav-group').count()==5
+    # Real workspace navigation must mount the AI module; 1.9.1 omitted its title.
+    await page.locator('[data-action="nav"][data-view="ai"]').click()
+    await page.locator('#ai-rules-root').wait_for(timeout=8000)
+    assert 'AI Assistant' in await page.locator('.topline h2').inner_text()
+    await page.locator('[data-action="nav"][data-view="home"]').click()
+    await page.locator('.ws-widgets').wait_for(timeout=8000)
     # Actual stores, not mocked dashboard counts.
     await page.evaluate('''async()=>{const f=await import('mt:lib/forum-store.mjs'),x=await import('mt:lib/xenforo-store.mjs');await f.upsertTemplate({label:'QA Majestic binder',text:'Hello',format:'plain',category:'QA',profileId:'profile_majest',shortcut:0,favorite:true});await f.upsertTemplate({label:'QA Russia binder',text:'Other',format:'plain',category:'QA',profileId:'profile_russia',shortcut:0,favorite:true});await x.saveCurrentBookmark('profile_majest','https://forum.majestic-rp.ru/threads/test.42/','QA bookmark');}''')
     await page.get_by_text('QA Majestic binder',exact=True).wait_for(timeout=5000)
@@ -1296,6 +1302,8 @@ async def main():
             try:
                 cases=await exercise(browser)
                 cases+=await ai_connection_browser(browser)
+                from ai_browser_192 import ai_rules_browser
+                cases+=await ai_rules_browser(browser)
                 cases+=await experience_workspace(browser)
                 cases+=await evidence_vault_workspace(browser)
                 cases+=await evidence_timeline_workspace(browser)
