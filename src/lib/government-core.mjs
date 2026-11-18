@@ -88,6 +88,8 @@ export function validateGovernment(raw,profileIds){if(!Array.isArray(raw)||raw.l
    if(r.status==='active'&&!r.endedAt){if(unique.has(key))throw Error('Сотрудник уже назначен на эту должность');unique.add(key);}
   }
  }
+ // A judge cannot conduct overlapping scheduled hearings across different cases.
+ const assigned=new Map();for(const c of records.filter(x=>x.type==='case'&&x.judgeAssignmentId))for(const h of c.hearings){if(h.status!=='scheduled')continue;const rows=assigned.get(c.judgeAssignmentId)||[];if(rows.some(x=>x.startsAt<h.endsAt&&h.startsAt<x.endsAt))throw Error('У назначенного судьи пересекаются заседания по разным делам');rows.push(h);assigned.set(c.judgeAssignmentId,rows);}
  // A self-reference and any deeper cycle must be rejected on import and edit.
  for(const unit of records.filter(r=>r.type==='unit')){
   const visited=new Set([unit.id]);let current=unit;

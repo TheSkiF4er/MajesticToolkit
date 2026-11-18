@@ -1,4 +1,4 @@
-import {createJudicialCase,editJudicialCase,changeCaseStatus,mutateCaseParticipants,mutateCaseDocuments,noteJudicialCase,validateCaseRelations} from './judicial-case-core.mjs';
+import {createJudicialCase,editJudicialCase,changeCaseStatus,mutateCaseParticipants,mutateCaseDocuments,noteJudicialCase,mutateCaseHearing,mutateCaseMotion,mutateCaseDeadline,validateCaseRelations} from './judicial-case-core.mjs';
 import {listDocumentRecords} from './document-store.mjs';
 import {api} from './browser.mjs';
 import { GOV_PREFIX,GOV_LIMITS,cleanGovernment,validateGovernment,createDepartment,editDepartment,createTemplate,editTemplate,createDecision,editDecision,finalizeDecision,cloneDecision,createAgencyUnit,editAgencyUnit,createAgencyPosition,editAgencyPosition,createAgencyCompetence,editAgencyCompetence,createAgencyAssignment,editAgencyAssignment,createCourt,editCourt,createCourtJurisdiction,editCourtJurisdiction } from './government-core.mjs';
@@ -30,6 +30,9 @@ export const setCourtCaseStatus=(id,status,reason)=>enqueue(()=>caseUpdate(id,r=
 export const mutateCourtCaseParticipant=(id,action,fields)=>enqueue(()=>caseUpdate(id,r=>mutateCaseParticipants(r,action,fields)));
 export const mutateCourtCaseDocument=(id,action,fields)=>enqueue(()=>caseUpdate(id,r=>mutateCaseDocuments(r,action,fields)));
 export const addCourtCaseNote=(id,text)=>enqueue(()=>caseUpdate(id,r=>noteJudicialCase(r,text)));
+export const mutateCourtCaseHearing=(id,action,fields)=>enqueue(()=>caseUpdate(id,r=>mutateCaseHearing(r,action,fields)));
+export const mutateCourtCaseMotion=(id,action,fields)=>enqueue(()=>caseUpdate(id,r=>mutateCaseMotion(r,action,fields)));
+export const mutateCourtCaseDeadline=(id,action,fields)=>enqueue(()=>caseUpdate(id,r=>mutateCaseDeadline(r,action,fields)));
 export const addDepartment=(profile,fields)=>enqueue(()=>insert(createDepartment(profile,fields)));
 export const updateDepartment=(id,fields)=>enqueue(async()=>update(editDepartment(await getGovernment(id),fields)));
 export const addTemplate=(profile,fields)=>enqueue(()=>insert(createTemplate(profile,fields)));

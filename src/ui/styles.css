@@ -325,3 +325,14 @@ body[data-mode=sidebar] .ws-layout .side{height:auto;position:static;overflow:vi
 .court-case-history{padding-inline-start:23px;max-height:320px;overflow:auto;font-size:.9rem;line-height:1.6;overflow-wrap:anywhere}
 .court-case-row strong{overflow-wrap:anywhere}
 @media(max-width:640px){.court-case-detail{padding:10px}.court-case-detail .justice-result{align-items:stretch}.court-case-detail .row{justify-content:flex-start}}
+
+/* 2.0.6: live proceedings inside court case, responsive for mobile browsers. */
+.court-proceedings{padding-top:16px;margin-top:12px;border-top:1px solid var(--stroke)}
+.court-proceeding-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:9px;font-size:.9rem}
+.court-proceeding-summary>span{padding:10px;border:1px solid var(--stroke);border-radius:10px}
+.court-proceeding-group{border-top:1px solid var(--stroke);padding-top:12px;min-width:0}
+.court-proceeding-item{align-items:flex-start;gap:10px;overflow-wrap:anywhere}
+.court-proceeding-item .row{flex-wrap:wrap;justify-content:flex-end}
+.court-proceeding-text{white-space:pre-wrap;overflow-wrap:anywhere}
+.court-overdue{color:#df6565;font-weight:600}
+@media(max-width:700px){.court-proceeding-item{flex-direction:column}.court-proceeding-item .row{justify-content:flex-start}}

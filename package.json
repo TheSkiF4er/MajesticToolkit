@@ -1,7 +1,7 @@
 {
   "name": "majestictoolkit",
   "private": true,
-  "version": "2.0.5",
+  "version": "2.0.6",
   "type": "module",
   "description": "Автономное браузерное расширение: форум, жалобы, экономика, Law Codex и Government Tools и Document Studio Google Workspace и Productivity & UX",
   "scripts": {
@@ -16,7 +16,8 @@
     "package:release": "node scripts/package.mjs",
     "verify": "npm test && npm run build && node scripts/verify.mjs && npm run package:release && node scripts/check-release.mjs",
     "build-for-amo": "npm run build && node scripts/verify.mjs && npm run package:release && node scripts/check-release.mjs",
-    "ai:gateway": "node ai-gateway/server.mjs"
+    "ai:gateway": "node ai-gateway/server.mjs",
+    "test:browser:proceedings": "python3 tests/browser-judicial-proceedings-206.py"
   },
   "engines": {
     "node": ">=22 <23"

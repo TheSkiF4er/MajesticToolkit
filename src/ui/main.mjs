@@ -61,6 +61,7 @@ import {documentSection,refreshDocuments,documentRecords,handleDocumentAction,ha
 import {governmentJusticeSection,loadJusticeWorkspace,changeJusticeTab,justiceSearchHTML,setJusticeQuery,justiceRecord,rememberJusticeOpen} from './government-justice-page.mjs';
 import {handleCourtAction,handleCourtSubmit,setCourtTab} from './judicial-page.mjs';
 import {caseListHTML,handleCourtCaseAction,handleCourtCaseSubmit,openCourtCase,setCourtCaseFilter} from './court-case-page.mjs';
+import {handleProceedingAction,handleProceedingSubmit} from './judicial-proceedings-page.mjs';
 import {replaceDocumentRecords} from '../lib/document-store.mjs';
 import {integrationsSection,refreshIntegrations,externalLinks,handleIntegrationAction,handleIntegrationSubmit} from './integrations-page.mjs';
 import {replaceLinks} from '../lib/integration-store.mjs';
@@ -444,8 +445,9 @@ async function handleJusticeAction(button){
   }
 }
 document.addEventListener('click', event => {
-  const button = event.target.closest('button[data-court-case-action],button[data-court-action],button[data-agency-action],button[data-timer-action],button[data-productivity-action],button[data-action],button[data-url],button[data-forum-action],button[data-case-action],button[data-economy-action],button[data-law-action],button[data-government-action],button[data-document-action],button[data-justice-action],button[data-integration-action],button[data-monitor-action],button[data-knowledge-action],button[data-source-action],button[data-library-action],button[data-graph-action]');
+  const button = event.target.closest('button[data-proceeding-action],button[data-court-case-action],button[data-court-action],button[data-agency-action],button[data-timer-action],button[data-productivity-action],button[data-action],button[data-url],button[data-forum-action],button[data-case-action],button[data-economy-action],button[data-law-action],button[data-government-action],button[data-document-action],button[data-justice-action],button[data-integration-action],button[data-monitor-action],button[data-knowledge-action],button[data-source-action],button[data-library-action],button[data-graph-action]');
   if (!button || button.disabled) return;
+  if(button.dataset.proceedingAction){void handleProceedingAction(button,state,governmentRecords()).catch(err=>feedback(err.message,true));return;}
   if(button.dataset.courtCaseAction){void handleCourtCaseAction(button,state,governmentRecords(),refreshGovernment,render,feedback).catch(err=>feedback(err.message,true));return;}
   if(button.dataset.courtAction){void handleCourtAction(button,state,governmentRecords(),refreshGovernment,render,feedback).catch(err=>feedback(err.message,true));return;}
   if(button.dataset.agencyAction){void handleAgencyAction(button,state,governmentRecords(),refreshGovernment,render,feedback).catch(err=>feedback(err.message,true));return;}
@@ -672,6 +674,7 @@ document.addEventListener('submit', event => {
     void modifyState(current=>savePreferences(current,{forum:updateForumSettings(current.preferences.forum,scope,patch)})).then(next=>{state=next;render();feedback('Настройки форума сохранены');}).catch(err=>feedback(err.message,true));return;
   }
   const formId = event.target.getAttribute('id');
+  if(formId==='court-proceeding-form'){event.preventDefault();void handleProceedingSubmit(event.target,state,refreshGovernment,render,feedback).catch(err=>feedback(err.message,true));return;}
   if(['court-case-form','court-case-participant-form','court-case-participant-edit-form','court-case-document-form','court-case-status-form','court-case-note-form'].includes(formId)){event.preventDefault();void handleCourtCaseSubmit(event.target,state,governmentRecords(),refreshGovernment,render,feedback).catch(err=>feedback(err.message,true));return;}
   if(formId==='judicial-form'||formId==='court-route-form'){event.preventDefault();void handleCourtSubmit(event.target,state,refreshGovernment,render,feedback).catch(err=>feedback(err.message,true));return;}
   if(['knowledge-source-meta-form','knowledge-collection-form','knowledge-collection-member-form'].includes(formId)){
