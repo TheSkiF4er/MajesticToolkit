@@ -987,6 +987,30 @@ async def experience_workspace(browser):
     await library.locator('#knowledge-library-status').select_option('unverified')
     await library.get_by_text('Подходящих статей нет.').wait_for()
     await library.locator('#knowledge-library-status').select_option('all')
+    # Evidence & Knowledge Graph 1.8.4: literal revision quote + live case connection.
+    graph=page.locator('#evidence-knowledge-graph')
+    source_id=await page.evaluate("window.__data.majesticToolkitSourceLibraryV154.find(x=>x.title==='QA Правила версии два').id")
+    form=graph.locator('#knowledge-quote-form')
+    await form.locator('[name=revision]').select_option(source_id+'|'+source_id)
+    await form.locator('[name=quote]').fill('Новая формулировка правила')
+    await form.locator('[name=note]').fill('Основание для проверки')
+    await form.locator('button[type=submit]').click()
+    await page.wait_for_function("window.__data.majesticToolkitKnowledgeV13?.evidenceGraph?.quotes?.length===1")
+    assert await graph.get_by_text('Новая формулировка правила',exact=False).count()>0
+    quote_id=await page.evaluate("window.__data.majesticToolkitKnowledgeV13.evidenceGraph.quotes[0].id")
+    cases=await page.evaluate("Object.values(window.__data).filter(v=>v?.title==='QA urgent case'&&v?.profileId==='profile_majest').map(v=>v.id)")
+    assert cases,cases
+    case_id=cases[0]
+    link_form=graph.locator('#knowledge-graph-link-form')
+    await link_form.locator('[name=from]').select_option('quote:'+quote_id)
+    await link_form.locator('[name=to]').select_option('case:'+case_id)
+    await link_form.locator('[name=relation]').select_option('cites')
+    await link_form.locator('[name=note]').fill('QA привязка к жалобе')
+    await link_form.locator('button[type=submit]').click()
+    await page.wait_for_function("window.__data.majesticToolkitKnowledgeV13?.evidenceGraph?.links?.length===1")
+    await graph.locator('#knowledge-graph-case-filter').select_option(case_id)
+    assert await graph.get_by_text('QA привязка к жалобе').count()==1
+    await graph.locator('#knowledge-graph-case-filter').select_option('')
     await detail.locator('[data-library-action=restore]').click()
     await page.wait_for_function("window.__data.majesticToolkitSourceLibraryV154?.some(x=>x.title==='QA Правила версии один'&&x.revisions.length===2&&x.status==='unverified')")
     await page.locator('#workspace-profile').select_option('profile_russia')

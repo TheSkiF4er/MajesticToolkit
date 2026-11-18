@@ -1,3 +1,4 @@
+import {emptyGraph,validateEvidenceGraph} from './evidence-knowledge-graph.mjs';
 /** MajesticToolkit 1.3.0 local knowledge graph. No remote data collection. */
 import {googleFileId} from './integration-core.mjs';
 export const KNOWLEDGE_KEY='majesticToolkitKnowledgeV13';
@@ -11,7 +12,7 @@ export const KNOWLEDGE_PORTALS=Object.freeze({
 });
 const identifier=v=>{if(typeof v!=='string'||!/^[\w-]{8,128}$/.test(v))throw Error('Неверный идентификатор');return v;};
 const text=(s,max,required=true)=>{if(typeof s!=='string'||s.trim().length>max||(required&&!s.trim()))throw Error('Некорректный текст записи');return s.trim();};
-export const emptyKnowledge=()=>({version:1,resources:[],relations:[],collections:[]});
+export const emptyKnowledge=()=>({version:1,resources:[],relations:[],collections:[],evidenceGraph:emptyGraph()});
 export function googleResourceUrl(kind,id){const file=googleFileId(id);if(kind==='google-doc')return `https://docs.google.com/document/d/${file}/edit`;if(kind==='google-sheet')return `https://docs.google.com/spreadsheets/d/${file}/edit`;throw Error('Неверный вид файла Google');}
 export function googleResourceId(kind,urlOrId){const input=text(urlOrId,1000);if(/^[\w-]{10,180}$/.test(input))return googleFileId(input);let u;try{u=new URL(input);}catch{throw Error('Укажите ссылку Google Docs / Sheets или ID');}if(u.protocol!=='https:'||u.hostname!=='docs.google.com'||u.username||u.password||u.port)throw Error('Нужна HTTPS-ссылка Google Docs/Sheets');const type=kind==='google-doc'?'document':'spreadsheets';const m=new RegExp(`^/${type}/d/([\\w-]{10,180})(?:/|$)`).exec(u.pathname);if(!m)throw Error('Неверная ссылка Google');return googleFileId(m[1]);}
 export function validateKnowledge(raw,profileIds){if(!raw||typeof raw!=='object'||Array.isArray(raw)||raw.version!==1||!Array.isArray(raw.resources)||!Array.isArray(raw.relations)||raw.resources.length>KNOWLEDGE_LIMITS.resources||raw.relations.length>KNOWLEDGE_LIMITS.relations)throw Error('Некорректный формат Центра знаний');
@@ -34,7 +35,7 @@ export function validateKnowledge(raw,profileIds){if(!raw||typeof raw!=='object'
   for(const key of members){const [kind,nodeId]=key.split(':');if(['google-doc','google-sheet'].includes(kind)&&googleRefs.get(`${kind}:${nodeId}`)!==profileId)throw Error('Коллекция с Google-файлом другого профиля');}
   return{id,profileId,title:text(c.title,120),notes:text(c.notes??'',800,false),members,createdAt:text(c.createdAt,40)};
  });
- return {version:1,resources,relations,collections:cleanCollections};
+ return {version:1,resources,relations,collections:cleanCollections,evidenceGraph:validateEvidenceGraph(raw.evidenceGraph??emptyGraph(),profileIds)};
 }
 export function sourceNodes(profileId,{documents=[],laws=[],government=[],forum=[],links=[],resources=[],sources=[]}={}){
  const nodes=[];const push=(kind,row,title,extra={})=>{if(row?.profileId&&row.profileId!==profileId&&row.profileId!=='*')return;nodes.push({kind,id:row.id,title:String(title||'Без названия'),profileId:row.profileId??'*',...extra});};
