@@ -373,3 +373,9 @@ body[data-mode=sidebar] .ws-layout .side{height:auto;position:static;overflow:vi
 #marketplace-dialog .economy-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 #marketplace-dialog .economy-fields>.field:last-child{grid-column:1/-1}
 @media(max-width:600px){#marketplace-dialog .economy-fields{grid-template-columns:1fr}.market-products{grid-template-columns:1fr}}
+
+/* Trading & Inventory 2.1.3: keep stock actions usable on narrow side panels. */
+.inventory-actions{display:flex;flex-wrap:wrap;gap:4px;min-width:210px}
+.inventory-actions .button{padding:5px 8px;font-size:12px;white-space:nowrap}
+#trading-dialog{max-width:min(620px,96vw);max-height:90vh;overflow:auto}
+#trading-search{max-width:100%}

@@ -48,7 +48,7 @@ async def economy_browser_smoke(browser):
     await boot(page)
     await page.locator('.nav [data-view="economy"]').click()
     await page.locator('.economy-tabs [data-tab="overview"]').wait_for(timeout=15000)
-    assert await page.locator('.economy-tabs [role=tab]').count()==6
+    assert await page.locator('.economy-tabs [role=tab]').count()==7
     assert '0 записей' in await page.locator('.economy-workspace-header').inner_text()
 
     await page.locator('[data-economy-action="new"][data-type="deal"]').first.click()

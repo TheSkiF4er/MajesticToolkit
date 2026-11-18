@@ -1,7 +1,8 @@
 import {api} from './browser.mjs';
+import {listInventory} from './inventory-store.mjs';
 import {MARKET_PREFIX,MAX_MARKET_ROWS,cleanMarketRecord,newMarketRecord,changeMarketRecord,validateMarketplace} from './marketplace-core.mjs';
 let sequence=Promise.resolve();
-function locked(fn){const job=sequence.then(fn);sequence=job.catch(()=>{});return job;}
+function locked(fn){const job=sequence.then(()=>globalThis.navigator?.locks?.request?globalThis.navigator.locks.request('mt-trading-inventory-v213',{mode:'exclusive'},fn):fn());sequence=job.catch(()=>{});return job;}
 function parseRows(raw){return Object.entries(raw).filter(([k])=>k.startsWith(MARKET_PREFIX)).map(([k,v])=>{const row=cleanMarketRecord(v);if(k!==MARKET_PREFIX+row.id)throw Error('Повреждённый ключ записи рынка: '+k);return row;});}
 async function all(){const rows=parseRows(await api.storage.local.get(null));return validateMarketplace(rows);}
 export async function listMarketplace(profileId=null){const rows=await all();return rows.filter(r=>!profileId||r.profileId===profileId).sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt)||a.id.localeCompare(b.id));}
@@ -11,9 +12,12 @@ export function updateMarketplace(id,profileId,values){return locked(async()=>{c
  if(next.type==='product'&&next.archived&&rows.some(r=>r.type==='listing'&&r.productId===next.id&&r.status==='active'))throw Error('Закройте активные объявления перед архивированием товара');
  if(next.type==='listing'&&next.status==='active'&&rows.some(p=>p.id===next.productId&&p.archived))throw Error('Архивный товар не может иметь активные объявления');
  validateMarketplace(rows.map(r=>r.id===id?next:r));await api.storage.local.set({[MARKET_PREFIX+id]:next});return next;});}
-export function removeMarketplace(id,profileId){return locked(async()=>{const rows=await all();const previous=rows.find(r=>r.id===id&&r.profileId===profileId);if(!previous)throw Error('Рыночная запись другого профиля или удалена');if(previous.type==='product'&&rows.some(r=>r.productId===id))throw Error('Товар используется в объявлениях или истории цен. Архивируйте товар вместо удаления.');await api.storage.local.remove(MARKET_PREFIX+id);return previous;});}
+export function removeMarketplace(id,profileId){return locked(async()=>{const rows=await all();const previous=rows.find(r=>r.id===id&&r.profileId===profileId);if(!previous)throw Error('Рыночная запись другого профиля или удалена');if(previous.type==='product'){if(rows.some(r=>r.productId===id))throw Error('Товар используется в объявлениях или истории цен. Архивируйте товар вместо удаления.');if((await listInventory()).some(b=>b.events.some(e=>e.productId===id)))throw Error('Товар используется в складских операциях. Архивируйте товар вместо удаления.');}await api.storage.local.remove(MARKET_PREFIX+id);return previous;});}
 export function replaceMarketplace(records,profileIds=null){return locked(async()=>{
- const next=validateMarketplace(records,profileIds);const raw=await api.storage.local.get(null);
+ const next=validateMarketplace(records,profileIds);const inventory=await listInventory();
+ const productIds=new Set(next.filter(r=>r.type==='product').map(r=>r.id));
+ if(inventory.some(b=>b.events.some(e=>e.productId&&!productIds.has(e.productId))))throw Error('Нельзя удалить товар, используемый складским журналом');
+ const raw=await api.storage.local.get(null);
  // Include damaged storage rows in rollback: never silently discard corrupt data.
  const previous=Object.fromEntries(Object.entries(raw).filter(([k])=>k.startsWith(MARKET_PREFIX)));
  const update=Object.fromEntries(next.map(row=>[MARKET_PREFIX+row.id,row]));
