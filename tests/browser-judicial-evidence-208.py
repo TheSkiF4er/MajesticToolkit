@@ -131,6 +131,38 @@ async def judicial_browser_smoke(browser):
     info=await page.evaluate('''async()=>{const g=await import('mt:lib/government-store.mjs'),s=await import('mt:lib/document-store.mjs'),d=await import('mt:lib/judicial-dossier.mjs');const gov=await g.listGovernment();const c=gov.find(x=>x.type==='case');const report=d.assembleJudicialDossier(c,gov,await s.listDocumentRecords());const zip=await d.createJudicialDossierArchive(report);const checked=await d.verifyJudicialDossierArchive(zip.blob);return {missing:checked.manifest.attachments.filter(x=>x.status==='missing').length,included:checked.manifest.attachments.filter(x=>x.status==='included').length};}''')
     assert info=={'missing':0,'included':1},info
     await page.locator('#court-evidence-dossier-dialog [data-court-evidence-action=close-dialog]').click()
+    # 2.1.0 GA: real overdue court deadline appears on the shared dashboard.
+    await page.evaluate("""async()=>{
+      const g=await import('mt:lib/government-store.mjs');
+      const row=(await g.listGovernment()).find(x=>x.type==='case'&&x.number==='QA-208');
+      await g.mutateCourtCaseParticipant(row.id,'add',{name:'GA witness',role:'claimant',notes:''});
+      await g.setCourtCaseStatus(row.id,'filed','Заявление подано');
+      await g.setCourtCaseStatus(row.id,'accepted','Принято');
+      await g.mutateCourtCaseDeadline(row.id,'add',{title:'Проверить материалы дела GA',dueOn:'2026-11-01',description:'Срок для проверки'});
+    }""")
+    await page.locator('.justice-tabs [data-tab=overview]').click()
+    await page.get_by_text('Проверить материалы дела GA',exact=False).wait_for(timeout=15000)
+    assert await page.locator('.justice-workspace').get_by_text('Просрочено').count()>=1
+    await page.locator('[data-justice-action=integrity]').click()
+    await page.get_by_text('Нарушений не обнаружено.',exact=False).wait_for(timeout=20000)
+    await page.locator('.justice-workspace [data-justice-action=open][data-kind=case]').first.click()
+    await page.locator('.court-case-detail').wait_for()
+    assert await page.locator('.court-case-detail').get_by_text('QA-208',exact=False).count()>0
+    # Export goes through the full v19 serializer, validates court links and returns actual JSON.
+    await page.locator('.nav [data-view=backup]').click()
+    import json
+    async with page.expect_download(timeout=20000) as exported:
+        await page.locator('[data-action=export]').click()
+    artifact=await exported.value
+    backup=json.loads(Path(await artifact.path()).read_text())
+    assert backup['schemaVersion']==19 and any(x.get('number')=='QA-208' for x in backup['government'])
+    assert len(backup['evidenceVault'])>=2
+    # The portable backup contains real Vault bytes and verifies them on roundtrip.
+    async with page.expect_download(timeout=20000) as portable:
+        await page.locator('[data-action=backup-portable-export]').click()
+    assert (await portable.value).suggested_filename.endswith('.zip')
+    await page.locator('.nav [data-view=justice]').click()
+    await page.locator('.justice-tabs [data-tab=cases]').click()
     await page.locator('#workspace-profile').select_option('profile_russia')
     await page.locator('.court-case-detail').wait_for(state='detached')
     assert not await page.locator('.court-evidence-row').count()
