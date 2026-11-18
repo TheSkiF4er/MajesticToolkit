@@ -2,7 +2,7 @@
 // The workspace never creates a second copy of a law, decision or document.
 export const JUSTICE_TABS = Object.freeze(['overview','courts','agencies','law','decisions','documents']);
 export const JUSTICE_UI_KEY = 'mtGovernmentJusticeWorkspaceV201';
-export const JUSTICE_OPEN_KINDS = Object.freeze(['department','unit','position','competence','assignment','decision','government-template','book','memo','document','document-template']);
+export const JUSTICE_OPEN_KINDS = Object.freeze(['department','unit','position','competence','assignment','decision','government-template','book','memo','document','document-template','court','jurisdiction']);
 const courtPattern = /(?:^|[^\p{L}\p{N}])(?:суд(?:а|е|ом|ы|ья|ьи|ей|ов|ебн[\p{L}]*)?|court|judicial|justice)(?=$|[^\p{L}\p{N}])/iu;
 const asText = value => typeof value === 'string' ? value : '';
 export function isCourtDepartment(row){return row?.type === 'department' && courtPattern.test([row.name,row.code,row.jurisdiction,row.position].map(asText).join(' '));}
@@ -14,14 +14,18 @@ export function justiceSnapshot(profileId, government=[], law=[], documents=[]) 
   const docs=documents.filter(x=>x.profileId===profileId);
   const departments=gov.filter(x=>x.type==='department');
   const decisions=gov.filter(x=>x.type==='decision');
+  const courtIds=new Set(gov.filter(x=>x.type==='court').map(x=>x.departmentId));
+  const courts=departments.filter(x=>courtIds.has(x.id)||isCourtDepartment(x));
   const books=legal.filter(x=>x.type==='book');
   const rows=[];
   for(const g of gov){
-    if(g.type==='department')rows.push({kind:'department',id:g.id,tab:isCourtDepartment(g)?'courts':'agencies',title:g.name,description:[g.code,g.officer,g.position,g.jurisdiction].join(' · '),text:[g.name,g.code,g.officer,g.position,g.jurisdiction].join(' '),updatedAt:safeDate(g)});
+    if(g.type==='department')rows.push({kind:'department',id:g.id,tab:courtIds.has(g.id)||isCourtDepartment(g)?'courts':'agencies',title:g.name,description:[g.code,g.officer,g.position,g.jurisdiction].join(' · '),text:[g.name,g.code,g.officer,g.position,g.jurisdiction].join(' '),updatedAt:safeDate(g)});
     else if(g.type==='unit')rows.push({kind:'unit',id:g.id,tab:'agencies',title:`${g.code} · ${g.name}`,description:`Подразделение · ${departments.find(d=>d.id===g.departmentId)?.name||''}`,text:[g.name,g.code,g.description,departments.find(d=>d.id===g.departmentId)?.name].join(' '),updatedAt:safeDate(g)});
     else if(g.type==='competence')rows.push({kind:'competence',id:g.id,tab:'agencies',title:`${g.code} · ${g.title}`,description:`Компетенция · ${departments.find(d=>d.id===g.departmentId)?.name||''}`,text:[g.code,g.title,g.description,g.legalBasis,departments.find(d=>d.id===g.departmentId)?.name].join(' '),updatedAt:safeDate(g)});
     else if(g.type==='position')rows.push({kind:'position',id:g.id,tab:'agencies',title:g.title,description:`Должность · ${departments.find(d=>d.id===g.departmentId)?.name||''}`,text:[g.title,g.rank,g.description,...g.competenceIds.map(id=>gov.find(x=>x.id===id)?.title||''),departments.find(d=>d.id===g.departmentId)?.name].join(' '),updatedAt:safeDate(g)});
     else if(g.type==='assignment')rows.push({kind:'assignment',id:g.id,tab:'agencies',title:g.officer,description:`Назначение · ${gov.find(d=>d.id===g.positionId)?.title||''}`,text:[g.officer,g.startedAt,g.endedAt,g.notes,gov.find(d=>d.id===g.positionId)?.title,departments.find(d=>d.id===g.departmentId)?.name].join(' '),updatedAt:safeDate(g)});
+    else if(g.type==='court')rows.push({kind:'court',id:g.id,tab:'courts',title:`${departments.find(d=>d.id===g.departmentId)?.name||'Суд недоступен'}`,description:`Судебная инстанция · ${g.level}`,text:[g.level,g.venue,g.description,departments.find(d=>d.id===g.departmentId)?.name].join(' '),updatedAt:safeDate(g)});
+    else if(g.type==='jurisdiction')rows.push({kind:'jurisdiction',id:g.id,tab:'courts',title:`${g.category} · ${g.territory}`,description:`Подсудность · ${g.stage} · ${departments.find(d=>d.id===gov.find(c=>c.id===g.courtId)?.departmentId)?.name||''}`,text:[g.category,g.territory,g.stage,g.legalBasis,departments.find(d=>d.id===gov.find(c=>c.id===g.courtId)?.departmentId)?.name].join(' '),updatedAt:safeDate(g)});
     else if(g.type==='decision')rows.push({kind:'decision',id:g.id,tab:'decisions',title:`№ ${g.caseNumber} — ${g.subject}`,description:`${g.status==='final'?'Утверждено':'Черновик'} · ${departments.find(d=>d.id===g.departmentId)?.name||'Ведомство недоступно'}`,text:[g.caseNumber,g.subject,g.facts,g.reason,g.sanction,g.notes].join(' '),updatedAt:safeDate(g)});
     else if(g.type==='template')rows.push({kind:'government-template',id:g.id,tab:'documents',title:g.title,description:`Процессуальный шаблон · ${g.category}`,text:[g.title,g.category,g.body].join(' '),updatedAt:safeDate(g)});
   }
@@ -37,7 +41,7 @@ export function justiceSnapshot(profileId, government=[], law=[], documents=[]) 
     rows.push({kind:d.type==='template'?'document-template':'document',id:d.id,tab:'documents',title,description:d.type==='template'?`Шаблон Document Studio · ${d.category}`:`Документ · версия ${d.currentVersion}`,text:[title,version?.body||d.body,d.category].join(' '),updatedAt:safeDate(d)});
   }
   rows.sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt)||a.title.localeCompare(b.title,'ru'));
-  return {profileId,departments,units:gov.filter(x=>x.type==='unit'),positions:gov.filter(x=>x.type==='position'),competences:gov.filter(x=>x.type==='competence'),assignments:gov.filter(x=>x.type==='assignment'),courts:departments.filter(isCourtDepartment),decisions,books,
+  return {profileId,departments,units:gov.filter(x=>x.type==='unit'),positions:gov.filter(x=>x.type==='position'),competences:gov.filter(x=>x.type==='competence'),assignments:gov.filter(x=>x.type==='assignment'),courts,courtRegistry:gov.filter(x=>x.type==='court'),jurisdictions:gov.filter(x=>x.type==='jurisdiction'),decisions,books,
     governmentTemplates:gov.filter(x=>x.type==='template'),documents:docs.filter(x=>x.type==='document'),documentTemplates:docs.filter(x=>x.type==='template'),
     memos:legal.filter(x=>x.type==='memo'),articles:books.reduce((n,b)=>n+(b.editions?.find(e=>e.id===b.activeEditionId)?.articles?.length||0),0),
     rows};

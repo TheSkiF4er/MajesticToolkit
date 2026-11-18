@@ -305,3 +305,13 @@ body[data-mode=sidebar] .ws-layout .side{height:auto;position:static;overflow:vi
 .agency-date-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 .agency-history{font-size:.86rem;overflow-wrap:anywhere}
 @media(max-width:640px){.agency-filters,.agency-date-fields{grid-template-columns:minmax(0,1fr)}.agency-row-actions{justify-content:flex-start}.agency-record{margin-inline-start:calc(var(--agency-depth,0)*8px)}}
+
+/* Judicial System 2.0.4 */
+.judicial-panel{min-width:0}
+.judicial-court{margin-inline-start:calc(var(--agency-depth,0)*min(18px,2.3vw));border-inline-start:3px solid var(--stroke);padding-inline-start:12px}
+.judicial-court>div:first-child{min-width:0;overflow-wrap:anywhere}
+.judicial-court details ul{padding-inline-start:22px;line-height:1.7}
+.judicial-actions{flex-wrap:wrap;justify-content:flex-end}
+.judicial-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.judicial-form-grid .field{min-width:0}
+@media(max-width:640px){.judicial-form-grid{grid-template-columns:minmax(0,1fr)}.judicial-court{margin-inline-start:calc(var(--agency-depth,0)*8px)}.judicial-actions{justify-content:flex-start}}

@@ -1,5 +1,5 @@
 import {api} from './browser.mjs';
-import { GOV_PREFIX,GOV_LIMITS,cleanGovernment,validateGovernment,createDepartment,editDepartment,createTemplate,editTemplate,createDecision,editDecision,finalizeDecision,cloneDecision,createAgencyUnit,editAgencyUnit,createAgencyPosition,editAgencyPosition,createAgencyCompetence,editAgencyCompetence,createAgencyAssignment,editAgencyAssignment } from './government-core.mjs';
+import { GOV_PREFIX,GOV_LIMITS,cleanGovernment,validateGovernment,createDepartment,editDepartment,createTemplate,editTemplate,createDecision,editDecision,finalizeDecision,cloneDecision,createAgencyUnit,editAgencyUnit,createAgencyPosition,editAgencyPosition,createAgencyCompetence,editAgencyCompetence,createAgencyAssignment,editAgencyAssignment,createCourt,editCourt,createCourtJurisdiction,editCourtJurisdiction } from './government-core.mjs';
 let chain=Promise.resolve();const enqueue=fn=>{const p=chain.then(fn);chain=p.catch(()=>{});return p;};
 export function parseGovernmentStorage(raw){return Object.entries(raw).filter(([k])=>k.startsWith(GOV_PREFIX)).flatMap(([k,v])=>{try{const r=cleanGovernment(v);return k===GOV_PREFIX+r.id?[r]:[];}catch(err){console.warn('MajesticToolkit: повреждённая запись Government Tools',k,err);return [];}});}
 export async function listGovernment(){return parseGovernmentStorage(await api.storage.local.get(null)).sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt));}
@@ -14,6 +14,10 @@ export const addAgencyCompetence=(profile,fields)=>enqueue(()=>insert(createAgen
 export const updateAgencyCompetence=(id,fields)=>enqueue(async()=>update(editAgencyCompetence(await getGovernment(id),fields)));
 export const addAgencyAssignment=(profile,fields)=>enqueue(()=>insert(createAgencyAssignment(profile,fields)));
 export const updateAgencyAssignment=(id,fields)=>enqueue(async()=>update(editAgencyAssignment(await getGovernment(id),fields)));
+export const addCourt=(profile,fields)=>enqueue(()=>insert(createCourt(profile,fields)));
+export const updateCourt=(id,fields)=>enqueue(async()=>update(editCourt(await getGovernment(id),fields)));
+export const addCourtJurisdiction=(profile,fields)=>enqueue(()=>insert(createCourtJurisdiction(profile,fields)));
+export const updateCourtJurisdiction=(id,fields)=>enqueue(async()=>update(editCourtJurisdiction(await getGovernment(id),fields)));
 export const addDepartment=(profile,fields)=>enqueue(()=>insert(createDepartment(profile,fields)));
 export const updateDepartment=(id,fields)=>enqueue(async()=>update(editDepartment(await getGovernment(id),fields)));
 export const addTemplate=(profile,fields)=>enqueue(()=>insert(createTemplate(profile,fields)));
@@ -22,7 +26,7 @@ export const addDecision=(profile,fields,laws)=>enqueue(()=>insert(createDecisio
 export const updateDecision=(id,fields,laws)=>enqueue(async()=>update(editDecision(await getGovernment(id),fields,laws)));
 export const approveDecision=id=>enqueue(async()=>update(finalizeDecision(await getGovernment(id))));
 export const duplicateDecision=id=>enqueue(async()=>insert(cloneDecision(await getGovernment(id))));
-export function deleteGovernment(id){return enqueue(async()=>{const r=await getGovernment(id);const entries=await listGovernment();if(r.type==='department'){
+export function deleteGovernment(id){return enqueue(async()=>{const r=await getGovernment(id);const entries=await listGovernment();if(r.type==='court'&&entries.some(x=>x.type==='jurisdiction'&&x.courtId===id))throw Error('Сначала удалите правила подсудности суда');if(r.type==='department'){
   if(entries.some(x=>x.departmentId===id))throw Error('Сначала удалите или перенесите связанные решения и шаблоны');
   const stored=await api.storage.local.get(null);
   if(Object.entries(stored).some(([key,doc])=>key.startsWith('majesticDocumentV7:') && doc?.profileId===r.profileId && (doc?.type==='template'&&doc.departmentId===id || doc?.type==='document'&&Array.isArray(doc.versions)&&doc.versions.some(v=>v.departmentId===id)))) throw Error('Сначала удалите или перенесите связанные документы Document Studio');
