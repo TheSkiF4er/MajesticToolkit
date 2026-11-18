@@ -1,13 +1,18 @@
 // MajesticToolkit 0.6.0 — local, server-scoped Government Tools.
 // Every decision retains its source law edition and quoted article at creation time.
 export const GOV_PREFIX = 'majesticGovernmentV6:';
-export const GOV_LIMITS = Object.freeze({ records: 1600, departments: 80, templates: 300, decisions: 1200, references: 25 });
+export const GOV_LIMITS = Object.freeze({ records: 1600, departments: 80, templates: 300, decisions: 1200, references: 25, units: 320, positions: 400, competences: 500, assignments: 600 });
 const now = () => new Date().toISOString();
 const uid = () => globalThis.crypto?.randomUUID?.() ?? `gov-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 function text(v, name, max, optional = false) {if(typeof v !== 'string') throw Error(`Неверный тип: ${name}`); const s=v.trim(); if(s.length>max||(!optional&&!s)) throw Error(`Заполните «${name}» (до ${max} символов)`); return s;}
 function identifier(s){const id=text(s,'ID',128);if(!/^[\w-]{8,128}$/.test(id))throw Error('Недопустимый ID');return id;}
 function time(t){const val=text(t,'Время',40);if(!Number.isFinite(Date.parse(val)))throw Error('Некорректная дата');return val;}
 function requiredObject(x){if(!x||typeof x!=='object'||Array.isArray(x))throw Error('Некорректная запись Government Tools');return x;}
+const agencyStatus=s=>{const value=s??'active';if(value!=='active'&&value!=='archived')throw Error('Недопустимый статус реестра');return value;};
+const dateOnly=(s,label,optional=false)=>{if(optional&&(s===undefined||s===''))return '';const v=text(s,label,10);if(!/^\d{4}-\d{2}-\d{2}$/.test(v)||Number.isNaN(Date.parse(v+'T00:00:00.000Z'))||new Date(v+'T00:00:00.000Z').toISOString().slice(0,10)!==v)throw Error(`Некорректная дата: ${label}`);return v;};
+const shortCode=(s,label)=>{const value=text(s,label,35);if(!/^[\p{L}\p{N}_.-]+$/u.test(value))throw Error(`Некорректный код: ${label}`);return value;};
+const idList=(raw,label,limit=80)=>{if(!Array.isArray(raw)||raw.length>limit)throw Error(`Некорректные связи: ${label}`);const items=raw.map(identifier);if(new Set(items).size!==items.length)throw Error(`Повторяющиеся связи: ${label}`);return items;};
+
 export const PLACEHOLDERS = Object.freeze(['agency','agencyCode','jurisdiction','officer','position','caseNumber','subject','date','facts','articles','sanction','reason','notes']);
 export const DEFAULT_TEMPLATE = 'ВЕДОМСТВО: {agency}\nДело № {caseNumber}\nДата: {date}\nДолжностное лицо: {officer}, {position}\nЛицо: {subject}\n\nОБСТОЯТЕЛЬСТВА\n{facts}\n\nПРИМЕНИМЫЕ НОРМЫ\n{articles}\n\nРЕШЕНИЕ\n{sanction}\n\nОБОСНОВАНИЕ\n{reason}\n\nПРИМЕЧАНИЯ\n{notes}';
 export function cleanReference(raw){requiredObject(raw);return {bookId:identifier(raw.bookId),editionId:identifier(raw.editionId),bookTitle:text(raw.bookTitle,'Название закона',170),editionLabel:text(raw.editionLabel,'Редакция',100),effectiveDate:text(raw.effectiveDate,'Дата редакции',10),articleKey:text(raw.articleKey,'Номер статьи',50),articleTitle:text(raw.articleTitle,'Название статьи',220),articleText:text(raw.articleText,'Текст статьи',12000),sourceUrl:(()=>{const link=text(raw.sourceUrl??'','Источник',1000,true);if(link){let u;try{u=new URL(link);}catch{throw Error('Неверная ссылка на закон');}if(u.protocol!=='https:'||u.username||u.password)throw Error('Допустимы только HTTPS-источники');}return link;})()};}
@@ -20,7 +25,17 @@ export function cleanPenalty(raw){requiredObject(raw);const kind=text(raw.kind,'
 export function penaltyTotals(penalties){const rows=penalties.map(cleanPenalty);return {fine:rows.reduce((n,x)=>n+x.amount,0),minutes:rows.reduce((n,x)=>n+x.minutes,0)};}
 export function formatPenalties(penalties,references){const rows=penalties.map(cleanPenalty);if(!rows.length)return '';const lines=rows.map((row,i)=>{const ref=references.find(r=>referenceId(r)===row.referenceId);if(!ref)throw Error('Статья для санкции не найдена');return `${i+1}. ${PENALTY_TYPES[row.kind]}${row.kind==='fine'?`: $${row.amount.toLocaleString('ru-RU')}`:''}${row.kind==='custody'?`: ${row.minutes} мин.`:''} — ${ref.bookTitle}, ст. ${ref.articleKey}${row.details?' ('+row.details+')':''}`;});const totals=penaltyTotals(rows);return 'САНКЦИИ ПО СТАТЬЯМ\n'+lines.join('\n')+`\nИтого: штраф $${totals.fine.toLocaleString('ru-RU')}, срок ${totals.minutes} мин. (параметры введены пользователем)`;}
 export function cleanGovernment(raw){requiredObject(raw);const base={id:identifier(raw.id),profileId:identifier(raw.profileId),createdAt:time(raw.createdAt),updatedAt:time(raw.updatedAt)};
- if(raw.type==='department')return {...base,type:'department',name:text(raw.name,'Ведомство',110),code:text(raw.code,'Сокращение',35),jurisdiction:text(raw.jurisdiction??'','Юрисдикция',120,true),officer:text(raw.officer,'ФИО',110),position:text(raw.position,'Должность',110)};
+ if(raw.type==='department')return {...base,type:'department',name:text(raw.name,'Ведомство',110),code:text(raw.code,'Сокращение',35),jurisdiction:text(raw.jurisdiction??'','Юрисдикция',120,true),officer:text(raw.officer,'ФИО',110),position:text(raw.position,'Должность',110),...(Object.hasOwn(raw,'description')?{description:text(raw.description??'','Описание ведомства',2000,true)}:{}),...(Object.hasOwn(raw,'status')?{status:agencyStatus(raw.status)}:{})};
+ if(raw.type==='unit')return {...base,type:'unit',departmentId:identifier(raw.departmentId),parentUnitId:raw.parentUnitId?identifier(raw.parentUnitId):'',name:text(raw.name,'Подразделение',120),code:shortCode(raw.code,'Код подразделения'),description:text(raw.description??'','Описание подразделения',2000,true),status:agencyStatus(raw.status)};
+ if(raw.type==='competence')return {...base,type:'competence',departmentId:identifier(raw.departmentId),code:shortCode(raw.code,'Код компетенции'),title:text(raw.title,'Компетенция',140),description:text(raw.description,'Описание полномочия',3000),legalBasis:text(raw.legalBasis??'','Правовое основание',1500,true),status:agencyStatus(raw.status)};
+ if(raw.type==='position')return {...base,type:'position',departmentId:identifier(raw.departmentId),unitId:raw.unitId?identifier(raw.unitId):'',title:text(raw.title,'Должность',120),rank:text(raw.rank??'','Звание/уровень',90,true),description:text(raw.description??'','Обязанности',2000,true),competenceIds:idList(raw.competenceIds??[],'Компетенции'),status:agencyStatus(raw.status)};
+ if(raw.type==='assignment'){
+  const startedAt=dateOnly(raw.startedAt,'Дата назначения'),endedAt=dateOnly(raw.endedAt,'Дата окончания',true);
+  if(endedAt&&endedAt<startedAt)throw Error('Дата окончания раньше назначения');
+  const history=raw.history??[];
+  if(!Array.isArray(history)||history.length>60)throw Error('Слишком длинная история назначений');
+  return {...base,type:'assignment',departmentId:identifier(raw.departmentId),positionId:identifier(raw.positionId),officer:text(raw.officer,'Сотрудник',120),startedAt,endedAt,notes:text(raw.notes??'','Примечание',1500,true),status:agencyStatus(raw.status),history:history.map(h=>{requiredObject(h);return {changedAt:time(h.changedAt),positionId:identifier(h.positionId),officer:text(h.officer,'Сотрудник',120),startedAt:dateOnly(h.startedAt,'Дата назначения'),endedAt:dateOnly(h.endedAt,'Дата окончания',true),status:agencyStatus(h.status),reason:text(h.reason??'','Причина изменения',500,true)};})};
+ }
  if(raw.type==='template') {const body=text(raw.body,'Шаблон',14000);const unknown=[...body.matchAll(/\{([a-zA-Z][\w]*)\}/g)].map(m=>m[1]).filter(x=>!PLACEHOLDERS.includes(x));if(unknown.length)throw Error(`Неизвестные переменные шаблона: ${unknown.join(', ')}`);return {...base,type:'template',departmentId:raw.departmentId?identifier(raw.departmentId):'',title:text(raw.title,'Название шаблона',120),category:text(raw.category||'Процессуальный документ','Категория',80),body};}
  if(raw.type==='decision') {const refs=raw.references;if(!Array.isArray(refs)||refs.length>GOV_LIMITS.references)throw Error('Некорректные ссылки на статьи');const references=refs.map(cleanReference);const ids=new Set();for(const ref of references){const key=`${ref.bookId}/${ref.editionId}/${ref.articleKey}`;if(ids.has(key))throw Error('Дублирующаяся статья');ids.add(key);}
  const penalties=(raw.penalties??[]);if(!Array.isArray(penalties)||penalties.length>60)throw Error('Не более 60 санкций');const cleanedPenalties=penalties.map(item=>cleanPenalty(item));for(const penalty of cleanedPenalties){if(!references.some(ref=>referenceId(ref)===penalty.referenceId))throw Error('Санкция ссылается на отсутствующую статью');}
@@ -28,7 +43,34 @@ export function cleanGovernment(raw){requiredObject(raw);const base={id:identifi
  throw Error('Неизвестный тип записи Government Tools');
 }
 export function validateGovernment(raw,profileIds){if(!Array.isArray(raw)||raw.length>GOV_LIMITS.records)throw Error('Слишком много записей Government Tools');const ps=profileIds?new Set(profileIds):null;const ids=new Set();const records=raw.map(cleanGovernment);for(const r of records){if(ids.has(r.id))throw Error('Дублируется ID записи');ids.add(r.id);if(ps&&!ps.has(r.profileId))throw Error('Запись относится к отсутствующему профилю');}
- const departments=new Map(records.filter(x=>x.type==='department').map(x=>[x.id,x]));if(departments.size>GOV_LIMITS.departments||records.filter(x=>x.type==='template').length>GOV_LIMITS.templates||records.filter(x=>x.type==='decision').length>GOV_LIMITS.decisions)throw Error('Превышен лимит Government Tools');for(const r of records){if(r.departmentId){const dep=departments.get(r.departmentId);if(!dep||dep.profileId!==r.profileId)throw Error('Ведомство отсутствует или принадлежит другому профилю');}}return records;}
+ const departments=new Map(records.filter(x=>x.type==='department').map(x=>[x.id,x]));
+ if(departments.size>GOV_LIMITS.departments||Object.entries({template:GOV_LIMITS.templates,decision:GOV_LIMITS.decisions,unit:GOV_LIMITS.units,position:GOV_LIMITS.positions,competence:GOV_LIMITS.competences,assignment:GOV_LIMITS.assignments}).some(([t,max])=>records.filter(x=>x.type===t).length>max))throw Error('Превышен лимит Government Tools');
+ const byId=new Map(records.map(r=>[r.id,r]));
+ const unique=new Set();
+ for(const r of records){
+  if(r.departmentId){const dep=departments.get(r.departmentId);if(!dep||dep.profileId!==r.profileId)throw Error('Ведомство отсутствует или принадлежит другому профилю');}
+  if(r.type==='unit'){
+   if(r.parentUnitId){const parent=byId.get(r.parentUnitId);if(parent?.type!=='unit'||parent.profileId!==r.profileId||parent.departmentId!==r.departmentId)throw Error('Родительское подразделение отсутствует или принадлежит другому ведомству');}
+   const key=`unit:${r.departmentId}:${r.code.toLocaleLowerCase('ru')}`;if(unique.has(key))throw Error('Код подразделения уже занят');unique.add(key);
+  }
+  if(r.type==='competence'){const key=`competence:${r.departmentId}:${r.code.toLocaleLowerCase('ru')}`;if(unique.has(key))throw Error('Код компетенции уже занят');unique.add(key);}
+  if(r.type==='position'){
+   if(r.unitId){const unit=byId.get(r.unitId);if(unit?.type!=='unit'||unit.profileId!==r.profileId||unit.departmentId!==r.departmentId)throw Error('Подразделение должности отсутствует или принадлежит другому ведомству');}
+   for(const id of r.competenceIds){const c=byId.get(id);if(c?.type!=='competence'||c.departmentId!==r.departmentId||c.profileId!==r.profileId)throw Error('Компетенция должности отсутствует или принадлежит другому ведомству');}
+  }
+  if(r.type==='assignment'){
+   const pos=byId.get(r.positionId);if(pos?.type!=='position'||pos.profileId!==r.profileId||pos.departmentId!==r.departmentId)throw Error('Должность сотрудника отсутствует или принадлежит другому ведомству');
+   if(r.status==='active'&&!r.endedAt&&pos.status!=='active')throw Error('Нельзя назначать на архивную должность');
+   const key=`assignment:${r.positionId}:${r.officer.toLocaleLowerCase('ru')}`;
+   if(r.status==='active'&&!r.endedAt){if(unique.has(key))throw Error('Сотрудник уже назначен на эту должность');unique.add(key);}
+  }
+ }
+ // A self-reference and any deeper cycle must be rejected on import and edit.
+ for(const unit of records.filter(r=>r.type==='unit')){
+  const visited=new Set([unit.id]);let current=unit;
+  while(current.parentUnitId){if(visited.has(current.parentUnitId))throw Error('Цикл в структуре подразделений');visited.add(current.parentUnitId);current=byId.get(current.parentUnitId);}
+ }
+ return records;}
 export function createDepartment(profileId,fields){const t=now();return cleanGovernment({id:uid(),profileId,type:'department',createdAt:t,updatedAt:t,...fields});}
 export function editDepartment(old,fields){const r=cleanGovernment(old);if(r.type!=='department')throw Error('Это не ведомство');return cleanGovernment({...r,...fields,id:r.id,profileId:r.profileId,type:r.type,createdAt:r.createdAt,updatedAt:now()});}
 export function createTemplate(profileId,fields){const t=now();return cleanGovernment({id:uid(),profileId,type:'template',createdAt:t,updatedAt:t,...fields});}
@@ -41,4 +83,28 @@ export function renderDocument(template,department,decision){const t=cleanGovern
  const vars={agency:dep.name,agencyCode:dep.code,jurisdiction:dep.jurisdiction,officer:dep.officer,position:dep.position,caseNumber:d.caseNumber,subject:d.subject,date:d.finalizedAt?.slice(0,10)||d.createdAt.slice(0,10),facts:d.facts,articles:d.references.length?d.references.map(ref=>`${ref.bookTitle} — статья ${ref.articleKey}. ${ref.articleTitle} (${ref.editionLabel}, ${ref.effectiveDate})`).join('\n'):'Статьи не выбраны',sanction:[d.sanction,formatPenalties(d.penalties,d.references)].filter(Boolean).join('\n'),reason:d.reason,notes:d.notes};return t.body.replace(/\{([a-zA-Z][\w]*)\}/g,(_,key)=>vars[key]??'');
 }
 export function exportDecisionText(decision,department){const d=cleanGovernment(decision),dep=cleanGovernment(department);if(d.type!=='decision'||dep.type!=='department'||d.departmentId!==dep.id)throw Error('Некорректное ведомство');return `${dep.name} (${dep.code})\n${dep.jurisdiction}\n\nДело № ${d.caseNumber}\nСтатус: ${d.status==='final'?'Утверждено':'Черновик'}${d.finalizedAt?' · '+d.finalizedAt:''}\nСотрудник: ${dep.officer}, ${dep.position}\nЛицо: ${d.subject}\n\nОБСТОЯТЕЛЬСТВА\n${d.facts}\n\nПРИМЕНИМЫЕ СТАТЬИ\n${d.references.map(r=>`${r.bookTitle} — статья ${r.articleKey}. ${r.articleTitle}; ${r.editionLabel} (${r.effectiveDate})\n${r.articleText}${r.sourceUrl?'\nИсточник: '+r.sourceUrl:''}`).join('\n\n')||'Не выбраны'}\n\nРЕШЕНИЕ\n${[d.sanction,formatPenalties(d.penalties,d.references)].filter(Boolean).join('\n')}\n\nОБОСНОВАНИЕ\n${d.reason}\n\nПРИМЕЧАНИЯ\n${d.notes}\n`;
+}
+
+// Agency records use the SAME Government Tools store and backup, not a parallel registry.
+function createAgencyRecord(profileId,type,fields){const t=now();return cleanGovernment({id:uid(),profileId,type,createdAt:t,updatedAt:t,...fields});}
+function editAgencyRecord(old,type,fields){const record=cleanGovernment(old);if(record.type!==type)throw Error('Неверный тип записи ведомства');return cleanGovernment({...record,...fields,id:record.id,profileId:record.profileId,type,createdAt:record.createdAt,updatedAt:now()});}
+export const createAgencyUnit=(profileId,fields)=>createAgencyRecord(profileId,'unit',fields);
+export const editAgencyUnit=(old,fields)=>editAgencyRecord(old,'unit',fields);
+export const createAgencyPosition=(profileId,fields)=>createAgencyRecord(profileId,'position',fields);
+export const editAgencyPosition=(old,fields)=>editAgencyRecord(old,'position',fields);
+export const createAgencyCompetence=(profileId,fields)=>createAgencyRecord(profileId,'competence',fields);
+export const editAgencyCompetence=(old,fields)=>editAgencyRecord(old,'competence',fields);
+export const createAgencyAssignment=(profileId,fields)=>createAgencyRecord(profileId,'assignment',{...fields,history:[]});
+export function editAgencyAssignment(old,fields){
+ const r=cleanGovernment(old);if(r.type!=='assignment')throw Error('Не назначение');
+ const event={changedAt:now(),positionId:r.positionId,officer:r.officer,startedAt:r.startedAt,endedAt:r.endedAt,status:r.status,reason:typeof fields.reason==='string'?fields.reason:''};
+ // Historical events cannot be rewritten by a form submission.
+ return editAgencyRecord(r,'assignment',{...fields,history:[...r.history,event].slice(-60)});
+}
+export function agencyRoster(records,departmentId){
+ const rows=validateGovernment(records).filter(r=>r.departmentId===departmentId);
+ const positions=new Map(rows.filter(r=>r.type==='position').map(r=>[r.id,r]));
+ const units=new Map(rows.filter(r=>r.type==='unit').map(r=>[r.id,r]));
+ const competences=new Map(rows.filter(r=>r.type==='competence').map(r=>[r.id,r]));
+ return rows.filter(r=>r.type==='assignment').map(r=>({...r,position:positions.get(r.positionId),unit:units.get(positions.get(r.positionId)?.unitId)||null,competences:(positions.get(r.positionId)?.competenceIds||[]).map(id=>competences.get(id)).filter(Boolean)}));
 }
