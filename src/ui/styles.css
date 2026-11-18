@@ -336,3 +336,12 @@ body[data-mode=sidebar] .ws-layout .side{height:auto;position:static;overflow:vi
 .court-proceeding-text{white-space:pre-wrap;overflow-wrap:anywhere}
 .court-overdue{color:#df6565;font-weight:600}
 @media(max-width:700px){.court-proceeding-item{flex-direction:column}.court-proceeding-item .row{justify-content:flex-start}}
+
+/* Procedural Document Studio 2.0.7: case-driven generator and approval. */
+.court-procedural-generator{padding:12px;border:1px solid var(--stroke);border-radius:10px;min-width:0}
+.court-procedural-generator summary{cursor:pointer;font-weight:650}
+.court-procedural-generator form{padding-top:12px;max-width:100%}
+.court-procedural-generator textarea{width:100%;min-width:0}
+.studio-item .tag{display:inline-block;max-width:100%;white-space:normal;overflow-wrap:anywhere}
+.studio-item .row{flex-wrap:wrap}
+@media(max-width:650px){.court-procedural-generator{padding:9px}.studio-item .row{justify-content:flex-start}}

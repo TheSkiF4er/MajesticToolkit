@@ -1,5 +1,7 @@
 import {createJudicialCase,editJudicialCase,changeCaseStatus,mutateCaseParticipants,mutateCaseDocuments,noteJudicialCase,mutateCaseHearing,mutateCaseMotion,mutateCaseDeadline,validateCaseRelations} from './judicial-case-core.mjs';
 import {listDocumentRecords} from './document-store.mjs';
+import {createDocument,validateDocuments,DOCUMENT_PREFIX} from './document-core.mjs';
+import {prepareProceduralDocument} from './procedural-document-core.mjs';
 import {api} from './browser.mjs';
 import { GOV_PREFIX,GOV_LIMITS,cleanGovernment,validateGovernment,createDepartment,editDepartment,createTemplate,editTemplate,createDecision,editDecision,finalizeDecision,cloneDecision,createAgencyUnit,editAgencyUnit,createAgencyPosition,editAgencyPosition,createAgencyCompetence,editAgencyCompetence,createAgencyAssignment,editAgencyAssignment,createCourt,editCourt,createCourtJurisdiction,editCourtJurisdiction } from './government-core.mjs';
 let chain=Promise.resolve();const enqueue=fn=>{const p=chain.then(fn);chain=p.catch(()=>{});return p;};
@@ -24,11 +26,38 @@ export const updateCourtJurisdiction=(id,fields)=>enqueue(async()=>update(editCo
 // from storage before mutation and every change appends a validated audit event.
 async function caseInsert(profile,fields){const row=createJudicialCase(profile,fields),records=await listGovernment();validateCaseRelations(row,[...records,row],await listDocumentRecords());return insert(row);}
 async function caseUpdate(id,operation){const current=await getGovernment(id);if(current.type!=='case')throw Error('Судебное дело не найдено');const row=operation(current),records=await listGovernment();validateCaseRelations(row,records.map(x=>x.id===id?row:x),await listDocumentRecords());if(row===current)return row;return update(row);}
+/** Create a real Studio record AND link it to the case, including the case audit
+ * event. A single storage write keeps both records together; rollback also
+ * handles storage implementations that partially apply a failed set(). */
+export const generateCourtCaseDocument=(caseId,kind,fields,profiles)=>enqueue(async()=>{
+ const row=await getGovernment(caseId);
+ if(row.type!=='case'||!profiles.includes(row.profileId))throw Error('Судебное дело не найдено в доступном профиле');
+ const gov=await listGovernment(),docs=await listDocumentRecords();
+ const draft=prepareProceduralDocument(row,gov,kind,fields);
+ const procedural={caseId:row.id,kind,sourceRevision:row.revision,generatedAt:new Date().toISOString(),approvals:[]};
+ const document=createDocument(row.profileId,{...draft,procedural});
+ const updated=mutateCaseDocuments(row,'add',{id:document.id,kind:'document',title:draft.title});
+ const nextGov=gov.map(r=>r.id===row.id?updated:r),nextDocs=[...docs,document];
+ validateGovernment(nextGov,profiles);
+ validateDocuments(nextDocs,profiles,nextGov);
+ validateCaseRelations(updated,nextGov,nextDocs);
+ const docKey=DOCUMENT_PREFIX+document.id,caseKey=GOV_PREFIX+row.id;
+ try{await api.storage.local.set({[docKey]:document,[caseKey]:updated});}
+ catch(error){try{await api.storage.local.set({[caseKey]:row});await api.storage.local.remove(docKey);}catch(rollback){throw new AggregateError([error,rollback],'Не удалось восстановить дело после ошибки создания документа');}throw error;}
+ return {document,caseRecord:updated};
+});
 export const addJudicialCase=(profile,fields)=>enqueue(()=>caseInsert(profile,fields));
 export const editCourtCase=(id,fields)=>enqueue(()=>caseUpdate(id,r=>editJudicialCase(r,fields)));
 export const setCourtCaseStatus=(id,status,reason)=>enqueue(()=>caseUpdate(id,r=>changeCaseStatus(r,status,reason)));
 export const mutateCourtCaseParticipant=(id,action,fields)=>enqueue(()=>caseUpdate(id,r=>mutateCaseParticipants(r,action,fields)));
-export const mutateCourtCaseDocument=(id,action,fields)=>enqueue(()=>caseUpdate(id,r=>mutateCaseDocuments(r,action,fields)));
+export const mutateCourtCaseDocument=(id,action,fields)=>enqueue(async()=>{
+ if(fields?.kind==='document'){
+  const document=(await listDocumentRecords()).find(r=>r.id===fields.id&&r.type==='document');
+  if(document?.procedural){if(document.procedural.caseId!==id)throw Error('Процессуальный документ привязан к другому делу');
+   if(action==='remove')throw Error('Процессуальный документ нельзя отвязать от исходного дела: его связь является частью истории');}
+ }
+ return caseUpdate(id,r=>mutateCaseDocuments(r,action,fields));
+});
 export const addCourtCaseNote=(id,text)=>enqueue(()=>caseUpdate(id,r=>noteJudicialCase(r,text)));
 export const mutateCourtCaseHearing=(id,action,fields)=>enqueue(()=>caseUpdate(id,r=>mutateCaseHearing(r,action,fields)));
 export const mutateCourtCaseMotion=(id,action,fields)=>enqueue(()=>caseUpdate(id,r=>mutateCaseMotion(r,action,fields)));

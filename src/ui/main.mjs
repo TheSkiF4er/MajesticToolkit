@@ -57,7 +57,7 @@ import { replaceLawRecords } from '../lib/law-store.mjs';
 import { governmentSection, refreshGovernment, governmentRecords, handleGovernmentAction, handleGovernmentLawChange, handleGovernmentSubmit, setGovernmentSection, setGovernmentDecisionDepartment } from './government-page.mjs';
 import {handleAgencyAction,handleAgencySubmit,setAgencyFilter,setAgencyQuery,setAgencyTab,agencyListHTML} from './agency-page.mjs';
 import { replaceGovernment } from '../lib/government-store.mjs';
-import {documentSection,refreshDocuments,documentRecords,handleDocumentAction,handleDocumentSubmit,handleDocumentInput,setDocumentTab} from './document-page.mjs';
+import {documentSection,refreshDocuments,documentRecords,handleDocumentAction,handleDocumentSubmit,handleDocumentInput,setDocumentTab,handleDocumentApprovalSubmit} from './document-page.mjs';
 import {governmentJusticeSection,loadJusticeWorkspace,changeJusticeTab,justiceSearchHTML,setJusticeQuery,justiceRecord,rememberJusticeOpen} from './government-justice-page.mjs';
 import {handleCourtAction,handleCourtSubmit,setCourtTab} from './judicial-page.mjs';
 import {caseListHTML,handleCourtCaseAction,handleCourtCaseSubmit,openCourtCase,setCourtCaseFilter} from './court-case-page.mjs';
@@ -675,7 +675,7 @@ document.addEventListener('submit', event => {
   }
   const formId = event.target.getAttribute('id');
   if(formId==='court-proceeding-form'){event.preventDefault();void handleProceedingSubmit(event.target,state,refreshGovernment,render,feedback).catch(err=>feedback(err.message,true));return;}
-  if(['court-case-form','court-case-participant-form','court-case-participant-edit-form','court-case-document-form','court-case-status-form','court-case-note-form'].includes(formId)){event.preventDefault();void handleCourtCaseSubmit(event.target,state,governmentRecords(),refreshGovernment,render,feedback).catch(err=>feedback(err.message,true));return;}
+  if(['court-case-form','court-case-participant-form','court-case-participant-edit-form','court-case-document-form','court-case-status-form','court-case-note-form','procedural-generate-form'].includes(formId)){event.preventDefault();void handleCourtCaseSubmit(event.target,state,governmentRecords(),refreshGovernment,render,feedback).catch(err=>feedback(err.message,true));return;}
   if(formId==='judicial-form'||formId==='court-route-form'){event.preventDefault();void handleCourtSubmit(event.target,state,refreshGovernment,render,feedback).catch(err=>feedback(err.message,true));return;}
   if(['knowledge-source-meta-form','knowledge-collection-form','knowledge-collection-member-form'].includes(formId)){
     event.preventDefault();void handleLibrarySubmit(event.target,state,knowledgeSourceRows(),knowledgeSnapshot(),()=>refreshKnowledge(state.profiles.map(p=>p.id)),render,feedback,knowledgeNodes(state.activeProfileId)).then(()=>clearProductivityCache()).catch(err=>feedback(err.message,true));return;
@@ -687,6 +687,7 @@ document.addEventListener('submit', event => {
     event.preventDefault();void answerProductivity(event.target.elements.namedItem('question').value,state).catch(err=>feedback(err.message,true));return;
   }
   if(['google-config-form','site-link-form','google-import-doc-form','google-read-sheet-form'].includes(formId)){event.preventDefault();void handleIntegrationSubmit(event.target,state,render,feedback).catch(err=>feedback(err.message,true));return;}
+  if(formId==='document-approval-form'){event.preventDefault();void handleDocumentApprovalSubmit(event.target,state,render,feedback).catch(err=>feedback(err.message,true));return;}
   if(formId==='document-form'){event.preventDefault();void handleDocumentSubmit(event,state,render,feedback).catch(err=>feedback(err.message,true));return;}
   if (formId === 'agency-form') {event.preventDefault();void handleAgencySubmit(event,state,refreshGovernment,render,feedback).catch(err=>feedback(err.message,true));return;}
   if (formId === 'government-form') {event.preventDefault();void handleGovernmentSubmit(event,state,render,feedback,lawRecords()).catch(err=>feedback(err.message,true));return;}
