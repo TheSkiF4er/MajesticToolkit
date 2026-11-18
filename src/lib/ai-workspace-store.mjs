@@ -14,14 +14,14 @@ export const emptyAIWorkspace=()=>({version:1,conversations:[],contexts:[],draft
 export function cleanAIWorkspace(value){
  if(!value||typeof value!=='object'||Array.isArray(value)||Object.keys(value).some(k=>!['version','conversations','contexts','drafts'].includes(k))||value.version!==1||!Array.isArray(value.conversations)||!Array.isArray(value.contexts)||!Array.isArray(value.drafts)||value.conversations.length>20||value.contexts.length>30||value.drafts.length>30)throw Error('Некорректное локальное хранилище AI');
  const unique=rows=>{if(new Set(rows.map(x=>x.id)).size!==rows.length)throw Error('Повторяющийся ID локальной записи AI');return rows;};
- const contexts=unique(value.contexts.map(c=>{if(!c||!idCheck(c.id)||!KINDS.includes(c.kind)||!idCheck(c.refId)||!date(c.createdAt))throw Error('Некорректная контекстная ссылка');return {id:c.id,kind:c.kind,refId:c.refId,title:text(c.title,140,'контекст'),createdAt:c.createdAt};}));
+ const contexts=unique(value.contexts.map(c=>{if(!c||Object.keys(c).some(k=>!['id','kind','refId','title','createdAt'].includes(k))||!idCheck(c.id)||!KINDS.includes(c.kind)||!idCheck(c.refId)||!date(c.createdAt))throw Error('Некорректная контекстная ссылка');return {id:c.id,kind:c.kind,refId:c.refId,title:text(c.title,140,'контекст'),createdAt:c.createdAt};}));
  const conversations=unique(value.conversations.map(c=>{
-  if(!c||!idCheck(c.id)||!date(c.updatedAt)||!Array.isArray(c.messages)||!c.messages.length||c.messages.length>AI_WORKSPACE_LIMITS.messages)throw Error('Некорректная история диалога');
-  const messages=c.messages.map(m=>{if(!m||!['user','assistant'].includes(m.role))throw Error('Некорректная роль в диалоге');return {role:m.role,text:text(m.text,AI_WORKSPACE_LIMITS.message,'сообщение',false)};});
+  if(!c||Object.keys(c).some(k=>!['id','title','updatedAt','messages'].includes(k))||!idCheck(c.id)||!date(c.updatedAt)||!Array.isArray(c.messages)||!c.messages.length||c.messages.length>AI_WORKSPACE_LIMITS.messages)throw Error('Некорректная история диалога');
+  const messages=c.messages.map(m=>{if(!m||Object.keys(m).some(k=>!['role','text'].includes(k))||!['user','assistant'].includes(m.role))throw Error('Некорректная роль в диалоге');return {role:m.role,text:text(m.text,AI_WORKSPACE_LIMITS.message,'сообщение',false)};});
   if(JSON.stringify(messages).length>100000)throw Error('Диалог слишком большой');
   return {id:c.id,title:text(c.title,100,'название диалога'),updatedAt:c.updatedAt,messages};
  }));
- const drafts=unique(value.drafts.map(d=>{if(!d||!idCheck(d.id)||!date(d.updatedAt))throw Error('Некорректный AI-черновик');return {id:d.id,title:text(d.title,100,'название черновика'),text:text(d.text,AI_WORKSPACE_LIMITS.draft,'черновик'),updatedAt:d.updatedAt};}));
+ const drafts=unique(value.drafts.map(d=>{if(!d||Object.keys(d).some(k=>!['id','title','text','updatedAt'].includes(k))||!idCheck(d.id)||!date(d.updatedAt))throw Error('Некорректный AI-черновик');return {id:d.id,title:text(d.title,100,'название черновика'),text:text(d.text,AI_WORKSPACE_LIMITS.draft,'черновик'),updatedAt:d.updatedAt};}));
  if(JSON.stringify({contexts,conversations,drafts}).length>600000)throw Error('Локальная история AI превышает лимит');
  return {version:1,contexts,conversations,drafts};
 }

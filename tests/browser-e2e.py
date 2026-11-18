@@ -579,6 +579,36 @@ async def experience_workspace(browser):
     assert 'AI Assistant' in await page.locator('.topline h2').inner_text()
     await page.locator('[data-action="nav"][data-view="home"]').click()
     await page.locator('.ws-widgets').wait_for(timeout=8000)
+    # Backup v18 integration: the actual Workspace export checkbox controls disclosure.
+    await page.evaluate("""async()=>{
+      const ai=await import('mt:lib/ai-workspace-store.mjs');
+      await ai.saveAIConversation('profile_majest',{title:'Личный AI-диалог',messages:[{role:'user',text:'Секретная история QA'},{role:'assistant',text:'Только локально'}]});
+      // Empty, deterministic IndexedDB fixture: the about:blank origin itself denies IDB access.
+      const fakeDb={close(){},transaction(){
+        const tx={};
+        tx.objectStore=()=>({index:()=>({getAll:()=>{
+          const r={result:[]};queueMicrotask(()=>{r.onsuccess?.();queueMicrotask(()=>tx.oncomplete?.());});return r;
+        }})});
+        return tx;
+      }};
+      Object.defineProperty(window,'indexedDB',{configurable:true,value:{open(){const req={result:fakeDb};queueMicrotask(()=>req.onsuccess?.());return req;}}});
+      window.__backups=[];
+      const original=URL.createObjectURL.bind(URL);
+      URL.createObjectURL=blob=>{if(blob.type.includes('json'))void blob.text().then(t=>window.__backups.push(JSON.parse(t)));return original(blob);};
+    }""")
+    await page.locator('[data-action="nav"][data-view="backup"]').click()
+    await page.locator('#backup-include-ai').wait_for(timeout=7000)
+    assert not await page.locator('#backup-include-ai').is_checked()
+    await page.locator('[data-action="export"]').click()
+    await page.wait_for_function('window.__backups.length===1',timeout=8000)
+    assert await page.evaluate('window.__backups[0].schemaVersion===18&&window.__backups[0].aiWorkspace===null')
+    await page.locator('#backup-include-ai').check()
+    await page.locator('[data-action="export"]').click()
+    await page.wait_for_function('window.__backups.length===2',timeout=8000)
+    assert await page.evaluate('window.__backups[1].aiWorkspace[0].workspace.conversations[0].messages[0].text==="Секретная история QA"')
+    assert not await page.evaluate('JSON.stringify(window.__backups[1]).includes("MT_AI_GATEWAY_TOKEN")')
+    await page.locator('[data-action="nav"][data-view="home"]').click()
+    await page.locator('.ws-widgets').wait_for(timeout=8000)
     # Actual stores, not mocked dashboard counts.
     await page.evaluate('''async()=>{const f=await import('mt:lib/forum-store.mjs'),x=await import('mt:lib/xenforo-store.mjs');await f.upsertTemplate({label:'QA Majestic binder',text:'Hello',format:'plain',category:'QA',profileId:'profile_majest',shortcut:0,favorite:true});await f.upsertTemplate({label:'QA Russia binder',text:'Other',format:'plain',category:'QA',profileId:'profile_russia',shortcut:0,favorite:true});await x.saveCurrentBookmark('profile_majest','https://forum.majestic-rp.ru/threads/test.42/','QA bookmark');}''')
     await page.get_by_text('QA Majestic binder',exact=True).wait_for(timeout=5000)
@@ -1310,6 +1340,8 @@ async def main():
                 cases+=await ai_support_browser(browser)
                 from ai_browser_195 import ai_workspace_browser
                 cases+=await ai_workspace_browser(browser)
+                from ai_browser_200 import ai_release_browser
+                cases+=await ai_release_browser(browser)
                 cases+=await experience_workspace(browser)
                 cases+=await evidence_vault_workspace(browser)
                 cases+=await evidence_timeline_workspace(browser)

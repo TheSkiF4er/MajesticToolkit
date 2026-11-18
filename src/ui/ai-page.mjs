@@ -5,11 +5,11 @@ import {complaintAISection,mountComplaintAI,stopComplaintAI} from './ai-complain
 import {rulesAISection,mountRulesAI,stopRulesAI} from './ai-rules-page.mjs';
 import {AI_GATEWAY,assertQuestion,getAISettings,setAIEnabled,requestAIPermission,hasAIPermission,aiHealth,streamAI,streamWorkspaceAI,chatHistory,workspaceChatPayload} from '../lib/ai-connection.mjs';
 import {escapeHtml as e} from '../lib/sites.mjs';
-const session={profileId:'',token:'',messages:[],controller:null,root:null,connected:false,context:'',contextRef:null};
-function reset(profileId){if(session.profileId===profileId)return;stopRulesAI();stopComplaintAI();stopSupportAI();session.controller?.abort();Object.assign(session,{profileId,token:'',messages:[],controller:null,root:null,connected:false,context:'',contextRef:null});}
+const session={profileId:'',token:'',messages:[],controller:null,root:null,connected:false,context:'',contextRef:null,mode:'all'};
+function reset(profileId){if(session.profileId===profileId)return;stopRulesAI();stopComplaintAI();stopSupportAI();session.controller?.abort();Object.assign(session,{profileId,token:'',messages:[],controller:null,root:null,connected:false,context:'',contextRef:null,mode:'all'});}
 export function stopAI(){session.controller?.abort();session.controller=null;stopRulesAI();stopComplaintAI();stopSupportAI();}
 export function aiSection(){return `<div class="stack" id="ai-connection" aria-label="AI Connection">
-<section class="card stack"><h3>AI Workspace & Productivity · единая среда</h3><p class="subtle">Чат, ответы по источникам, анализ жалоб и техподдержка используют действующий шлюз. История и черновики сохраняются локально только после нажатия. Переключение режима не отправляет данные и не заменяет подтверждение каждого запроса.</p><div class="row" id="ai-workspace-tabs"><button type="button" class="button secondary" data-ai-mode="all">Все инструменты</button><button type="button" class="button secondary" data-ai-mode="chat">Чат</button><button type="button" class="button secondary" data-ai-mode="rules">Правила</button><button type="button" class="button secondary" data-ai-mode="complaint">Жалобы</button><button type="button" class="button secondary" data-ai-mode="support">Поддержка</button><button type="button" class="button secondary" data-ai-mode="saved">Контексты и черновики</button></div></section>
+<section class="card stack"><h3>AI Assistant & Support · 2.0.0</h3><p class="subtle">Чат, ответы по источникам, анализ жалоб и техподдержка используют действующий шлюз. История и черновики сохраняются локально только после нажатия. Переключение режима не отправляет данные и не заменяет подтверждение каждого запроса.</p><div class="row" id="ai-workspace-tabs"><button type="button" class="button secondary" data-ai-mode="all">Все инструменты</button><button type="button" class="button secondary" data-ai-mode="chat">Чат</button><button type="button" class="button secondary" data-ai-mode="rules">Правила</button><button type="button" class="button secondary" data-ai-mode="complaint">Жалобы</button><button type="button" class="button secondary" data-ai-mode="support">Поддержка</button><button type="button" class="button secondary" data-ai-mode="saved">Контексты и черновики</button></div></section>
 <section class="card stack"><h3>OpenAI · AI Connection & Privacy Core</h3><p class="subtle">Облачный AI выключен по умолчанию. Работает через необязательный локальный шлюз ${e(AI_GATEWAY)}. Ключ OpenAI хранится только в окружении шлюза; ответ передаётся потоково. Локальный помощник в разделе «Поиск и помощник» доступен без подключения.</p>
 <div class="row"><label class="check"><input id="ai-enabled" type="checkbox" aria-label="Включить облачный AI">Включить AI для активного профиля</label><span id="ai-status" class="subtle" role="status">Проверка настроек…</span></div>
 <p class="subtle">Для подключения запустите <code>node ai-gateway/server.mjs</code> и введите отдельный токен шлюза. Разрешение доступа к 127.0.0.1 запрашивается только при включении AI. Учётные данные и текст диалога не сохраняются в резервной копии.</p>
@@ -22,7 +22,7 @@ export function aiSection(){return `<div class="stack" id="ai-connection" aria-l
 <div class="row"><button type="submit" class="button primary" id="ai-send">Отправить запрос</button><button type="button" class="button secondary" id="ai-cancel" disabled>Отменить</button></div></form>
 <p id="ai-live-status" role="status" aria-live="polite" class="subtle"></p><div id="ai-replies" class="stack" aria-live="polite"></div>
 </section>${rulesAISection()}${complaintAISection()}${supportAISection()}${aiWorkspaceSection()}</div>`;}
-function messageDOM(container){container.replaceChildren();for(const item of session.messages){const box=document.createElement('article');box.className='card stack';const heading=document.createElement('strong');heading.textContent=item.role==='user'?'Отправленный вопрос':'OpenAI · предварительный ответ';const pre=document.createElement('pre');pre.className='ai-response';pre.textContent=item.text;box.append(heading,pre);container.append(box);} }
+function messageDOM(container,items=session.messages){container.replaceChildren();for(const item of items){const box=document.createElement('article');box.className='card stack';const heading=document.createElement('strong');heading.textContent=item.role==='user'?'Отправленный вопрос':'OpenAI · предварительный ответ';const pre=document.createElement('pre');pre.className='ai-response';pre.textContent=item.text;box.append(heading,pre);container.append(box);} }
 export async function mountAI(root,state,feedback){
  if(!root)return;reset(state.activeProfileId);session.root=root;
  const enabled=root.querySelector('#ai-enabled'),status=root.querySelector('#ai-status'),live=root.querySelector('#ai-live-status'),token=root.querySelector('#ai-token'),question=root.querySelector('#ai-question'),preview=root.querySelector('#ai-preview'),check=root.querySelector('#ai-confirm'),send=root.querySelector('#ai-send'),cancel=root.querySelector('#ai-cancel'),connect=root.querySelector('#ai-connect');
@@ -30,8 +30,8 @@ export async function mountAI(root,state,feedback){
  // Existing tools stay mounted; only the selected working panel is displayed.
  const panes={chat:root.querySelector('#ai-chat-panel'),rules:root.querySelector('#ai-rules-root'),complaint:root.querySelector('#ai-complaint-root'),support:root.querySelector('#ai-support-root'),saved:root.querySelector('#ai-workspace-root')};
  const selectMode=mode=>{for(const [key,pane] of Object.entries(panes))if(pane)pane.hidden=mode!=='all'&&mode!==key;for(const b of root.querySelectorAll('[data-ai-mode]'))b.setAttribute('aria-pressed',String(b.dataset.aiMode===mode));};
- for(const b of root.querySelectorAll('[data-ai-mode]'))b.addEventListener('click',()=>selectMode(b.dataset.aiMode));
- selectMode('all');
+ for(const b of root.querySelectorAll('[data-ai-mode]'))b.addEventListener('click',()=>{session.mode=b.dataset.aiMode;selectMode(session.mode);});
+ selectMode(session.mode);
  const preparedQuestion=()=>[question.value.trim(),session.context].filter(Boolean).join('\n\n---\nРабочий контекст (недоверенные локальные данные, только для справки):\n');
  const updatePreview=()=>{check.checked=false;try{const q=preparedQuestion();preview.textContent=q?(session.messages.length?JSON.stringify(workspaceChatPayload(q,session.messages),null,2):assertQuestion(q)):'Запрос не введён.';}catch(err){preview.textContent='Запрос невозможно отправить: '+err.message;}};
  const aiCase=new URLSearchParams(location.search).get('aiCase');if(aiCase)prefillAIWorkspace('case',aiCase);
@@ -71,11 +71,22 @@ export async function mountAI(root,state,feedback){
    const history=chatHistory(session.messages);
    const sentPreview=history.length?JSON.stringify(workspaceChatPayload(q,history),null,2):q;
    if(preview.textContent!==sentPreview)throw Error('История или контекст изменились — перепроверьте данные');
-   session.messages.push({role:'user',text:q});const response={role:'assistant',text:''};session.messages.push(response);const messages=root.querySelector('#ai-replies');messageDOM(messages);live.textContent='Запрос отправлен. Ответ поступает…';
-   const streamOptions={signal:controller.signal,onDelta:(_chunk,full)=>{response.text=full;if(root.isConnected&&session.profileId===state.activeProfileId)messages.lastElementChild?.querySelector('pre')?.replaceChildren(document.createTextNode(full));},onComplete:(p)=>{live.textContent=`Ответ завершён. Токены: вход ${p.usage?.inputTokens??'—'}, выход ${p.usage?.outputTokens??'—'}.`;}};
-   await (history.length?streamWorkspaceAI(q,session.token,history,streamOptions):streamAI(q,session.token,streamOptions));
+   // Keep the in-flight reply OUT of persistent chat. A cancelled or truncated
+   // stream must never become a source for the next AI request or saved history.
+   const before=session.messages.map(m=>({...m})),response={role:'assistant',text:''};
+   const messages=root.querySelector('#ai-replies');
+   messageDOM(messages,[...before,{role:'user',text:q},response]);
+   const isCurrent=()=>session.controller===controller&&session.root===root&&session.profileId===state.activeProfileId&&root.isConnected;
+   live.textContent='Запрос отправлен. Ответ поступает…';
+   let usage=null;
+   const streamOptions={signal:controller.signal,onDelta:(_chunk,full)=>{response.text=full;if(isCurrent())messages.lastElementChild?.querySelector('pre')?.replaceChildren(document.createTextNode(full));},onComplete:p=>{usage=p.usage;}};
+   const result=await (history.length?streamWorkspaceAI(q,session.token,history,streamOptions):streamAI(q,session.token,streamOptions));
+   if(!isCurrent()||controller.signal.aborted)throw new DOMException('AI request aborted','AbortError');
+   session.messages=[...before,{role:'user',text:q},{role:'assistant',text:result}].slice(-40);
+   messageDOM(messages);
+   live.textContent=`Ответ завершён. Токены: вход ${usage?.inputTokens??'—'}, выход ${usage?.outputTokens??'—'}.`;
    check.checked=false;question.value='';session.context='';session.contextRef=null;preview.textContent='Запрос не введён.';
-  }catch(err){live.textContent=err.name==='AbortError'?'Запрос отменён':`Ошибка AI: ${err.message}`;if(session.messages.at(-1)?.role==='assistant'&&!session.messages.at(-1).text)session.messages.pop();messageDOM(root.querySelector('#ai-replies'));}
-  finally{session.controller=null;send.disabled=false;cancel.disabled=true;connect.disabled=false;}
+  }catch(err){if(session.root===root&&session.profileId===state.activeProfileId){live.textContent=err.name==='AbortError'?'Запрос отменён; неполный ответ не сохранён':`Ошибка AI: ${err.message}`;messageDOM(root.querySelector('#ai-replies'));}}
+  finally{if(session.root===root){session.controller=null;send.disabled=false;cancel.disabled=true;connect.disabled=false;}}
  });
 }

@@ -8,7 +8,7 @@ const el=(tag,text,cls)=>{const x=document.createElement(tag);if(text!==undefine
 let preset=null;
 export function prefillAIWorkspace(kind,refId){if(!['rule','source','case'].includes(kind)||typeof refId!=='string')return;preset={kind,refId};}
 export function aiWorkspaceSection(){return `<section class="card stack" id="ai-workspace-root" aria-label="AI Workspace & Productivity">
-<h3>AI Workspace & Productivity · 1.9.5</h3><p class="subtle">Рабочие контексты сохраняются локально как ссылки на ваши записи. История AI и черновики сохраняются только по вашему нажатию. Токен шлюза, API-ключ, согласия и приватные файлы не записываются в историю или Backup v17.</p>
+<h3>AI Assistant & Support · 2.0.0</h3><p class="subtle">Рабочие контексты сохраняются локально как ссылки на ваши записи. История AI и черновики сохраняются только по вашему нажатию. Токен шлюза, API-ключ, согласия и приватные файлы не записываются в историю или Backup v18. Диалоги входят в Backup v18 исключительно при отдельном выборе.</p>
 <div class="row"><button type="button" class="button secondary" id="ai-workspace-save-chat">Сохранить текущий диалог</button><button type="button" class="button secondary" id="ai-workspace-new-chat">Новый диалог</button></div>
 <div class="stack"><h4>Сохранённые диалоги</h4><div id="ai-workspace-conversations" class="stack"></div></div>
 <div class="divider"></div><h4>Контекст из рабочих модулей</h4><p class="subtle">В контексте хранятся только тип и ID. После выбора текст повторно читается из актуального профиля и отображается перед отправкой. Выберите конкретную запись и нажмите «Применить»; автоматически в AI ничего не передаётся.</p>

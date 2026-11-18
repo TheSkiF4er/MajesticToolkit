@@ -35,7 +35,7 @@ test('read-only local diagnostics report bounded statuses; secrets never present
  const mock={runtime:{getManifest:()=>({version:'1.9.4'})},storage:{local:{get:async()=>({'mtAiConnectionV191':{personal:'secret'}})}},permissions:{contains:async({origins})=>!origins[0].includes('russia.online')}};
  const data=await runSupportDiagnostics({apiImpl:mock,indexedDBImpl:{open(){}},storageManager:{estimate:async()=>({quota:100,usage:94})},includeGateway:true,token:'TOKENSECRET',health:async()=>{throw Error('Bearer TOKENSECRET denied');}});
  assert.equal(data.version,'1.9.4');assert.equal(data.checks.find(x=>x.id==='indexedDB').status,'ok');assert.equal(data.checks.find(x=>x.id==='storageQuota').status,'warn');assert.equal(data.checks.find(x=>x.id==='forumRussia').status,'warn');assert.equal(data.checks.find(x=>x.id==='gatewayConnection').status,'warn');
- assert.doesNotMatch(supportReport({category:'ai',version:data.version,checks:data.checks.map(({id,status})=>({id,status}))}),/TOKENSECRET|personal|94/);
+ assert.doesNotMatch(supportReport({category:'ai',version:data.version,checks:data.checks.map(({id,status})=>({id,status}))}),/TOKENSECRET|personal|"quota"|"usage"/);
 });
 test('AI support gateway actually forwards strict diagnostics through OpenAI Responses SSE',async()=>{
  const mock=upstream(),g=await server(mock);

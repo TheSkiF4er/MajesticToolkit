@@ -1,8 +1,8 @@
 /** Crash-survivable rollback of extension-owned local records. Never includes OAuth/session tokens. */
 export const RECOVERY_KEY = 'majesticToolkitRecoveryV1';
 export const RECOVERY_LIMIT = 20 * 1024 * 1024;
-const OWNED_KEYS = new Set(['mtPunishmentRegistryV1','mtSectionMonitorV1','rpNexusStateV1', 'majesticToolkitRulesV1', 'majesticToolkitSourceLibraryV154', 'majesticToolkitProductivityV9', 'majesticToolkit:externalLinks:v8', 'majesticToolkitMonitorV12', 'majesticToolkitKnowledgeV13']);
-const OWNED_PREFIXES = ['mtModerationOpsV175:', 'mtPunishmentCalculatorV1:', 'mtPunishmentDraftV1:', 'rpnForumTemplateV2:', 'rpnComplaintV3:', 'rpnEconomyV4:', 'majesticLawV5:', 'majesticGovernmentV6:', 'majesticDocumentV7:', 'majesticToolkitXfNavV11:'];
+const OWNED_KEYS = new Set(['mtAiConnectionV191','mtPunishmentRegistryV1','mtSectionMonitorV1','rpNexusStateV1', 'majesticToolkitRulesV1', 'majesticToolkitSourceLibraryV154', 'majesticToolkitProductivityV9', 'majesticToolkit:externalLinks:v8', 'majesticToolkitMonitorV12', 'majesticToolkitKnowledgeV13']);
+const OWNED_PREFIXES = ['mtModerationOpsV175:', 'mtPunishmentCalculatorV1:', 'mtPunishmentDraftV1:', 'rpnForumTemplateV2:', 'rpnComplaintV3:', 'rpnEconomyV4:', 'majesticLawV5:', 'majesticGovernmentV6:', 'majesticDocumentV7:', 'majesticToolkitXfNavV11:', 'mtAiWorkspaceV195:'];
 export const isOwnedKey = key => OWNED_KEYS.has(key) || OWNED_PREFIXES.some(prefix => key.startsWith(prefix));
 const serialize = value => JSON.stringify(value);
 const utf8 = value => new TextEncoder().encode(value);
