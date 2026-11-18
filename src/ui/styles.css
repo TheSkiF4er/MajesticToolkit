@@ -315,3 +315,13 @@ body[data-mode=sidebar] .ws-layout .side{height:auto;position:static;overflow:vi
 .judicial-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
 .judicial-form-grid .field{min-width:0}
 @media(max-width:640px){.judicial-form-grid{grid-template-columns:minmax(0,1fr)}.judicial-court{margin-inline-start:calc(var(--agency-depth,0)*8px)}.judicial-actions{justify-content:flex-start}}
+
+/* Court Case Management 2.0.5 — responsive case registry and audit detail. */
+.court-case-panel,.court-case-detail{min-width:0}
+.court-case-detail{border:1px solid var(--stroke);border-radius:12px;padding:16px;margin-top:14px;overflow-wrap:anywhere}
+.court-case-detail>h4{margin-top:14px}
+.court-case-detail .row{flex-wrap:wrap}
+.court-case-detail details{border-top:1px solid var(--stroke);padding-top:12px}
+.court-case-history{padding-inline-start:23px;max-height:320px;overflow:auto;font-size:.9rem;line-height:1.6;overflow-wrap:anywhere}
+.court-case-row strong{overflow-wrap:anywhere}
+@media(max-width:640px){.court-case-detail{padding:10px}.court-case-detail .justice-result{align-items:stretch}.court-case-detail .row{justify-content:flex-start}}

@@ -5,7 +5,8 @@ import {governmentRecords,governmentSection} from './government-page.mjs';
 import {lawRecords,lawSection} from './law-page.mjs';
 import {documentRecords,documentSection} from './document-page.mjs';
 import {courtRegistrySection} from './judicial-page.mjs';
-const LABELS={overview:'Обзор',courts:'Суды',agencies:'Ведомства',law:'Законодательство',decisions:'Решения',documents:'Документы'};
+import {courtCaseSection} from './court-case-page.mjs';
+const LABELS={overview:'Обзор',courts:'Суды',cases:'Судебные дела',agencies:'Ведомства',law:'Законодательство',decisions:'Решения',documents:'Документы'};
 let ui={tabs:{},recent:[]},query='',cache=null;
 function snapshot(state){
   const gov=governmentRecords(),laws=lawRecords(),docs=documentRecords(),profileId=state.activeProfileId;
@@ -25,9 +26,10 @@ export function justiceSearchHTML(state){const snap=snapshot(state);const hits=j
 function overview(state,snap){
   const recent=ui.recent.filter(r=>r.profileId===state.activeProfileId).map(r=>snap.rows.find(x=>x.kind===r.kind&&x.id===r.id)).filter(Boolean).slice(0,8);
   return `<section class="justice-stats" aria-label="Сводка Government & Justice">
-   ${[['Суды',snap.courts.length,'courts'],['Ведомства',snap.departments.length,'agencies'],['Нормативные акты',snap.books.length,'law'],['Решения',snap.decisions.length,'decisions'],['Документы',snap.documents.length,'documents'],['Шаблоны',snap.documentTemplates.length+snap.governmentTemplates.length,'documents']].map(([label,count,tab])=>`<button type="button" class="justice-stat" data-justice-action="tab" data-tab="${tab}"><span class="subtle">${label}</span><strong>${count}</strong></button>`).join('')}
+   ${[['Суды',snap.courts.length,'courts'],['Судебные дела',snap.cases.length,'cases'],['Ведомства',snap.departments.length,'agencies'],['Нормативные акты',snap.books.length,'law'],['Решения',snap.decisions.length,'decisions'],['Документы',snap.documents.length,'documents'],['Шаблоны',snap.documentTemplates.length+snap.governmentTemplates.length,'documents']].map(([label,count,tab])=>`<button type="button" class="justice-stat" data-justice-action="tab" data-tab="${tab}"><span class="subtle">${label}</span><strong>${count}</strong></button>`).join('')}
    </section><section class="card stack"><h3>Быстрые действия</h3><div class="row justice-actions">
     <button type="button" class="button primary" data-government-action="new-department">+ Ведомство / суд</button>
+    <button type="button" class="button secondary" data-court-case-action="new" ${snap.courtRegistry.some(x=>x.status==='active')?'':'disabled title="Сначала создайте действующий суд"'}>+ Судебное дело</button>
     <button type="button" class="button secondary" data-government-action="new-decision" ${snap.departments.length?'':'disabled title="Сначала создайте ведомство"'}>+ Решение</button>
     <button type="button" class="button secondary" data-law-action="new-book">+ Закон</button>
     <button type="button" class="button secondary" data-document-action="new-document">+ Документ</button>
@@ -41,9 +43,9 @@ function overview(state,snap){
 function courts(state,snap){return courtRegistrySection(state,governmentRecords());}
 function documentTemplates(snap){return `<section class="card stack"><div class="row spread"><h3>Процессуальные шаблоны Government Tools (${snap.governmentTemplates.length})</h3><button class="button secondary" data-government-action="new-template">+ Процессуальный шаблон</button></div>${snap.governmentTemplates.length?snap.governmentTemplates.map(t=>`<article class="justice-result"><div><strong>${e(t.title)}</strong><p class="subtle">${e(t.category)} · ${e(snap.departments.find(d=>d.id===t.departmentId)?.name||'Все ведомства')}</p></div><button type="button" class="button secondary" data-government-action="edit-template" data-id="${e(t.id)}">Редактировать</button></article>`).join(''):'<p class="empty">Процессуальных шаблонов пока нет.</p>'}</section>`;}
 export function governmentJusticeSection(state){const snap=snapshot(state),tab=currentJusticeTab(state.activeProfileId);
- return `<div class="stack justice-workspace"><section class="card stack justice-header"><div class="row spread"><div><h3>Government & Justice · 2.0.4</h3><p class="subtle">${e(state.profiles.find(p=>p.id===state.activeProfileId)?.name||'Профиль')} · Единое рабочее пространство Law Codex, Government Tools и Document Studio.</p></div><span class="tag">Локально · ${e(state.profiles.find(p=>p.id===state.activeProfileId)?.server||'')}</span></div>
+ return `<div class="stack justice-workspace"><section class="card stack justice-header"><div class="row spread"><div><h3>Government & Justice · 2.0.5</h3><p class="subtle">${e(state.profiles.find(p=>p.id===state.activeProfileId)?.name||'Профиль')} · Единое рабочее пространство Law Codex, Government Tools и Document Studio.</p></div><span class="tag">Локально · ${e(state.profiles.find(p=>p.id===state.activeProfileId)?.server||'')}</span></div>
  <nav class="justice-tabs" role="tablist" aria-label="Разделы Government & Justice">${JUSTICE_TABS.map(id=>`<button type="button" role="tab" aria-selected="${id===tab}" class="button ${id===tab?'primary':'secondary'}" data-justice-action="tab" data-tab="${id}">${e(LABELS[id])}</button>`).join('')}</nav></section>
  <div role="tabpanel" aria-label="${e(LABELS[tab])}" class="stack" id="justice-panel">
- ${tab==='overview'?overview(state,snap):tab==='courts'?courts(state,snap):tab==='agencies'?governmentSection(state,'departments'):tab==='law'?lawSection(state):tab==='decisions'?`<section class="card"><p class="subtle">Это существующие ведомственные решения Government Tools, а не отдельный судебный реестр дел (запланирован на 2.0.5).</p></section>${governmentSection(state,'decisions')}`:documentTemplates(snap)+documentSection(state)}
+ ${tab==='overview'?overview(state,snap):tab==='courts'?courts(state,snap):tab==='cases'?courtCaseSection(state,governmentRecords(),documentRecords()):tab==='agencies'?governmentSection(state,'departments'):tab==='law'?lawSection(state):tab==='decisions'?`<section class="card"><p class="subtle">Здесь отображаются ведомственные решения Government Tools. Судебные дела доступны в отдельной вкладке.</p></section>${governmentSection(state,'decisions')}`:documentTemplates(snap)+documentSection(state)}
  </div></div>`;
 }

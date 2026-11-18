@@ -1,3 +1,5 @@
+import {createJudicialCase,editJudicialCase,changeCaseStatus,mutateCaseParticipants,mutateCaseDocuments,noteJudicialCase,validateCaseRelations} from './judicial-case-core.mjs';
+import {listDocumentRecords} from './document-store.mjs';
 import {api} from './browser.mjs';
 import { GOV_PREFIX,GOV_LIMITS,cleanGovernment,validateGovernment,createDepartment,editDepartment,createTemplate,editTemplate,createDecision,editDecision,finalizeDecision,cloneDecision,createAgencyUnit,editAgencyUnit,createAgencyPosition,editAgencyPosition,createAgencyCompetence,editAgencyCompetence,createAgencyAssignment,editAgencyAssignment,createCourt,editCourt,createCourtJurisdiction,editCourtJurisdiction } from './government-core.mjs';
 let chain=Promise.resolve();const enqueue=fn=>{const p=chain.then(fn);chain=p.catch(()=>{});return p;};
@@ -18,6 +20,16 @@ export const addCourt=(profile,fields)=>enqueue(()=>insert(createCourt(profile,f
 export const updateCourt=(id,fields)=>enqueue(async()=>update(editCourt(await getGovernment(id),fields)));
 export const addCourtJurisdiction=(profile,fields)=>enqueue(()=>insert(createCourtJurisdiction(profile,fields)));
 export const updateCourtJurisdiction=(id,fields)=>enqueue(async()=>update(editCourtJurisdiction(await getGovernment(id),fields)));
+// All case writes use the Government Tools queue; multi-tab updates are refreshed
+// from storage before mutation and every change appends a validated audit event.
+async function caseInsert(profile,fields){const row=createJudicialCase(profile,fields),records=await listGovernment();validateCaseRelations(row,[...records,row],await listDocumentRecords());return insert(row);}
+async function caseUpdate(id,operation){const current=await getGovernment(id);if(current.type!=='case')throw Error('Судебное дело не найдено');const row=operation(current),records=await listGovernment();validateCaseRelations(row,records.map(x=>x.id===id?row:x),await listDocumentRecords());if(row===current)return row;return update(row);}
+export const addJudicialCase=(profile,fields)=>enqueue(()=>caseInsert(profile,fields));
+export const editCourtCase=(id,fields)=>enqueue(()=>caseUpdate(id,r=>editJudicialCase(r,fields)));
+export const setCourtCaseStatus=(id,status,reason)=>enqueue(()=>caseUpdate(id,r=>changeCaseStatus(r,status,reason)));
+export const mutateCourtCaseParticipant=(id,action,fields)=>enqueue(()=>caseUpdate(id,r=>mutateCaseParticipants(r,action,fields)));
+export const mutateCourtCaseDocument=(id,action,fields)=>enqueue(()=>caseUpdate(id,r=>mutateCaseDocuments(r,action,fields)));
+export const addCourtCaseNote=(id,text)=>enqueue(()=>caseUpdate(id,r=>noteJudicialCase(r,text)));
 export const addDepartment=(profile,fields)=>enqueue(()=>insert(createDepartment(profile,fields)));
 export const updateDepartment=(id,fields)=>enqueue(async()=>update(editDepartment(await getGovernment(id),fields)));
 export const addTemplate=(profile,fields)=>enqueue(()=>insert(createTemplate(profile,fields)));
@@ -26,7 +38,9 @@ export const addDecision=(profile,fields,laws)=>enqueue(()=>insert(createDecisio
 export const updateDecision=(id,fields,laws)=>enqueue(async()=>update(editDecision(await getGovernment(id),fields,laws)));
 export const approveDecision=id=>enqueue(async()=>update(finalizeDecision(await getGovernment(id))));
 export const duplicateDecision=id=>enqueue(async()=>insert(cloneDecision(await getGovernment(id))));
-export function deleteGovernment(id){return enqueue(async()=>{const r=await getGovernment(id);const entries=await listGovernment();if(r.type==='court'&&entries.some(x=>x.type==='jurisdiction'&&x.courtId===id))throw Error('Сначала удалите правила подсудности суда');if(r.type==='department'){
+export function deleteGovernment(id){return enqueue(async()=>{const r=await getGovernment(id);const entries=await listGovernment();if(r.type==='court'&&entries.some(x=>x.type==='jurisdiction'&&x.courtId===id))throw Error('Сначала удалите правила подсудности суда');
+ if(r.type==='case')throw Error('Судебное дело можно архивировать, но нельзя удалить вместе с журналом действий');if(['decision','template'].includes(r.type)&&entries.some(x=>x.type==='case'&&x.documents.some(d=>d.id===id&&d.kind===(r.type==='decision'?'decision':'template'))))throw Error('Сначала отвяжите документ от судебного дела');
+ if(r.type==='department'){
   if(entries.some(x=>x.departmentId===id))throw Error('Сначала удалите или перенесите связанные решения и шаблоны');
   const stored=await api.storage.local.get(null);
   if(Object.entries(stored).some(([key,doc])=>key.startsWith('majesticDocumentV7:') && doc?.profileId===r.profileId && (doc?.type==='template'&&doc.departmentId===id || doc?.type==='document'&&Array.isArray(doc.versions)&&doc.versions.some(v=>v.departmentId===id)))) throw Error('Сначала удалите или перенесите связанные документы Document Studio');

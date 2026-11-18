@@ -1,7 +1,8 @@
 // MajesticToolkit 0.6.0 — local, server-scoped Government Tools.
 // Every decision retains its source law edition and quoted article at creation time.
+import {cleanJudicialCase,validateCaseRelations,CASE_LIMITS} from './judicial-case-core.mjs';
 export const GOV_PREFIX = 'majesticGovernmentV6:';
-export const GOV_LIMITS = Object.freeze({ records: 1600, departments: 80, templates: 300, decisions: 1200, references: 25, units: 320, positions: 400, competences: 500, assignments: 600, courts: 80, jurisdictions: 600 });
+export const GOV_LIMITS = Object.freeze({ records: 1600, departments: 80, templates: 300, decisions: 1200, references: 25, units: 320, positions: 400, competences: 500, assignments: 600, courts: 80, jurisdictions: 600, cases: CASE_LIMITS.cases });
 const now = () => new Date().toISOString();
 const uid = () => globalThis.crypto?.randomUUID?.() ?? `gov-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 function text(v, name, max, optional = false) {if(typeof v !== 'string') throw Error(`Неверный тип: ${name}`); const s=v.trim(); if(s.length>max||(!optional&&!s)) throw Error(`Заполните «${name}» (до ${max} символов)`); return s;}
@@ -30,6 +31,7 @@ export function cleanPenalty(raw){requiredObject(raw);const kind=text(raw.kind,'
 export function penaltyTotals(penalties){const rows=penalties.map(cleanPenalty);return {fine:rows.reduce((n,x)=>n+x.amount,0),minutes:rows.reduce((n,x)=>n+x.minutes,0)};}
 export function formatPenalties(penalties,references){const rows=penalties.map(cleanPenalty);if(!rows.length)return '';const lines=rows.map((row,i)=>{const ref=references.find(r=>referenceId(r)===row.referenceId);if(!ref)throw Error('Статья для санкции не найдена');return `${i+1}. ${PENALTY_TYPES[row.kind]}${row.kind==='fine'?`: $${row.amount.toLocaleString('ru-RU')}`:''}${row.kind==='custody'?`: ${row.minutes} мин.`:''} — ${ref.bookTitle}, ст. ${ref.articleKey}${row.details?' ('+row.details+')':''}`;});const totals=penaltyTotals(rows);return 'САНКЦИИ ПО СТАТЬЯМ\n'+lines.join('\n')+`\nИтого: штраф $${totals.fine.toLocaleString('ru-RU')}, срок ${totals.minutes} мин. (параметры введены пользователем)`;}
 export function cleanGovernment(raw){requiredObject(raw);const base={id:identifier(raw.id),profileId:identifier(raw.profileId),createdAt:time(raw.createdAt),updatedAt:time(raw.updatedAt)};
+ if(raw.type==='case')return cleanJudicialCase(raw);
  if(raw.type==='department')return {...base,type:'department',name:text(raw.name,'Ведомство',110),code:text(raw.code,'Сокращение',35),jurisdiction:text(raw.jurisdiction??'','Юрисдикция',120,true),officer:text(raw.officer,'ФИО',110),position:text(raw.position,'Должность',110),...(Object.hasOwn(raw,'description')?{description:text(raw.description??'','Описание ведомства',2000,true)}:{}),...(Object.hasOwn(raw,'status')?{status:agencyStatus(raw.status)}:{})};
  if(raw.type==='unit')return {...base,type:'unit',departmentId:identifier(raw.departmentId),parentUnitId:raw.parentUnitId?identifier(raw.parentUnitId):'',name:text(raw.name,'Подразделение',120),code:shortCode(raw.code,'Код подразделения'),description:text(raw.description??'','Описание подразделения',2000,true),status:agencyStatus(raw.status)};
  if(raw.type==='competence')return {...base,type:'competence',departmentId:identifier(raw.departmentId),code:shortCode(raw.code,'Код компетенции'),title:text(raw.title,'Компетенция',140),description:text(raw.description,'Описание полномочия',3000),legalBasis:text(raw.legalBasis??'','Правовое основание',1500,true),status:agencyStatus(raw.status)};
@@ -51,11 +53,12 @@ export function cleanGovernment(raw){requiredObject(raw);const base={id:identifi
 }
 export function validateGovernment(raw,profileIds){if(!Array.isArray(raw)||raw.length>GOV_LIMITS.records)throw Error('Слишком много записей Government Tools');const ps=profileIds?new Set(profileIds):null;const ids=new Set();const records=raw.map(cleanGovernment);for(const r of records){if(ids.has(r.id))throw Error('Дублируется ID записи');ids.add(r.id);if(ps&&!ps.has(r.profileId))throw Error('Запись относится к отсутствующему профилю');}
  const departments=new Map(records.filter(x=>x.type==='department').map(x=>[x.id,x]));
- if(departments.size>GOV_LIMITS.departments||Object.entries({template:GOV_LIMITS.templates,decision:GOV_LIMITS.decisions,unit:GOV_LIMITS.units,position:GOV_LIMITS.positions,competence:GOV_LIMITS.competences,assignment:GOV_LIMITS.assignments,court:GOV_LIMITS.courts,jurisdiction:GOV_LIMITS.jurisdictions}).some(([t,max])=>records.filter(x=>x.type===t).length>max))throw Error('Превышен лимит Government Tools');
+ if(departments.size>GOV_LIMITS.departments||Object.entries({template:GOV_LIMITS.templates,decision:GOV_LIMITS.decisions,unit:GOV_LIMITS.units,position:GOV_LIMITS.positions,competence:GOV_LIMITS.competences,assignment:GOV_LIMITS.assignments,court:GOV_LIMITS.courts,jurisdiction:GOV_LIMITS.jurisdictions,case:GOV_LIMITS.cases}).some(([t,max])=>records.filter(x=>x.type===t).length>max))throw Error('Превышен лимит Government Tools');
  const byId=new Map(records.map(r=>[r.id,r]));
  const unique=new Set();
  for(const r of records){
   if(r.departmentId){const dep=departments.get(r.departmentId);if(!dep||dep.profileId!==r.profileId)throw Error('Ведомство отсутствует или принадлежит другому профилю');}
+  if(r.type==='case'){validateCaseRelations(r,records);const key=`case:${r.profileId}:${r.number.toLocaleLowerCase('ru')}`;if(unique.has(key))throw Error('Номер судебного дела уже занят в этом профиле');unique.add(key);}
   if(r.type==='unit'){
    if(r.parentUnitId){const parent=byId.get(r.parentUnitId);if(parent?.type!=='unit'||parent.profileId!==r.profileId||parent.departmentId!==r.departmentId)throw Error('Родительское подразделение отсутствует или принадлежит другому ведомству');}
    const key=`unit:${r.departmentId}:${r.code.toLocaleLowerCase('ru')}`;if(unique.has(key))throw Error('Код подразделения уже занят');unique.add(key);

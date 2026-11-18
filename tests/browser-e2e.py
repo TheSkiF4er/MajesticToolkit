@@ -1096,7 +1096,7 @@ async def experience_workspace(browser):
     # 2.0.1 Government & Justice: real browser CRUD, search, tab persistence and profile isolation.
     await page.locator('.nav [data-view=justice]').click()
     await page.locator('.justice-tabs').wait_for(timeout=7000)
-    assert await page.locator('.justice-stat').count()==6
+    assert await page.locator('.justice-stat').count()==7
     await page.locator('#justice-panel [data-government-action=new-department]').click()
     await page.locator('#government-dialog').wait_for()
     await page.locator('#government-form [name=name]').fill('QA Окружной суд')
