@@ -40,6 +40,8 @@ import '../lib/complaints-core.js';
 import '../lib/forum-core.js';
 import {economySection,refreshEconomy,loadEconomyWorkspace,handleEconomyAction,handleEconomySubmit,setEconomyFilter,setEconomySearch,setEconomyLookup,economyLookupHTML,forgetEconomyProfile} from './economy-page.mjs';
 import { replaceEconomy, listEconomy as listEconomyRecords } from '../lib/economy-store.mjs';
+import {listMarketplace,replaceMarketplace} from '../lib/marketplace-store.mjs';
+import {handleMarketplaceAction,handleMarketplaceSubmit,setMarketplaceQuery,setMarketplaceArchived} from './marketplace-page.mjs';
 import {exportPunishmentData,replacePunishmentData,validatePunishmentBackup} from '../lib/punishment-backup.mjs';
 import {inventoryAllVault,makePortableBackup,parsePortableBackup} from '../lib/dossier-backup.mjs';
 import {exportAIWorkspaces,replaceAIWorkspaces,disableAIOnRestore} from '../lib/ai-backup.mjs';
@@ -157,7 +159,7 @@ async function refreshAllModules() {
 }
 function renderPopup() {
   const p = getActiveProfile(state);
-  return `<div class="popup-shell stack ws-popup"><div class="brand"><span class="logo" aria-label="Логотип MajesticToolkit">MT</span><div><h1>MajesticToolkit</h1><p>Economy & Crime · 2.1.1</p></div></div><div class="card stack"><div class="row spread"><strong>Активный профиль</strong>${tag(projectLabel(p.project))}</div><select aria-label="Выбрать профиль" id="popup-profile">${state.profiles.map(x => `<option value="${e(x.id)}" ${x.id === state.activeProfileId ? 'selected' : ''}>${e(x.name)} · ${e(x.server)}</option>`).join('')}</select><p class="subtle">${e(p.server)}</p>${p.forumUrl ? `<button class="button secondary" data-url="${e(p.forumUrl)}">Открыть форум ↗</button>` : ''}</div><div class="row"><button class="button primary" data-action="panel">Боковая панель</button><button class="button secondary" data-action="workspace">Рабочее пространство ↗</button></div><div class="ws-popup-grid"><button class="button secondary" data-action="popup-search">Поиск</button><button class="button secondary" data-action="popup-forum">Биндер</button><button class="button secondary" data-action="popup-navigation">Навигация</button><button class="button secondary" data-action="popup-customization">Оформление</button><button class="button secondary" data-action="popup-monitor">Серверы и игроки</button><button class="button secondary" data-action="popup-moderation">Центр модерации</button><button class="button secondary" data-action="popup-complaints">Жалобы</button><button class="button secondary" data-action="popup-timers">Таймеры</button><button class="button secondary" data-action="popup-economy">Экономика</button><button class="button secondary" data-action="popup-rules">Правила проекта</button><button class="button secondary" data-action="popup-law">Законы</button><button class="button secondary" data-action="popup-government">Ведомства</button><button class="button secondary" data-action="popup-justice">Government & Justice</button><button class="button secondary" data-action="popup-documents">Документы</button><button class="button secondary" data-action="popup-integrations">Интеграции</button><button class="button secondary" data-action="popup-knowledge">Центр знаний</button><button class="button secondary" data-action="popup-settings">Настройки и профили</button><button class="button link" data-url="https://docossum.com/">Docossum ↗</button><button class="button link" data-url="https://fletcher-wiki.com/">Fletcher ↗</button></div><footer class="copyright">© <a href="https://github.com/TheSkiF4er" target="_blank" rel="noopener noreferrer">SkiF4er</a></footer></div>`;
+  return `<div class="popup-shell stack ws-popup"><div class="brand"><span class="logo" aria-label="Логотип MajesticToolkit">MT</span><div><h1>MajesticToolkit</h1><p>Economy & Crime · 2.1.2</p></div></div><div class="card stack"><div class="row spread"><strong>Активный профиль</strong>${tag(projectLabel(p.project))}</div><select aria-label="Выбрать профиль" id="popup-profile">${state.profiles.map(x => `<option value="${e(x.id)}" ${x.id === state.activeProfileId ? 'selected' : ''}>${e(x.name)} · ${e(x.server)}</option>`).join('')}</select><p class="subtle">${e(p.server)}</p>${p.forumUrl ? `<button class="button secondary" data-url="${e(p.forumUrl)}">Открыть форум ↗</button>` : ''}</div><div class="row"><button class="button primary" data-action="panel">Боковая панель</button><button class="button secondary" data-action="workspace">Рабочее пространство ↗</button></div><div class="ws-popup-grid"><button class="button secondary" data-action="popup-search">Поиск</button><button class="button secondary" data-action="popup-forum">Биндер</button><button class="button secondary" data-action="popup-navigation">Навигация</button><button class="button secondary" data-action="popup-customization">Оформление</button><button class="button secondary" data-action="popup-monitor">Серверы и игроки</button><button class="button secondary" data-action="popup-moderation">Центр модерации</button><button class="button secondary" data-action="popup-complaints">Жалобы</button><button class="button secondary" data-action="popup-timers">Таймеры</button><button class="button secondary" data-action="popup-economy">Экономика</button><button class="button secondary" data-action="popup-rules">Правила проекта</button><button class="button secondary" data-action="popup-law">Законы</button><button class="button secondary" data-action="popup-government">Ведомства</button><button class="button secondary" data-action="popup-justice">Government & Justice</button><button class="button secondary" data-action="popup-documents">Документы</button><button class="button secondary" data-action="popup-integrations">Интеграции</button><button class="button secondary" data-action="popup-knowledge">Центр знаний</button><button class="button secondary" data-action="popup-settings">Настройки и профили</button><button class="button link" data-url="https://docossum.com/">Docossum ↗</button><button class="button link" data-url="https://fletcher-wiki.com/">Fletcher ↗</button></div><footer class="copyright">© <a href="https://github.com/TheSkiF4er" target="_blank" rel="noopener noreferrer">SkiF4er</a></footer></div>`;
 }
 function render() {
   if (!state) return;
@@ -169,7 +171,7 @@ function render() {
   const title = titles[view];
   const contents = {ai:aiSection,evidence:()=>evidenceKnowledgeSection(state,complaintsSection(state),knowledgeSection(state)),moderation:()=>moderationCenterSection(state,complaintsSection(state)), rules: rulesSection, home: sectionHome, timers: timersSection, search: () => productivitySection(state), forum: () => forumSection(state), monitor: () => monitorSection(state), complaints: () => complaintsSection(state), economy: () => economySection(state), law: () => lawSection(state), justice: () => governmentJusticeSection(state), government: () => governmentSection(state), documents: () => documentSection(state), integrations: () => integrationsSection(state), knowledge:()=>knowledgeSection(state), profiles: sectionProfiles, sites: sectionSites, settings: sectionSettings, backup: sectionBackup };
   const wasOpen=document.querySelector('.ws-dashboard details')?.open; if(wasOpen!==undefined)dashboardConfigOpen=wasOpen;
-  replaceHtml(app, `<div class="layout ws-layout"><aside class="side"><div class="brand"><div class="logo" aria-label="Логотип MajesticToolkit">MT</div><div><h1>MajesticToolkit</h1><p>Economy & Crime · 2.1.1</p></div></div>${profileSelect()}<nav class="nav" aria-label="Разделы">${groupedNav()}</nav><div class="side-footer">Локальные данные · AI только по согласию<div class="copyright">© <a href="https://github.com/TheSkiF4er" target="_blank" rel="noopener noreferrer">SkiF4er</a></div></div></aside><main class="main" id="workspace-main"><header class="topline"><div><p class="eyebrow">MajesticToolkit / ${e(title[0])}</p><h2>${e(title[0])}</h2><p class="lead">${e(title[1])}</p></div><button class="button secondary ws-search" data-action="nav" data-view="search" aria-label="Единый поиск">⌕ Поиск <kbd>Ctrl K</kbd></button></header>${moduleWarning()}${view==='forum'?`<nav class="ws-forum-tabs" aria-label="Разделы форума">${FORUM_TABS.map(([id,label])=>`<button class="button ${forumPane===id?'primary':'secondary'}" data-action="forum-pane" data-pane="${id}" aria-pressed="${forumPane===id}">${label}</button>`).join('')}</nav>`:''}${contents[view]()}</main></div>`);
+  replaceHtml(app, `<div class="layout ws-layout"><aside class="side"><div class="brand"><div class="logo" aria-label="Логотип MajesticToolkit">MT</div><div><h1>MajesticToolkit</h1><p>Economy & Crime · 2.1.2</p></div></div>${profileSelect()}<nav class="nav" aria-label="Разделы">${groupedNav()}</nav><div class="side-footer">Локальные данные · AI только по согласию<div class="copyright">© <a href="https://github.com/TheSkiF4er" target="_blank" rel="noopener noreferrer">SkiF4er</a></div></div></aside><main class="main" id="workspace-main"><header class="topline"><div><p class="eyebrow">MajesticToolkit / ${e(title[0])}</p><h2>${e(title[0])}</h2><p class="lead">${e(title[1])}</p></div><button class="button secondary ws-search" data-action="nav" data-view="search" aria-label="Единый поиск">⌕ Поиск <kbd>Ctrl K</kbd></button></header>${moduleWarning()}${view==='forum'?`<nav class="ws-forum-tabs" aria-label="Разделы форума">${FORUM_TABS.map(([id,label])=>`<button class="button ${forumPane===id?'primary':'secondary'}" data-action="forum-pane" data-pane="${id}" aria-pressed="${forumPane===id}">${label}</button>`).join('')}</nav>`:''}${contents[view]()}</main></div>`);
   if(view==='ai')void mountAI(document.getElementById('ai-connection'),state,feedback).catch(error=>feedback(error.message,true));
   if(view==='complaints'){
     mountSectionMonitor(document.getElementById('section-monitor-root'),state,feedback);
@@ -210,6 +212,7 @@ async function exportBackup() {
   const templates = await listTemplates();
   const cases = await listCases();
   const economy = await listEconomyRecords();
+  const market = await listMarketplace();
   const laws = lawRecords();
   const government = governmentRecords();
   const documents = documentRecords();
@@ -218,14 +221,14 @@ async function exportBackup() {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
-  anchor.download = `majestictoolkit-backup-v2.1.0-${new Date().toISOString().slice(0,10)}.json`;
+  anchor.download = `majestictoolkit-backup-v2.1.2-${new Date().toISOString().slice(0,10)}.json`;
   document.body.appendChild(anchor); anchor.click(); anchor.remove();
   setTimeout(() => URL.revokeObjectURL(url), 30000);
-  feedback(`Копия: ${templates.length} шаблонов, ${cases.length} жалоб, ${economy.length} операций/матчей, ${laws.length} записей законодательства, ${government.length} ведомственных записей, ${documents.length} документов/шаблонов, ${externalLinks().length} внешних закладок`);
+  feedback(`Копия: ${templates.length} шаблонов, ${cases.length} жалоб, ${economy.length} операций/матчей, ${market.length} товаров/наблюдений/объявлений, ${laws.length} записей законодательства, ${government.length} ведомственных записей, ${documents.length} документов/шаблонов, ${externalLinks().length} внешних закладок`);
 }
 async function createBackupText({includeAI=document.getElementById('backup-include-ai')?.checked===true}={}){
   verifyJusticeStorageRows(await api.storage.local.get(null));
-  return makeBackupV19([validateState(state),await listTemplates(),await listCases(),await listEconomyRecords(),lawRecords(),governmentRecords(),documentRecords(),externalLinks(),productivity,await listXenForoLinks(),await loadMonitor(),await loadKnowledge(state.profiles.map(p=>p.id)),globalThis.RPNForumCore.cleanTemplate,await listSources(),await listRules()],await exportPunishmentData(state.profiles),await exportSectionData(state.profiles),await exportRegistryData(state.profiles),await exportModerationOps(state.profiles),await inventoryAllVault(state.profiles),includeAI?await exportAIWorkspaces(state.profiles):null);
+  return makeBackupV19([validateState(state),await listTemplates(),await listCases(),await listEconomyRecords(),lawRecords(),governmentRecords(),documentRecords(),externalLinks(),productivity,await listXenForoLinks(),await loadMonitor(),await loadKnowledge(state.profiles.map(p=>p.id)),globalThis.RPNForumCore.cleanTemplate,await listSources(),await listRules()],await exportPunishmentData(state.profiles),await exportSectionData(state.profiles),await exportRegistryData(state.profiles),await exportModerationOps(state.profiles),await inventoryAllVault(state.profiles),includeAI?await exportAIWorkspaces(state.profiles):null,await listMarketplace());
 }
 async function requestCaseReplacement(cases) {
   const result=await api.runtime.sendMessage({type:'RP_NEXUS_CASE_MUTATE',action:'replace',cases});
@@ -261,7 +264,7 @@ async function executeAction(button) {
     const missing=[...referenced].filter(id=>!known.has(id));
     if(missing.length)throw Error(`Невозможно создать полную переносимую копию: ${missing.length} материалов отсутствуют в Evidence Vault. Восстановите или удалите несвязанные записи перед экспортом.`);
     const {blob,manifest}=await makePortableBackup(json,inventory);
-    const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`majestictoolkit-portable-backup-v2.1.0-${new Date().toISOString().slice(0,10)}.zip`;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);
+    const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`majestictoolkit-portable-backup-v2.1.2-${new Date().toISOString().slice(0,10)}.zip`;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);
     feedback(`Переносимая копия: ${manifest.files.length} файлов Evidence Vault, проверены SHA-256`);return;
   }
   if(action==='ai-support'){navigateTo('ai');render();document.getElementById('ai-support-root')?.scrollIntoView?.({block:'start'});return;}
@@ -312,18 +315,21 @@ async function executeAction(button) {
     const related = previousCases.filter(c => c.profileId === id);
     const previousEconomy = await listEconomyRecords();
     const relatedEconomy = previousEconomy.filter(r => r.profileId === id);
+    const previousMarket = await listMarketplace();
+    const relatedMarket = previousMarket.filter(r=>r.profileId===id);
     const previousLaws = lawRecords().slice();
     const relatedLaws = previousLaws.filter(r=>r.profileId===id);
     const previousGovernment = governmentRecords().slice();
     const previousDocuments = documentRecords().slice();
     const relatedDocuments = previousDocuments.filter(r=>r.profileId===id);
     const relatedGovernment = previousGovernment.filter(r=>r.profileId===id);
-    if (!confirm(`Удалить профиль «${p.name}» и связанных с ним шаблонов: ${dependent.length}, жалоб: ${related.length}, записей экономики: ${relatedEconomy.length}, записей законодательства: ${relatedLaws.length}, ведомственных записей: ${relatedGovernment.length}, документов: ${relatedDocuments.length}, правил: ${previousRules.filter(r=>r.profileId===id).length}, записей реестра: ${previousRegistry.records.filter(r=>r.profileId===id).length}? Это действие нельзя отменить без резервной копии.`)) return;
+    if (!confirm(`Удалить профиль «${p.name}» и связанных с ним шаблонов: ${dependent.length}, жалоб: ${related.length}, записей экономики: ${relatedEconomy.length}, товаров и рыночных записей: ${relatedMarket.length}, записей законодательства: ${relatedLaws.length}, ведомственных записей: ${relatedGovernment.length}, документов: ${relatedDocuments.length}, правил: ${previousRules.filter(r=>r.profileId===id).length}, записей реестра: ${previousRegistry.records.filter(r=>r.profileId===id).length}? Это действие нельзя отменить без резервной копии.`)) return;
     try {
       await replaceXenForoLinks(previousXfLinks.filter(x=>x.profileId!==id));
       if (dependent.length) await replaceTemplates(previousTemplates.filter(t => t.profileId !== id));
       if (related.length) await requestCaseReplacement(previousCases.filter(c => c.profileId !== id));
       if (relatedEconomy.length) await replaceEconomy(previousEconomy.filter(r => r.profileId !== id));
+      if (relatedMarket.length) await replaceMarketplace(previousMarket.filter(r=>r.profileId!==id));
       if (relatedLaws.length) await replaceLawRecords(previousLaws.filter(r=>r.profileId!==id),state.profiles.filter(p=>p.id!==id).map(p=>p.id));
       // Court cases reference Studio documents. Remove their Government records first
       // so Document Studio can validate and safely remove the profile's linked files.
@@ -353,6 +359,7 @@ async function executeAction(button) {
       if (dependent.length) await replaceTemplates(previousTemplates);
       if (related.length) await requestCaseReplacement(previousCases);
       if (relatedEconomy.length) await replaceEconomy(previousEconomy);
+      if (relatedMarket.length) await replaceMarketplace(previousMarket);
       if (relatedLaws.length) await replaceLawRecords(previousLaws,state.profiles.map(p=>p.id));
       if (relatedGovernment.length) await replaceGovernment(previousGovernment,state.profiles.map(p=>p.id));
       if (relatedDocuments.length) await replaceDocumentRecords(previousDocuments,state.profiles.map(p=>p.id),previousGovernment);
@@ -452,7 +459,7 @@ async function handleJusticeAction(button){
   }
 }
 document.addEventListener('click', event => {
-  const button = event.target.closest('button[data-judgment-action],button[data-court-evidence-action],button[data-proceeding-action],button[data-court-case-action],button[data-court-action],button[data-agency-action],button[data-timer-action],button[data-productivity-action],button[data-action],button[data-url],button[data-forum-action],button[data-case-action],button[data-economy-action],button[data-law-action],button[data-government-action],button[data-document-action],button[data-justice-action],button[data-integration-action],button[data-monitor-action],button[data-knowledge-action],button[data-source-action],button[data-library-action],button[data-graph-action]');
+  const button = event.target.closest('button[data-judgment-action],button[data-court-evidence-action],button[data-proceeding-action],button[data-court-case-action],button[data-court-action],button[data-agency-action],button[data-timer-action],button[data-productivity-action],button[data-action],button[data-url],button[data-forum-action],button[data-case-action],button[data-economy-action],button[data-market-action],button[data-law-action],button[data-government-action],button[data-document-action],button[data-justice-action],button[data-integration-action],button[data-monitor-action],button[data-knowledge-action],button[data-source-action],button[data-library-action],button[data-graph-action]');
   if (!button || button.disabled) return;
   if(button.dataset.judgmentAction){void handleJudgmentAction(button,state,refreshGovernment,render,feedback).catch(err=>feedback(err.message,true));return;}
   if(button.dataset.proceedingAction){void handleProceedingAction(button,state,governmentRecords()).catch(err=>feedback(err.message,true));return;}
@@ -485,6 +492,7 @@ document.addEventListener('click', event => {
   if(button.dataset.forumAction==='reset-settings'){
     const scope=button.dataset.id;void modifyState(current=>savePreferences(current,{forum:updateForumSettings(current.preferences.forum,scope,scope==='global'?FORUM_DEFAULTS:null)})).then(next=>{state=next;render();feedback('Настройки форума сброшены');}).catch(err=>feedback(err.message,true));return;
   }
+  if(button.dataset.marketAction){void handleMarketplaceAction(button,state,render,feedback).catch(err=>feedback(err.message,true));return;}
   if(button.dataset.justiceAction){void handleJusticeAction(button).catch(err=>feedback(err.message,true));return;}
   const recentKind=button.dataset.governmentAction&&({ 'edit-department':'department','view-decision':'decision','edit-decision':'decision','edit-template':'government-template'}[button.dataset.governmentAction])||button.dataset.lawAction&&({'open-book':'book','edit-memo':'memo'}[button.dataset.lawAction])||button.dataset.documentAction&&({'view':'document','edit-document':'document','edit-template':'document-template'}[button.dataset.documentAction]);
   if(view==='justice'&&recentKind&&button.dataset.id)void rememberJusticeOpen(state,recentKind,button.dataset.id).catch(err=>feedback(err.message,true));
@@ -509,6 +517,7 @@ document.addEventListener('input', event => {
   if (event.target.id === 'forum-search') {filterForum(event.target.value);return;}
   if (event.target.id === 'complaint-search') setComplaintQuery(event.target.value);
   if (event.target.id === 'law-search') {const pos=event.target.selectionStart;setLawQuery(event.target.value);render();const el=document.getElementById('law-search');el?.focus();el?.setSelectionRange(pos,pos);return;}
+  if(event.target.id==='market-search'){setMarketplaceQuery(event.target.value);const pos=event.target.selectionStart;render();const el=document.getElementById('market-search');el?.focus();el?.setSelectionRange(Math.min(pos,el.value.length),Math.min(pos,el.value.length));return;}
   if(event.target.id==='economy-global-search'){setEconomyLookup(event.target.value,state);const el=document.getElementById('economy-global-results');if(el)replaceHtml(el,economyLookupHTML(state));return;}
   if(event.target.id==='economy-search'){const value=event.target.value,caret=event.target.selectionStart,profileId=state.activeProfileId;clearTimeout(economySearchTimer);economySearchTimer=setTimeout(()=>{if(view!=='economy'||state.activeProfileId!==profileId)return;void setEconomySearch(value,state).then(()=>{if(view!=='economy'||state.activeProfileId!==profileId)return;const current=document.getElementById('economy-search');if(!current||current.value!==value)return;render();const input=document.getElementById('economy-search');input?.focus();input?.setSelectionRange(Math.min(caret,input.value.length),Math.min(caret,input.value.length));}).catch(err=>feedback(err.message,true));},150);return;}
   if (event.target.matches('[data-case-draft]')) scheduleDraftSave(event.target,feedback);
@@ -537,6 +546,7 @@ async function restoreBackupText(text,portable=null){
         const beforeTemplates = await listTemplates();
         const beforeCases = await listCases();
         const beforeEconomy = await listEconomyRecords();
+        const beforeMarket = await listMarketplace();
         const beforeLaws = lawRecords().slice();
         const beforeGovernment = governmentRecords().slice();
         const beforeDocuments = documentRecords().slice();
@@ -559,6 +569,7 @@ async function restoreBackupText(text,portable=null){
             throw Error('Старая копия содержит другой набор профилей. Сначала экспортируйте данные 0.3.0, чтобы не потерять доступ к существующим жалобам.');
           }
           if (backup.schemaVersion < 4 && beforeEconomy.some(r => !backup.state.profiles.some(p => p.id === r.profileId))) throw Error('Старая копия содержит другой набор профилей. Экспортируйте копию 0.5.0 перед импортом.');
+          if (backup.marketplace===null && beforeMarket.some(r=>!backup.state.profiles.some(p=>p.id===r.profileId)))throw Error('Старая копия не содержит рыночный каталог, связанный с другими профилями. Сначала экспортируйте полную резервную копию 2.1.2.');
           if (backup.schemaVersion < 5 && beforeLaws.some(r=>!backup.state.profiles.some(p=>p.id===r.profileId))) throw Error('Старая копия содержит другие профили. Экспортируйте полную копию перед импортом.');
           if (backup.schemaVersion < 6 && beforeGovernment.some(r=>!backup.state.profiles.some(p=>p.id===r.profileId))) throw Error('Старая копия содержит другие профили. Сначала экспортируйте данные Government Tools.');
           if (backup.schemaVersion < 7 && beforeDocuments.some(r=>!backup.state.profiles.some(p=>p.id===r.profileId))) throw Error('Старая копия содержит другие профили. Сначала экспортируйте документы.');
@@ -576,6 +587,7 @@ async function restoreBackupText(text,portable=null){
           if (backup.schemaVersion >= 2) await replaceTemplates(backup.templates);
           if (backup.schemaVersion >= 3) await requestCaseReplacement(backup.cases);
           if (backup.schemaVersion >= 4) await replaceEconomy(backup.economy);
+          if (backup.marketplace !== null) await replaceMarketplace(backup.marketplace,backup.state.profiles.map(p=>p.id));
           if (backup.schemaVersion >= 5) await replaceLawRecords(backup.lawRecords,backup.state.profiles.map(p=>p.id));
           if (backup.schemaVersion >= 6) await replaceGovernment(backup.government,backup.state.profiles.map(p=>p.id));
           if (backup.schemaVersion >= 7) await replaceDocumentRecords(backup.documents,backup.state.profiles.map(p=>p.id),backup.government);
@@ -599,6 +611,7 @@ async function restoreBackupText(text,portable=null){
           if (backup.schemaVersion >= 2) await replaceTemplates(beforeTemplates);
           if (backup.schemaVersion >= 3) await requestCaseReplacement(beforeCases);
           if (backup.schemaVersion >= 4) await replaceEconomy(beforeEconomy);
+          if (backup.marketplace !== null) await replaceMarketplace(beforeMarket,beforeState.profiles.map(p=>p.id));
           if (backup.schemaVersion >= 5) await replaceLawRecords(beforeLaws,beforeState.profiles.map(p=>p.id));
           if (backup.schemaVersion >= 6) await replaceGovernment(beforeGovernment,beforeState.profiles.map(p=>p.id));
           if (backup.schemaVersion >= 7) await replaceDocumentRecords(beforeDocuments,beforeState.profiles.map(p=>p.id),beforeGovernment);
@@ -660,6 +673,7 @@ document.addEventListener('change', event => {
   if (el.id === 'law-compare-edition') {setLawCompareEdition(el.value);render();return;}
   if (el.id === 'law-import-file' && el.files?.[0]) {void importLawFile(el.files[0],state,render,feedback).catch(error=>feedback(error.message,true));return;}
   if (el.id === 'complaint-filter') {setComplaintFilter(el.value);return;}
+  if(el.id==='market-archived'){setMarketplaceArchived(el.checked);render();return;}
   if(el.id==='economy-filter'){void setEconomyFilter(el.value,state).then(render).catch(err=>feedback(err.message,true));return;}
   if(el.dataset.widgetToggle){void updateWidgets(v=>changeWidget(v,el.dataset.widgetToggle,'toggle')).catch(err=>feedback(err.message,true));return;}
   if (el.id === 'popup-profile'||el.id==='workspace-profile') {
@@ -704,6 +718,7 @@ document.addEventListener('submit', event => {
   if (formId === 'agency-form') {event.preventDefault();void handleAgencySubmit(event,state,refreshGovernment,render,feedback).catch(err=>feedback(err.message,true));return;}
   if (formId === 'government-form') {event.preventDefault();void handleGovernmentSubmit(event,state,render,feedback,lawRecords()).catch(err=>feedback(err.message,true));return;}
   if (formId === 'law-form') {event.preventDefault();void handleLawSubmit(event,state,render,feedback).catch(err=>feedback(err.message,true));return;}
+  if(formId==='marketplace-form'){event.preventDefault();void handleMarketplaceSubmit(event.target,state,render,feedback).catch(err=>feedback(err.message,true));return;}
   if (formId === 'economy-form' || event.target.matches('form[data-economy-calc]')) {event.preventDefault();void handleEconomySubmit(event,state,render,feedback).catch(err=>feedback(err.message,true));return;}
   if (['complaint-form','complaint-evidence-form','case-timeline-form','case-batch-form','moderation-policy-form','moderation-rule-form'].includes(formId)) {event.preventDefault();void handleComplaintSubmit(event,state,render,feedback).catch(err=>feedback(err.message,true));return;}
   if (['forum-template-form', 'xf-navigation-form'].includes(formId)) {

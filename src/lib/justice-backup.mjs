@@ -4,6 +4,7 @@
 import {makeBackupV18,parseBackupV18} from './ai-backup.mjs';
 import {verifyJusticeIntegrity} from './government-justice-ga.mjs';
 import {validateVaultInventory} from './dossier-backup.mjs';
+import {validateMarketplace} from './marketplace-core.mjs';
 
 const MAX_BYTES=48*1024*1024;
 const safeJSON=text=>{if(typeof text!=='string'||new TextEncoder().encode(text).length>MAX_BYTES)throw Error('Резервная копия превышает 48 МиБ');try{return JSON.parse(text);}catch{throw Error('Некорректный JSON резервной копии');}};
@@ -12,19 +13,21 @@ const check=async backup=>{
  await verifyJusticeIntegrity(profiles,backup.government??[],backup.documents??[],backup.evidenceVault);
  return backup;
 };
-export async function makeBackupV19(args,punishments,sections,registry,operations,inventory,aiWorkspace=null){
+export async function makeBackupV19(args,punishments,sections,registry,operations,inventory,aiWorkspace=null,marketplace=[]){
  const safeInventory=validateVaultInventory(inventory,args[0].profiles);
  const backup=JSON.parse(makeBackupV18(args,punishments,sections,registry,operations,safeInventory,aiWorkspace));
  await verifyJusticeIntegrity(backup.payload.profiles,backup.government,backup.documents,safeInventory);
- const result=JSON.stringify({...backup,schemaVersion:19},null,2);
+ const marketRows=validateMarketplace(marketplace,backup.payload.profiles.map(p=>p.id));
+ const result=JSON.stringify({...backup,schemaVersion:19,marketplace:marketRows},null,2);
  if(new TextEncoder().encode(result).length>MAX_BYTES)throw Error('Резервная копия превышает 48 МиБ');
  return result;
 }
 export async function parseBackupV19(text,validateState,cleanTemplate){
  const raw=safeJSON(text);
- if(raw?.schemaVersion!==19)return check(parseBackupV18(text,validateState,cleanTemplate));
+ if(raw?.schemaVersion!==19)return {...await check(parseBackupV18(text,validateState,cleanTemplate)),marketplace:null};
  if(raw.format!=='majestictoolkit-backup'||!Object.hasOwn(raw,'aiWorkspace')||!Array.isArray(raw.evidenceVault))throw Error('Некорректный Backup v19');
  const parsed=parseBackupV18(JSON.stringify({...raw,schemaVersion:18}),validateState,cleanTemplate);
  await check(parsed);
- return {...parsed,schemaVersion:19};
+ const marketplace=Object.hasOwn(raw,'marketplace')?validateMarketplace(raw.marketplace,parsed.state.profiles.map(p=>p.id)):null;
+ return {...parsed,schemaVersion:19,marketplace};
 }

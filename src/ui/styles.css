@@ -359,3 +359,17 @@ body[data-mode=sidebar] .ws-layout .side{height:auto;position:static;overflow:vi
 .economy-workspace .economy-filter{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
 @media(max-width:950px){.economy-workspace-columns{grid-template-columns:1fr}}
 @media(max-width:550px){.economy-hit{align-items:flex-start;flex-direction:column}.economy-tabs{flex-wrap:nowrap;scrollbar-width:thin}}
+
+/* Marketplace 2.1.2: responsive product browser and audited user price observations. */
+.market-products{display:grid;grid-template-columns:repeat(auto-fill,minmax(225px,1fr));gap:9px}
+.market-product{display:flex;flex-direction:column;justify-content:space-between;gap:10px;border:1px solid var(--stroke);background:var(--sub);border-radius:10px;padding:12px;min-width:0}
+.market-product strong,.market-product p{overflow-wrap:anywhere}
+.market-product p{margin:6px 0 0}
+.market-product .row{flex-wrap:wrap}
+.market-selected{border-color:var(--accent)}
+.market-table-scroll{overflow-x:auto;max-height:380px;border:1px solid var(--stroke);border-radius:9px}
+#marketplace-dialog{width:min(710px,calc(100vw - 24px));max-height:calc(100vh - 30px);overflow-y:auto}
+#marketplace-dialog form{display:grid;gap:14px}
+#marketplace-dialog .economy-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+#marketplace-dialog .economy-fields>.field:last-child{grid-column:1/-1}
+@media(max-width:600px){#marketplace-dialog .economy-fields{grid-template-columns:1fr}.market-products{grid-template-columns:1fr}}
