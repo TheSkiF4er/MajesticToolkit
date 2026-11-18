@@ -1,10 +1,11 @@
+import {cleanJudicialEvidence,judicialEvidenceRecord,JUDICIAL_EVIDENCE_LIMIT} from './judicial-evidence-core.mjs';
 import {cleanProceedings,cleanHearing,cleanMotion,cleanDeadline,HEARING_STATUSES,MOTION_STATUSES,MOTION_KINDS,DEADLINE_STATUSES,PROCEEDING_LIMITS} from './judicial-proceedings-core.mjs';
 /** 2.0.5 Court Case Management. Persistent cases live inside Government Tools v6,
  * so its existing backup, import and profile boundaries remain authoritative. */
 export const CASE_STATUSES=Object.freeze({draft:'Черновик',filed:'Подано',accepted:'Принято',hearing:'Рассматривается',suspended:'Приостановлено',closed:'Завершено',archived:'Архив'});
 export const CASE_ROLES=Object.freeze({claimant:'Заявитель',respondent:'Ответчик',representative:'Представитель',witness:'Свидетель',prosecutor:'Прокурор',other:'Иное лицо'});
 export const CASE_DOCUMENT_KINDS=Object.freeze({document:'Документ Studio',decision:'Ведомственное решение',template:'Процессуальный шаблон'});
-export const CASE_LIMITS=Object.freeze({cases:350,participants:40,documents:80,events:350});
+export const CASE_LIMITS=Object.freeze({cases:350,participants:40,documents:80,evidence:JUDICIAL_EVIDENCE_LIMIT,events:350});
 export const CASE_TRANSITIONS=Object.freeze({draft:['filed','archived'],filed:['accepted','draft','archived'],accepted:['hearing','suspended','closed'],hearing:['suspended','closed'],suspended:['accepted','hearing','closed'],closed:['archived','hearing'],archived:['draft']});
 const uid=()=>globalThis.crypto?.randomUUID?.()??`case-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 const object=(value,label)=>{if(!value||typeof value!=='object'||Array.isArray(value))throw Error(`Некорректный объект: ${label}`);return value;};
@@ -16,18 +17,18 @@ const enumValue=(value,values,label)=>{if(typeof value!=='string'||!Object.hasOw
 const number=v=>{if(!Number.isSafeInteger(v)||v<1||v>100000)throw Error('Недопустимая версия дела');return v;};
 export function cleanParticipant(raw){object(raw,'Участник');return {id:id(raw.id),role:enumValue(raw.role,CASE_ROLES,'Роль участника'),name:string(raw.name,'Участник',150),notes:string(raw.notes??'','Примечание',1000,true)};}
 export function cleanCaseLink(raw){object(raw,'Документ');return {id:id(raw.id),kind:enumValue(raw.kind,CASE_DOCUMENT_KINDS,'Тип документа'),title:string(raw.title,'Название документа',180),addedAt:date(raw.addedAt)};}
-export function cleanCaseEvent(raw){object(raw,'Событие');const allowed=['create','edit','status','participant-add','participant-edit','participant-remove','document-add','document-remove','note','hearing-add','hearing-edit','hearing-held','hearing-cancel','motion-file','motion-resolve','deadline-add','deadline-edit','deadline-complete','deadline-cancel'];if(!allowed.includes(raw.action))throw Error('Неизвестное действие в истории дела');return {id:id(raw.id),at:date(raw.at),action:raw.action,description:string(raw.description,'Описание действия',600),from:string(raw.from??'','Исходный статус',25,true),to:string(raw.to??'','Новый статус',25,true)};}
+export function cleanCaseEvent(raw){object(raw,'Событие');const allowed=['create','edit','status','participant-add','participant-edit','participant-remove','document-add','document-remove','note','hearing-add','hearing-edit','hearing-held','hearing-cancel','motion-file','motion-resolve','deadline-add','deadline-edit','deadline-complete','deadline-cancel','evidence-add','evidence-edit','evidence-remove'];if(!allowed.includes(raw.action))throw Error('Неизвестное действие в истории дела');return {id:id(raw.id),at:date(raw.at),action:raw.action,description:string(raw.description,'Описание действия',600),from:string(raw.from??'','Исходный статус',25,true),to:string(raw.to??'','Новый статус',25,true)};}
 export function cleanJudicialCase(raw){object(raw,'Судебное дело');if(raw.type!=='case')throw Error('Не судебное дело');
  const record={id:id(raw.id),profileId:id(raw.profileId),type:'case',createdAt:date(raw.createdAt),updatedAt:date(raw.updatedAt),revision:number(raw.revision),courtId:id(raw.courtId),judgeAssignmentId:linkId(raw.judgeAssignmentId),number:string(raw.number,'Номер судебного дела',100),title:string(raw.title,'Предмет дела',200),category:string(raw.category,'Категория',120),territory:string(raw.territory,'Территория',120),summary:string(raw.summary??'','Описание',9000,true),status:enumValue(raw.status,CASE_STATUSES,'Статус дела'),filedAt:raw.filedAt?date(raw.filedAt):'',closedAt:raw.closedAt?date(raw.closedAt):''};
  if(!Array.isArray(raw.participants)||raw.participants.length>CASE_LIMITS.participants||!Array.isArray(raw.documents)||raw.documents.length>CASE_LIMITS.documents||!Array.isArray(raw.history)||!raw.history.length||raw.history.length>CASE_LIMITS.events)throw Error('Превышен лимит данных судебного дела');
- record.participants=raw.participants.map(cleanParticipant);record.documents=raw.documents.map(cleanCaseLink);record.history=raw.history.map(cleanCaseEvent);Object.assign(record,cleanProceedings({...raw,participants:record.participants}));
+ record.participants=raw.participants.map(cleanParticipant);record.documents=raw.documents.map(cleanCaseLink);record.history=raw.history.map(cleanCaseEvent);Object.assign(record,cleanProceedings({...raw,participants:record.participants}));if(!Array.isArray(raw.evidence??[])||(raw.evidence??[]).length>CASE_LIMITS.evidence)throw Error('Превышен лимит судебных доказательств');record.evidence=(raw.evidence??[]).map(x=>cleanJudicialEvidence(x,record.profileId,record));if(new Set(record.evidence.map(x=>x.vaultId)).size!==record.evidence.length||new Set(record.evidence.map(x=>x.id)).size!==record.evidence.length)throw Error('Дублирование судебных доказательств');
  for(const [label,rows,fn] of [['участников',record.participants,x=>x.id],['документов',record.documents,x=>`${x.kind}:${x.id}`],['истории',record.history,x=>x.id]])if(new Set(rows.map(fn)).size!==rows.length)throw Error(`Дублирование ${label}`);
  if(record.history[0].action!=='create'||record.history[0].at!==record.createdAt||record.revision!==record.history.length||record.updatedAt<record.createdAt)throw Error('Нарушена история судебного дела');
  if(record.status==='draft'&&record.closedAt)throw Error('Черновик не может иметь дату завершения');
  return record;
 }
 function event(action,description,at,from='',to=''){return {id:uid(),at,action,description,from,to};}
-export function createJudicialCase(profileId,fields){const at=new Date().toISOString();return cleanJudicialCase({id:uid(),profileId,type:'case',createdAt:at,updatedAt:at,revision:1,courtId:fields.courtId,judgeAssignmentId:fields.judgeAssignmentId??'',number:fields.number,title:fields.title,category:fields.category,territory:fields.territory,summary:fields.summary??'',status:'draft',filedAt:'',closedAt:'',participants:[],documents:[],hearings:[],motions:[],deadlines:[],history:[event('create','Дело зарегистрировано как черновик',at)]});}
+export function createJudicialCase(profileId,fields){const at=new Date().toISOString();return cleanJudicialCase({id:uid(),profileId,type:'case',createdAt:at,updatedAt:at,revision:1,courtId:fields.courtId,judgeAssignmentId:fields.judgeAssignmentId??'',number:fields.number,title:fields.title,category:fields.category,territory:fields.territory,summary:fields.summary??'',status:'draft',filedAt:'',closedAt:'',participants:[],documents:[],evidence:[],hearings:[],motions:[],deadlines:[],history:[event('create','Дело зарегистрировано как черновик',at)]});}
 function change(old,action,description,patch,from='',to=''){
  const row=cleanJudicialCase(old);if(row.history.length>=CASE_LIMITS.events)throw Error('История дела заполнена: экспортируйте и архивируйте запись');
  const at=new Date(Math.max(Date.now(),Date.parse(row.updatedAt)+1)).toISOString();return cleanJudicialCase({...row,...patch,id:row.id,profileId:row.profileId,type:'case',createdAt:row.createdAt,revision:row.revision+1,updatedAt:at,history:[...row.history,event(action,description,at,from,to)]});
@@ -51,7 +52,7 @@ export function validateCaseRelations(row,records,documents=null){const r=cleanJ
  for(const d of r.documents){if(d.kind==='document'&&documents===null)continue;const link=d.kind==='document'?documents.find(x=>x.id===d.id&&x.type==='document'):all.get(d.id);if(!link||link.profileId!==r.profileId||(d.kind==='decision'&&link.type!=='decision')||(d.kind==='template'&&link.type!=='template'))throw Error(`Связанный документ «${d.title}» удалён либо принадлежит другому профилю`);if(d.kind==='document'&&link.procedural&&link.procedural.caseId!==r.id)throw Error('Процессуальный документ принадлежит другому судебному делу');}
  return r;
 }
-export function searchJudicialCases(rows,profileId,query='',filters={}){const tokens=String(query).trim().toLocaleLowerCase('ru').slice(0,160).split(/\s+/).filter(Boolean);return rows.filter(r=>r.type==='case'&&r.profileId===profileId&&(!filters.status||r.status===filters.status)&&(!filters.courtId||r.courtId===filters.courtId)&&tokens.every(t=>[r.number,r.title,r.category,r.territory,r.summary,...r.participants.map(p=>`${p.name} ${p.notes}`),...r.documents.map(d=>d.title),...(r.hearings??[]).flatMap(h=>[h.title,h.location,h.agenda,h.minutes]),...(r.motions??[]).flatMap(m=>[m.title,m.request,m.resolution]),...(r.deadlines??[]).map(d=>d.title)].join(' ').toLocaleLowerCase('ru').includes(t))).sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt));}
+export function searchJudicialCases(rows,profileId,query='',filters={}){const tokens=String(query).trim().toLocaleLowerCase('ru').slice(0,160).split(/\s+/).filter(Boolean);return rows.filter(r=>r.type==='case'&&r.profileId===profileId&&(!filters.status||r.status===filters.status)&&(!filters.courtId||r.courtId===filters.courtId)&&tokens.every(t=>[r.number,r.title,r.category,r.territory,r.summary,...r.participants.map(p=>`${p.name} ${p.notes}`),...r.documents.map(d=>d.title),...r.evidence.flatMap(d=>[d.title,d.note,d.category,d.snapshot.kind==='link'?d.snapshot.url:d.snapshot.name]),...(r.hearings??[]).flatMap(h=>[h.title,h.location,h.agenda,h.minutes]),...(r.motions??[]).flatMap(m=>[m.title,m.request,m.resolution]),...(r.deadlines??[]).map(d=>d.title)].join(' ').toLocaleLowerCase('ru').includes(t))).sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt));}
 
 // All procedural operations append an immutable event to the existing case audit trail.
 function requireProceedingsStage(row){if(['draft','closed','archived'].includes(row.status))throw Error('Процессуальные действия доступны только в открытом производстве');}
@@ -72,3 +73,26 @@ export function mutateCaseDeadline(old,action,fields){const row=cleanJudicialCas
  if(action==='edit'){const edited=cleanDeadline({...previous,title:fields.title,dueOn:fields.dueOn,description:fields.description??''});if(['title','dueOn','description'].every(k=>edited[k]===previous[k]))return row;const reason=string(fields.reason,'Основание изменения срока',400);deadlines[index]=edited;return proceed(row,'deadlines','deadline-edit',`Изменён срок «${previous.title}»: ${previous.dueOn} → ${edited.dueOn}. Основание: ${reason}`.slice(0,600),deadlines);}
  if(action==='complete'||action==='cancel'){const next=cleanDeadline({...previous,status:action==='complete'?'completed':'cancelled',result:fields.result,resolvedAt:now});deadlines[index]=next;return proceed(row,'deadlines',action==='complete'?'deadline-complete':'deadline-cancel',`${action==='complete'?'Исполнен':'Отменён'} срок «${previous.title}»: ${next.result}`.slice(0,600),deadlines);}
  throw Error('Неизвестное действие со сроком');}
+
+/** Attach/edit/detach a real Evidence Vault record; changes are recorded in case audit.
+ * The original attachment snapshot cannot be replaced by edits. */
+export function mutateCaseEvidence(old,action,fields){
+ const row=cleanJudicialCase(old);if(['archived','closed'].includes(row.status))throw Error('Закрытое или архивное дело нельзя изменять');
+ const evidence=[...row.evidence];let description='';
+ if(action==='add'){
+  if(evidence.length>=CASE_LIMITS.evidence)throw Error('Лимит судебных доказательств');
+  const item=cleanJudicialEvidence(judicialEvidenceRecord(fields.snapshot,fields),row.profileId,row);
+  if(evidence.some(x=>x.vaultId===item.vaultId))throw Error('Доказательство уже приобщено к делу');
+  evidence.push(item);description=`Приобщён материал «${item.title}» (${item.snapshot.kind}, Vault ${item.vaultId}${item.snapshot.kind==='file'?', SHA-256 '+item.snapshot.sha256:''})`.slice(0,600);
+ }else{
+  const index=evidence.findIndex(x=>x.id===fields.id);if(index<0)throw Error('Материал судебного дела не найден');const previous=evidence[index];
+  if(action==='edit'){
+   const item=cleanJudicialEvidence({...previous,category:fields.category,title:fields.title,note:fields.note??'',hearingId:fields.hearingId??'',motionId:fields.motionId??''},row.profileId,row);
+   if(['category','title','note','hearingId','motionId'].every(k=>item[k]===previous[k]))return row;
+   evidence[index]=item;description=`Изменена карточка материала «${previous.title}» (Vault ${previous.vaultId})`;
+  }else if(action==='remove'){
+   evidence.splice(index,1);description=`Исключён материал «${previous.title}» (Vault ${previous.vaultId}${previous.snapshot.kind==='file'?', SHA-256 '+previous.snapshot.sha256:''}); основание: ${string(fields.reason,'Причина исключения',280)}`.slice(0,600);
+  }else throw Error('Неизвестное действие с судебным доказательством');
+ }
+ return change(row,'evidence-'+action,description,{evidence});
+}

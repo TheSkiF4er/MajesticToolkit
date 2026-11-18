@@ -96,6 +96,8 @@ export async function deleteVaultRecord(id,profileId){
  const {exportRegistryData}=await import('./punishment-registry-store.mjs');const {loadState}=await import('./state.mjs');
  const registry=await exportRegistryData((await loadState()).profiles);
  if(registry.records.some(r=>r.evidence?.some(e=>e.vaultId===id)))throw Error('Материал присутствует в зарегистрированном решении и не может быть удалён');
+ const {listGovernment}=await import('./government-store.mjs');
+ if((await listGovernment()).some(r=>r.type==='case'&&r.profileId===profileId&&r.evidence?.some(e=>e.vaultId===id)))throw Error('Материал приобщён к судебному делу. Сначала исключите его из реестра дела.');
  await perform('readwrite',(s)=>{s.delete(id);});
 }
 

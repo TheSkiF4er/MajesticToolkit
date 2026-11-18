@@ -1,8 +1,9 @@
-import {createJudicialCase,editJudicialCase,changeCaseStatus,mutateCaseParticipants,mutateCaseDocuments,noteJudicialCase,mutateCaseHearing,mutateCaseMotion,mutateCaseDeadline,validateCaseRelations} from './judicial-case-core.mjs';
+import {createJudicialCase,editJudicialCase,changeCaseStatus,mutateCaseParticipants,mutateCaseDocuments,noteJudicialCase,mutateCaseHearing,mutateCaseMotion,mutateCaseDeadline,mutateCaseEvidence,validateCaseRelations} from './judicial-case-core.mjs';
 import {listDocumentRecords} from './document-store.mjs';
 import {createDocument,validateDocuments,DOCUMENT_PREFIX} from './document-core.mjs';
 import {prepareProceduralDocument} from './procedural-document-core.mjs';
 import {api} from './browser.mjs';
+import {getVaultRecord,verifyVaultFile} from './evidence-vault.mjs';
 import { GOV_PREFIX,GOV_LIMITS,cleanGovernment,validateGovernment,createDepartment,editDepartment,createTemplate,editTemplate,createDecision,editDecision,finalizeDecision,cloneDecision,createAgencyUnit,editAgencyUnit,createAgencyPosition,editAgencyPosition,createAgencyCompetence,editAgencyCompetence,createAgencyAssignment,editAgencyAssignment,createCourt,editCourt,createCourtJurisdiction,editCourtJurisdiction } from './government-core.mjs';
 let chain=Promise.resolve();const enqueue=fn=>{const p=chain.then(fn);chain=p.catch(()=>{});return p;};
 export function parseGovernmentStorage(raw){return Object.entries(raw).filter(([k])=>k.startsWith(GOV_PREFIX)).flatMap(([k,v])=>{try{const r=cleanGovernment(v);return k===GOV_PREFIX+r.id?[r]:[];}catch(err){console.warn('MajesticToolkit: повреждённая запись Government Tools',k,err);return [];}});}
@@ -62,6 +63,16 @@ export const addCourtCaseNote=(id,text)=>enqueue(()=>caseUpdate(id,r=>noteJudici
 export const mutateCourtCaseHearing=(id,action,fields)=>enqueue(()=>caseUpdate(id,r=>mutateCaseHearing(r,action,fields)));
 export const mutateCourtCaseMotion=(id,action,fields)=>enqueue(()=>caseUpdate(id,r=>mutateCaseMotion(r,action,fields)));
 export const mutateCourtCaseDeadline=(id,action,fields)=>enqueue(()=>caseUpdate(id,r=>mutateCaseDeadline(r,action,fields)));
+export const mutateCourtCaseEvidence=(id,action,fields)=>enqueue(async()=>{
+ const row=await getGovernment(id);if(row.type!=='case')throw Error('Судебное дело не найдено');
+ let payload=fields;
+ if(action==='add'){
+  const {meta}=await getVaultRecord(fields.vaultId);if(meta.profileId!==row.profileId)throw Error('Материал другого профиля');
+  if(meta.kind==='file')await verifyVaultFile(meta.id,row.profileId);
+  payload={...fields,snapshot:meta};
+ }
+ return caseUpdate(id,r=>mutateCaseEvidence(r,action,payload));
+});
 export const addDepartment=(profile,fields)=>enqueue(()=>insert(createDepartment(profile,fields)));
 export const updateDepartment=(id,fields)=>enqueue(async()=>update(editDepartment(await getGovernment(id),fields)));
 export const addTemplate=(profile,fields)=>enqueue(()=>insert(createTemplate(profile,fields)));
