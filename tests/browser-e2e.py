@@ -1121,11 +1121,39 @@ async def experience_workspace(browser):
     await page.locator('#justice-panel [data-law-action=new-book]').click()
     await page.locator('#law-dialog').wait_for()
     await page.locator('#law-form [name=title]').fill('QA Судебный кодекс')
-    await page.locator('#law-form [name=articlesText]').fill('Статья 12. Право на защиту\nПроцессуальные гарантии участников.')
+    await page.locator('#law-form [name=sourceUrl]').fill('https://example.org/qa-law-original')
+    await page.locator('#law-form [name=effectiveDate]').fill('2026-01-01')
+    await page.locator('#law-form [name=articlesText]').fill('Преамбула судебного кодекса.\nРаздел I. Общие положения\nГлава 1. Права участников\nСтатья 12. Право на защиту\n1. Процессуальные гарантии участников.\n1.1. Помощь представителя.')
     await page.locator('#law-form button[type=submit]').click()
     await page.locator('#law-dialog').wait_for(state='detached')
     await page.locator('#justice-search').fill('процессуальные гарантии')
     assert await page.locator('#justice-results .justice-result').count()==1
+    # 2.0.2: real law hierarchy, source verification, immutable amendments and date-sensitive search.
+    await page.locator('.justice-tabs [data-tab=law]').click()
+    law=page.locator('#justice-panel')
+    assert await law.get_by_text('Раздел I. Общие положения',exact=False).count()>0
+    assert await law.get_by_text('Глава 1. Права участников',exact=False).count()>0
+    assert await law.locator('.law-preamble').count()==1
+    await law.locator('[data-law-action=verify-source]').click()
+    assert await law.get_by_text('Источник вручную проверен пользователем',exact=False).count()>0
+    await law.locator('[data-law-action=new-edition]').click()
+    await page.locator('#law-dialog').wait_for()
+    await page.locator('#law-form [name=label]').fill('Редакция после поправки')
+    await page.locator('#law-form [name=effectiveDate]').fill('2026-12-01')
+    await page.locator('#law-form [name=sourceUrl]').fill('https://example.org/qa-law-revision')
+    await page.locator('#law-form [name=articlesText]').fill('Раздел I. Общие положения\nГлава 1. Права участников\nСтатья 12. Право на защиту\n1. Процессуальные гарантии изменены.\n1.1. Помощь представителя.\n1.2. Разрешено обжалование.')
+    await page.locator('#law-form button[type=submit]').click()
+    await page.locator('#law-dialog').wait_for(state='detached')
+    assert await law.locator('.law-diff-item').count()>=1
+    assert await law.locator('.law-diff-clause').count()>=1
+    await law.locator('#law-effective-date').fill('2026-11-20')
+    assert await law.locator('.law-article').get_by_text('Процессуальные гарантии участников.',exact=False).count()>0
+    assert not await law.locator('.law-article').get_by_text('Процессуальные гарантии изменены.',exact=False).count()
+    await law.locator('#law-effective-date').fill('2026-12-02')
+    assert await law.locator('.law-article').get_by_text('Процессуальные гарантии изменены.',exact=False).count()>0
+    await law.locator('[data-law-action=clear-date]').click()
+    # Continue original Government Tools scenario from the common workspace.
+    await page.locator('.justice-tabs [data-tab=overview]').click()
     # A real decision with a reference to the current law edition.
     await page.locator('#justice-panel [data-government-action=new-decision]').click()
     await page.locator('#government-dialog').wait_for()
@@ -1161,7 +1189,7 @@ async def experience_workspace(browser):
     assert await page.evaluate('document.documentElement.scrollWidth<=window.innerWidth+1')
     assert not errors,errors
     await context.close()
-    return 13
+    return 18
 
 
 

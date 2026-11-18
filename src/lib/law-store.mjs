@@ -1,5 +1,5 @@
 import { api } from './browser.mjs';
-import { LAW_PREFIX, LIMITS, cleanLawRecord, validateLawRecords, createBook, updateBookMetadata, addEdition, switchEdition, createMemo, updateMemo, makeFavorite } from './law-core.mjs';
+import { LAW_PREFIX, LIMITS, cleanLawRecord, validateLawRecords, createBook, updateBookMetadata, addEdition, switchEdition, setEditionSourceVerification, createMemo, updateMemo, makeFavorite } from './law-core.mjs';
 let serial=Promise.resolve();
 const enqueue=(fn)=>{const job=serial.then(fn);serial=job.catch(()=>{});return job;};
 export function parseLawStorage(raw){return Object.entries(raw).filter(([key])=>key.startsWith(LAW_PREFIX)).flatMap(([key,value])=>{try{const item=cleanLawRecord(value);return key===LAW_PREFIX+item.id?[item]:[];}catch(error){console.warn('MajesticToolkit: некорректная запись Law Codex',key,error);return [];}});}
@@ -10,6 +10,7 @@ export function newLawBook(profileId,fields){return enqueue(async()=>{const reco
 export function editLawBook(id,fields){return enqueue(async()=>put(updateBookMetadata(await getLawRecord(id),fields)));}
 export function newLawEdition(id,fields){return enqueue(async()=>put(addEdition(await getLawRecord(id),fields)));}
 export function chooseLawEdition(id,editionId){return enqueue(async()=>put(switchEdition(await getLawRecord(id),editionId)));}
+export function markLawSourceChecked(id,editionId,checked){return enqueue(async()=>put(setEditionSourceVerification(await getLawRecord(id),editionId,checked)));}
 export function newLawMemo(profileId,fields){return enqueue(async()=>{if((await listLawRecords()).length>=LIMITS.records)throw Error('Лимит записей');return put(createMemo(profileId,fields));});}
 export function editLawMemo(id,fields){return enqueue(async()=>put(updateMemo(await getLawRecord(id),fields)));}
 export function toggleLawFavorite(profileId,bookId,articleKey){return enqueue(async()=>{const book=await getLawRecord(bookId);if(book.type!=='book'||book.profileId!==profileId)throw Error('Закон относится к другому профилю');const entries=await listLawRecords();const current=entries.find(r=>r.type==='favorite'&&r.profileId===profileId&&r.bookId===bookId&&r.articleKey.toLowerCase()===articleKey.toLowerCase());if(current){await api.storage.local.remove(LAW_PREFIX+current.id);return false;}if(entries.length>=LIMITS.records)throw Error('Лимит записей');if(!book.editions.some(ed=>ed.articles.some(a=>a.key.toLowerCase()===articleKey.toLowerCase())))throw Error('Статья не найдена');await put(makeFavorite(profileId,bookId,articleKey));return true;});}

@@ -277,3 +277,16 @@ body[data-mode=sidebar] .ws-layout .side{height:auto;position:static;overflow:vi
 .justice-actions{flex-wrap:wrap}
 .justice-results{max-height:620px;overflow:auto;padding-right:4px}
 @media(max-width:640px){.justice-result{align-items:flex-start;flex-direction:column}.justice-result .row{flex-wrap:wrap}.justice-tabs{flex-wrap:nowrap;overflow-x:auto;padding-bottom:6px}.justice-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Law Codex Advanced 2.0.2 — structured legislation and precise edition comparisons. */
+.law-filter-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.law-effectiveness{border-inline-start:3px solid var(--accent,#477ec1);margin:2px 0;padding:9px 12px;background:var(--sub);border-radius:4px;font-weight:600}
+.law-structure{color:var(--muted,inherit);font-size:12px;overflow-wrap:anywhere;margin-top:6px}
+.law-preamble{border:1px solid var(--stroke);border-radius:8px;padding:10px 12px;margin:8px 0}
+.law-preamble summary{cursor:pointer;font-weight:600}
+.law-diff-item{padding:14px 0;border-top:1px solid var(--stroke);overflow-wrap:anywhere}
+.law-diff-clause{margin:12px 0;border:1px solid var(--stroke);border-radius:8px;padding:10px;background:var(--panel)}
+.law-compare-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:8px}
+.law-compare-grid>div{min-width:0}
+.law-compare-grid .law-text{max-height:280px;margin:6px 0 0}
+@media(max-width:650px){.law-filter-grid,.law-compare-grid{grid-template-columns:minmax(0,1fr)}}
