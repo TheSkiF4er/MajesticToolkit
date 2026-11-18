@@ -204,6 +204,15 @@ api.runtime.onMessage.addListener((message,sender,sendResponse) => {
     }
     if (message.type === 'RP_NEXUS_OPEN_WORKSPACE') {
       if (!isForum && !isVideo && !isTrustedExtension) throw Error('Недоверенный источник');
+      if(message.view==='evidence-case'){
+        if(!isForum)throw Error('Нужна тема форума');
+        const v=(await api.storage.local.get('rpNexusStateV1')).rpNexusStateV1;
+        const p=globalThis.MTXenForo.matchingProfile(v?.profiles,v?.activeProfileId,sender.url);
+        const key=globalThis.RPNComplaints.threadKey(sender.url);
+        const c=(await importedStore.listCases()).find(x=>x.profileId===p?.id&&x.threadKey===key);
+        if(!c||p.id!==v.activeProfileId)throw Error('Выберите профиль жалобы');
+        await api.tabs.create({url:api.runtime.getURL('ui/workspace.html?evidenceTab=timeline&evidenceCase='+encodeURIComponent(c.id)+'#evidence')});return true;
+      }
       if(message.view==='registry'){
         if(!isForum)throw Error('Нужна тема форума');const v=(await api.storage.local.get('rpNexusStateV1')).rpNexusStateV1,p=globalThis.MTXenForo.matchingProfile(v?.profiles,v?.activeProfileId,sender.url);const key=globalThis.RPNComplaints.threadKey(sender.url);const c=(await importedStore.listCases()).find(x=>x.profileId===p?.id&&x.threadKey===key);if(!c||p.id!==v.activeProfileId)throw Error('Выберите профиль жалобы');await api.tabs.create({url:api.runtime.getURL('ui/workspace.html?rulesTab=registry&registryCase='+encodeURIComponent(c.id)+'#rules')});return true;
       }
@@ -212,7 +221,7 @@ api.runtime.onMessage.addListener((message,sender,sendResponse) => {
         if(isForum){const state=(await api.storage.local.get('rpNexusStateV1')).rpNexusStateV1;const profile=globalThis.MTXenForo.matchingProfile(state?.profiles,state?.activeProfileId,sender.url);const thread=overlayThread(sender.url);if(profile&&thread){params.set('thread',thread);params.set('calcProfile',profile.id);const c=(await importedStore.listCases()).find(c=>c.profileId===profile.id&&c.threadKey===thread);if(c)params.set('caseId',c.id);}}
         await api.tabs.create({url:api.runtime.getURL('ui/workspace.html?'+params+'#rules')});return true;
       }
-      await api.tabs.create({url:api.runtime.getURL('ui/workspace.html' + (['customization','navigation','binder'].includes(message.view)?'?section='+message.view+'#forum':['home','forum','complaints','moderation','search','knowledge','profiles','timers','monitor','economy','rules','law','government','documents','integrations','settings'].includes(message.view) ? '#'+message.view : ''))});
+      await api.tabs.create({url:api.runtime.getURL('ui/workspace.html' + (['customization','navigation','binder'].includes(message.view)?'?section='+message.view+'#forum':['home','forum','complaints','moderation','search','knowledge','evidence','profiles','timers','monitor','economy','rules','law','government','documents','integrations','settings'].includes(message.view) ? '#'+message.view : ''))});
       return true;
     }
     if(message.type === 'MAJESTIC_TIMER') {

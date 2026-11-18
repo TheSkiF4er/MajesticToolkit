@@ -241,3 +241,23 @@ body[data-mode=sidebar] .ws-layout .side{height:auto;position:static;overflow:vi
 .knowledge-diff .knowledge-removed{background:rgba(190,74,74,.25);color:inherit;text-decoration:line-through}
 #knowledge-article-detail form .field{min-width:140px}
 @media(max-width:680px){#knowledge-library .row,#knowledge-article-detail .row{flex-wrap:wrap}}
+
+/* Evidence & Knowledge 1.9.0: responsive integration across existing editors. */
+.ek-intro{position:sticky;top:0;z-index:3}
+.ek-tabs{display:flex;gap:7px;flex-wrap:wrap}
+.ek-tabs [role=tab][aria-selected=true]{box-shadow:inset 0 -2px 0 currentColor}
+.ek-center [data-ek-panel][hidden]{display:none!important}
+.ek-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px}
+.ek-metric{display:flex;flex-direction:column;gap:7px;align-items:flex-start;min-width:0;padding:14px;border:1px solid var(--border,#64748b55);border-radius:12px;background:var(--surface,#ffffff09);color:inherit;text-align:left;cursor:pointer}
+.ek-metric strong{font-size:1.5rem;line-height:1.3}
+.ek-metric span{font-size:.84rem;overflow-wrap:anywhere}
+.ek-metric:hover,.ek-metric:focus-visible{outline:2px solid var(--accent,#647dcc);outline-offset:1px}
+.ek-integrity-warning{border-left:3px solid #c58d38;padding:10px;background:#c58d3815}
+.ek-overview-lists{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:12px}
+.ek-overview-lists .button{white-space:normal;text-align:left;overflow-wrap:anywhere}
+.ek-dossier-row{display:flex;justify-content:space-between;align-items:center;gap:15px;border-bottom:1px solid var(--border,#64748b55);padding:12px 0}
+.ek-dossier-row>div:first-child{min-width:0;overflow-wrap:anywhere}
+@media(max-width:680px){.ek-intro{position:static}.ek-tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.ek-tabs .button{white-space:normal}.ek-dossier-row{flex-direction:column;align-items:stretch}}
+
+/* Status notices are informational, never modal overlays. */
+#notice{pointer-events:none}

@@ -1016,10 +1016,50 @@ async def experience_workspace(browser):
     await page.locator('#workspace-profile').select_option('profile_russia')
     assert not await page.locator('#knowledge-library').get_by_text('QA Правила версии один').count()
     await page.locator('#workspace-profile').select_option('profile_majest')
-    assert not errors,errors
+    # Evidence & Knowledge 1.9.0: shared production components, profile state,
+    # real case dossiers and responsive tab navigation, not a static dashboard.
+    await page.locator('.nav [data-view=evidence]').click()
+    hub=page.locator('#evidence-knowledge-center')
+    await hub.locator('.ek-metric').first.wait_for(timeout=12000)
+    assert await hub.locator('.ek-metric').count()==9
+    assert await hub.locator('#ek-panel-overview').is_visible()
+    assert await hub.locator('#ek-summary').get_by_text('QA urgent case',exact=False).count()>0
+    await hub.get_by_label('Период активности').select_option('14')
+    await page.wait_for_function("window.__data.rpNexusStateV1.profiles[0].evidenceKnowledge?.days===14")
+    await hub.locator('[data-ek-tab=library]').click()
+    await hub.locator('#knowledge-library').wait_for(state='visible')
+    assert await hub.locator('#knowledge-library').get_by_text('QA Правила версии один',exact=True).count()>=1
+    await hub.locator('[data-ek-tab=graph]').click()
+    await hub.locator('#evidence-knowledge-graph').wait_for(state='visible')
+    assert await hub.locator('#evidence-knowledge-graph').get_by_text('QA привязка к жалобе').count()==1
+    await hub.locator('[data-ek-tab=timeline]').click()
+    await hub.locator('#ek-panel-timeline [data-case-card]').first.wait_for(state='visible')
+    await hub.locator('[data-ek-tab=dossier]').click()
+    dossier=hub.locator('#ek-dossier-list')
+    await dossier.get_by_text('QA urgent case',exact=True).first.wait_for()
+    await dossier.locator('.ek-dossier-row').filter(has_text='QA urgent case').get_by_role('button',name='Досье и экспорт').click()
+    await page.locator('#case-dossier-dialog').get_by_text('Досье дела',exact=False).first.wait_for()
+    await page.locator('#case-dossier-dialog').get_by_role('button',name='Закрыть').click()
+    await page.locator('#case-dossier-dialog').wait_for(state='detached')
+    await hub.locator('[data-ek-tab=overview]').click()
+    await hub.locator('[data-ek-tab=dossier]').click()
+    await hub.locator('#ek-dossier-list').get_by_text('QA urgent case',exact=True).first.wait_for()
+    await hub.locator('.ek-dossier-row').filter(has_text='QA urgent case').get_by_role('button',name='Таймлайн').click()
+    assert await hub.locator('#ek-panel-timeline').is_visible()
+    assert await hub.locator('[data-case-card]').filter(has_text='QA urgent case').count()==1
+    await page.wait_for_function("window.__data.rpNexusStateV1.profiles[0].evidenceKnowledge?.tab==='timeline'")
+    await page.locator('#workspace-profile').select_option('profile_russia')
+    await hub.locator('#ek-summary .ek-metric').first.wait_for(timeout=10000)
+    assert not await hub.locator('#ek-summary').get_by_text('QA urgent case').count()
+    assert not await hub.locator('#ek-dossier-list').get_by_text('QA urgent case').count()
+    await page.locator('#workspace-profile').select_option('profile_majest')
+    await hub.locator('[data-ek-tab=graph]').click()
+    await hub.locator('#evidence-knowledge-graph').wait_for(state='visible')
+    await page.set_viewport_size({'width':375,'height':780})
+    assert await page.evaluate('document.documentElement.scrollWidth<=window.innerWidth+1')
     assert not errors,errors
     await context.close()
-    return 12
+    return 13
 
 
 
