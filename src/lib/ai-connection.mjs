@@ -18,6 +18,7 @@ export async function setAIEnabled(profileId,enabled){
  const next={...old,[profileId]:{enabled}};await api.storage.local.set({[AI_SETTINGS_KEY]:next});return next[profileId];
 }
 export async function removeAIProfile(profileId){
+ const {removeAIWorkspaceProfile}=await import('./ai-workspace-store.mjs');await removeAIWorkspaceProfile(profileId);
  const raw=(await api.storage.local.get(AI_SETTINGS_KEY))[AI_SETTINGS_KEY]||{};if(!Object.hasOwn(raw,profileId))return;const next={...raw};delete next[profileId];await api.storage.local.set({[AI_SETTINGS_KEY]:next});
 }
 export async function requestAIPermission(){return api.permissions.request({origins:[AI_ORIGIN]});}
@@ -29,6 +30,17 @@ export async function aiHealth(token,{fetchImpl=fetch,signal}={}){
  if(!res.ok)throw Error(res.status===401?'Неверный токен шлюза':`Шлюз недоступен (HTTP ${res.status})`);
  const data=await res.json();if(!data?.ok||typeof data.model!=='string')throw Error('Некорректный ответ шлюза');return data;
 }
+/** Only explicitly approved prior turns are sent; never replay an entire saved archive. */
+export function chatHistory(messages){
+ if(!Array.isArray(messages))throw Error('Некорректная история диалога');
+ const limited=messages.filter(m=>m&&['user','assistant'].includes(m.role)&&typeof m.text==='string'&&m.text.trim()).slice(-6).map(m=>({role:m.role,text:m.text.slice(0,1100)}));
+ return limited;
+}
+export function workspaceChatPayload(question,history=[]){
+ const q=assertQuestion(question),previous=chatHistory(history);
+ return previous.length?{mode:'chat',question:q,history:previous}:{question:q};
+}
+export async function streamWorkspaceAI(question,token,history=[],options={}){return streamAIPayload(workspaceChatPayload(question,history),token,options);}
 export async function streamAI(question,token,options={}){return streamAIPayload({question:assertQuestion(question)},token,options);}
 export async function streamRulesAI(question,token,sources,options={}){
  if(!Array.isArray(sources)||sources.length<1||sources.length>5)throw Error('Выберите до пяти локальных источников');
