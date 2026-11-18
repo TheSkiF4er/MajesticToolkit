@@ -4,7 +4,7 @@ import {execFileSync} from 'node:child_process';
 const root=resolve(import.meta.dirname,'..');
 const version=JSON.parse(await readFile(resolve(root,'package.json'),'utf8')).version;
 const permissions=new Set(['storage','activeTab','scripting','sidePanel','alarms','notifications','unlimitedStorage','identity']);
-const origins=new Set(['https://forum.majestic-rp.ru/*','https://forum.russia.online/*','https://www.youtube.com/*','https://rutube.ru/*','https://www.twitch.tv/*','https://www.googleapis.com/*','https://docs.googleapis.com/*','https://sheets.googleapis.com/*','https://oauth2.googleapis.com/*','https://api.majestic-files.com/*','https://api.majestic-files.net/*','https://fletcher-wiki.com/*','https://www.fletcher-wiki.com/*']);
+const origins=new Set(['https://forum.majestic-rp.ru/*','https://forum.russia.online/*','https://www.youtube.com/*','https://rutube.ru/*','https://www.twitch.tv/*','https://www.googleapis.com/*','https://docs.googleapis.com/*','https://sheets.googleapis.com/*','https://oauth2.googleapis.com/*','https://api.majestic-files.com/*','https://api.majestic-files.net/*','https://fletcher-wiki.com/*','https://www.fletcher-wiki.com/*','http://127.0.0.1/*']);
 async function walk(dir){const nodes=await readdir(dir,{withFileTypes:true});return (await Promise.all(nodes.map(async n=>n.isDirectory()?walk(resolve(dir,n.name)):[resolve(dir,n.name)]))).flat();}
 const targets=['chromium','firefox','firefox-android','safari'];
 for(const browser of targets){
@@ -39,5 +39,6 @@ for(const browser of targets){
  for(const f of await walk(output))if(/\.(m?js)$/.test(f))execFileSync(process.execPath,['--check',f],{stdio:'pipe'});
  console.log(`${browser}: manifest, static scripts, syntax and permissions validated`);
 }
+execFileSync(process.execPath,['--check',resolve(root,'ai-gateway/server.mjs')],{stdio:'pipe'});
 const src=await walk(resolve(root,'src'));for(const f of src)if(/\.(m?js)$/.test(f))execFileSync(process.execPath,['--check',f],{stdio:'pipe'});
 console.log(`Checked ${src.filter(f=>/\.(m?js)$/.test(f)).length} source modules`);

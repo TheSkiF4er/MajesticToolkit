@@ -8,6 +8,7 @@ import asyncio
 import os
 from pathlib import Path
 from playwright.async_api import async_playwright
+from ai_browser_191 import ai_connection_browser
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -568,6 +569,7 @@ async def experience_workspace(browser):
         await page.evaluate('route=>history.replaceState(null,"",route)',route)
         await page.evaluate("import('mt:ui/main.mjs')")
     await boot(page)
+    # Isolated real-browser AI workflow is exercised in ai_browser_191.py.
     await page.locator('.ws-widgets').wait_for(timeout=8000)
     assert await page.locator('.ws-widget').count()==9
     assert await page.locator('.ws-nav-group').count()==5
@@ -1293,6 +1295,7 @@ async def main():
             browser=await engine.launch(headless=True,**kwargs)
             try:
                 cases=await exercise(browser)
+                cases+=await ai_connection_browser(browser)
                 cases+=await experience_workspace(browser)
                 cases+=await evidence_vault_workspace(browser)
                 cases+=await evidence_timeline_workspace(browser)
