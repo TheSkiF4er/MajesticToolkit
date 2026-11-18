@@ -80,6 +80,18 @@ export function removeComplaintEvidence(id, evidenceId) {
     return item;
   });
 }
+// Persist timeline mutations in the same serialized queue as evidence and complaint edits.
+export function mutateCaseTimeline(id,action,input={},expected=null){
+  return enqueue(async()=>{
+    const profile=getActiveProfile(await loadState()),before=await getCase(id);
+    if(before.profileId!==profile.id||new URL(before.url).hostname!==(profile.project==='majestic'?'forum.majestic-rp.ru':'forum.russia.online'))throw Error('Жалоба другого профиля или проекта');
+    const after=C.timelineAction(before,action,input,expected);
+    const current=getActiveProfile(await loadState());
+    if(current.id!==profile.id||current.project!==profile.project||current.server!==profile.server)throw Error('Активный профиль изменился');
+    await api.storage.local.set(await withOperations(before,after,'evidence',`Хронология: ${action}`));
+    return after;
+  });
+}
 // Serialized with evidence and status mutations to avoid lost workflow events.
 export function mutateCaseWorkflow(id,action,payload={}) {
   return enqueue(async()=>{

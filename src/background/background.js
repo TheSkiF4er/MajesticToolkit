@@ -384,6 +384,7 @@ api.runtime.onMessage.addListener((message,sender,sendResponse) => {
           if(!existing||existing.kind==='file'||existing.vaultId||record.meta.kind!=='link'||record.meta.profileId!==current.profileId||existing.url!==record.meta.url||existing.seconds!==record.meta.seconds)throw Error('Ссылка не соответствует доказательству жалобы');
           return store.linkComplaintEvidence(current.id,existing.id,record.meta.id);
         }
+        case 'timeline': return store.mutateCaseTimeline(message.id,message.operation,message.input,message.expected??null);
         case 'removeEvidence': return store.removeComplaintEvidence(message.id,message.evidenceId);
         case 'replace': return store.replaceCases(message.cases);
         case 'workflow': return store.mutateCaseWorkflow(message.id,message.workflowAction,message.payload);

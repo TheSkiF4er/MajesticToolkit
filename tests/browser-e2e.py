@@ -1059,6 +1059,83 @@ async def evidence_vault_workspace(browser):
     await context.close()
     return 1
 
+async def evidence_timeline_workspace(browser):
+    """Real complaint Timeline UI, live serialized mutations and linked HTTPS video offsets."""
+    import base64,json,re
+    modules={}
+    def add(path):
+        path=path.resolve();key='mt:'+path.relative_to(ROOT/'src').as_posix()
+        if key in modules:return key
+        modules[key]=''
+        def sub(m):return m.group(1)+add((path.parent/m.group(2)).resolve())+m.group(1)
+        source=re.sub(r"(['\"])(\.{1,2}/[^'\"\n]+\.m?js)\1",sub,path.read_text())
+        modules[key]='data:text/javascript;base64,'+base64.b64encode(source.encode()).decode()
+        return key
+    add(ROOT/'src/ui/complaints-page.mjs');add(ROOT/'src/lib/model.mjs')
+    html='<html><head><meta charset="utf-8"><script type="importmap">'+json.dumps({'imports':modules})+'</script></head><body><div id="cases"></div></body></html>'
+    context=await browser.new_context()
+    page=await context.new_page()
+    errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
+    await page.set_content(html)
+    await page.evaluate("""async()=>{
+      const state=(await import('mt:lib/model.mjs')).defaultState();
+      const data={rpNexusStateV1:state};window.__timelineData=data;window.__timelineState=state;
+      const event={addListener(){}},tabs=[];window.__timelineTabs=tabs;
+      window.browser={runtime:{id:'fixture',getURL:x=>x,async sendMessage(m){
+        try{
+          if(m.type==='RP_NEXUS_CASE_MUTATE'){
+           const s=await import('mt:lib/complaints-store.mjs');
+           if(m.action==='timeline')return {ok:true,value:await s.mutateCaseTimeline(m.id,m.operation,m.input,m.expected)};
+           if(m.action==='update')return {ok:true,value:await s.editComplaint(m.id,m.patch)};
+           if(m.action==='removeEvidence')return {ok:true,value:await s.removeComplaintEvidence(m.id,m.evidenceId)};
+          }
+          return {ok:true,value:null};
+        }catch(e){return {ok:false,error:e.message};}
+      }},tabs:{async create(x){tabs.push(x);return x;}},storage:{onChanged:event,local:{async get(k){if(k===null)return structuredClone(data);if(typeof k==='string')return {[k]:data[k]};if(Array.isArray(k))return Object.fromEntries(k.map(x=>[x,data[x]]));return {};},async set(x){for(const [k,v] of Object.entries(x))data[k]=structuredClone(v);},async remove(k){for(const x of Array.isArray(k)?k:[k])delete data[x];}}}};
+      window.confirm=()=>true;
+      const store=await import('mt:lib/complaints-store.mjs');window.__timelineCase=await store.createComplaint({profileId:state.activeProfileId,title:'Timeline UI fixture',url:'https://forum.majestic-rp.ru/threads/timeline.182/'});
+      window.__timelineCase=await store.addComplaintEvidence(window.__timelineCase.id,{title:'Видео 1',url:'https://youtu.be/example',seconds:12,note:''});
+      const ui=await import('mt:ui/complaints-page.mjs');window.__timelineUI=ui;
+      const root=document.getElementById('cases');const feedback=(msg,err)=>{window.__timelineFeedback={msg,err}};
+      const render=()=>MTSafeDOM.replaceHtml(root,ui.complaintsSection(state));
+      window.__timelineRender=render;await ui.refreshComplaints();render();
+      document.addEventListener('click',e=>{const b=e.target.closest('[data-case-action]');if(b)void ui.handleComplaintAction(b,state,render,feedback).catch(error=>feedback(error.message,true));});
+      document.addEventListener('submit',e=>{if(e.target.id==='case-timeline-form'){e.preventDefault();void ui.handleComplaintSubmit(e,state,render,feedback).catch(error=>feedback(error.message,true));}});
+    }""")
+    card=page.locator('[data-case-card]').filter(has_text='Timeline UI fixture')
+    await card.locator('[data-case-action=timeline]').click()
+    await card.locator('.evidence-timeline').get_by_text('Хронология пуста').wait_for()
+    await card.locator('[data-case-action=timeline-add]').click()
+    form=page.locator('#case-timeline-form')
+    await form.locator('[name=title]').fill('Нарушение у ворот')
+    await form.locator('[name=description]').fill('Наблюдение, требует проверки')
+    await form.locator('[name=participants]').fill('12345, Player_One')
+    await form.locator('[name=occurredAt]').fill('2026-11-17T22:10')
+    await form.locator('[name=evidenceIds]').check()
+    evidence_id=await page.evaluate("window.__timelineCase.evidence[0].id")
+    await form.locator('[name=clipEvidenceId]').select_option(evidence_id)
+    await form.locator('[name=startSeconds]').fill('42')
+    await form.locator('[name=endSeconds]').fill('72')
+    await form.locator('button[type=submit]').click()
+    await card.get_by_text('Нарушение у ворот').wait_for()
+    assert await page.evaluate("""async()=>{const s=await import('mt:lib/complaints-store.mjs');const c=await s.getCase(window.__timelineCase.id);return c.timeline.length===1&&c.timeline[0].participants[0]==='12345'&&c.timeline[0].endSeconds===72&&c.timeline[0].evidenceIds.length===1;}""")
+    await card.locator('[data-case-action=timeline-material]').click()
+    assert 't=42s' in await page.evaluate('window.__timelineTabs.at(-1)?.url')
+    await card.locator('[data-case-action=timeline-edit]').click()
+    await form.locator('[name=title]').fill('Нарушение проверено')
+    await form.locator('[name=status]').select_option('supported')
+    await form.locator('button[type=submit]').click()
+    await card.get_by_text('Нарушение проверено').wait_for()
+    assert await page.evaluate("""async()=>{const s=await import('mt:lib/complaints-store.mjs');try{const c=await s.getCase(window.__timelineCase.id);await s.removeComplaintEvidence(c.id,c.evidence[0].id);return false;}catch(e){return e.message.includes('хронологии');}}""")
+    # A stale edit from another tab is rejected by the persisted timestamp.
+    assert await page.evaluate("""async()=>{const s=await import('mt:lib/complaints-store.mjs'),c=await s.getCase(window.__timelineCase.id);try{await s.mutateCaseTimeline(c.id,'remove',{id:c.timeline[0].id},'2020-01-01T00:00:00.000Z');return false;}catch(e){return e.message.includes('другой вкладке');}}""")
+    await card.locator('[data-case-action=timeline-remove]').click()
+    await card.locator('.evidence-timeline').get_by_text('Хронология пуста').wait_for()
+    assert await page.evaluate("""async()=>{const s=await import('mt:lib/complaints-store.mjs');const c=await s.getCase(window.__timelineCase.id);return c.timeline.length===0&&c.evidence.length===1;}""")
+    assert not errors,errors
+    await context.close()
+    return 1
+
 async def main():
     names=os.environ.get('MAJESTIC_E2E_BROWSERS','chromium').split(',')
     async with async_playwright() as p:
@@ -1076,6 +1153,7 @@ async def main():
                 cases=await exercise(browser)
                 cases+=await experience_workspace(browser)
                 cases+=await evidence_vault_workspace(browser)
+                cases+=await evidence_timeline_workspace(browser)
                 print(f'{name} browser E2E: {cases} scenarios passed (offline XenForo DOM fixtures)')
             finally:await browser.close()
 

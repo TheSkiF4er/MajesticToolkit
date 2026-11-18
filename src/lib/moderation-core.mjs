@@ -18,7 +18,7 @@ export function moderationReport(result,players,c){
   for(const id of item.evidenceIds){const e=c.evidence.find(e=>e.id===id);lines.push(`${e.title}: ${evidenceSource(e)}${e.seconds===null?'':' (таймкод '+C.timecode(e.seconds)+')'}`);}
   if(!item.evidenceIds.length)lines.push('Доказательства не привязаны.');if(item.note)lines.push('Комментарий: '+item.note);
  }
- return calculationText(result)+'\n\n'+lines.join('\n');
+ return calculationText(result)+'\n\n'+lines.join('\n')+(c.timeline?.length?'\n\n'+C.timelineText(c):'');
 }
 export function saveModerationRecord(c,p,input,rows){
  assertCaseScope(c,p);if(c.status==='done')throw Error('Жалоба завершена. Откройте рассмотрение заново.');

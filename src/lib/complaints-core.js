@@ -71,7 +71,7 @@
   function draftDecision(item) {
     const c=cleanCase(item);const kind=c.workflow.decision;
     const intro={satisfied:'По результатам рассмотрения предлагается удовлетворить обращение.',rejected:'По результатам рассмотрения предлагается отказать в удовлетворении обращения.',partial:'По результатам рассмотрения предлагается частично удовлетворить обращение.',request:'Для продолжения рассмотрения необходимо запросить уточняющие сведения.',refer:'Обращение предлагается передать уполномоченному подразделению.'}[kind];
-    return `РЕШЕНИЕ ПО ОБРАЩЕНИЮ\nТема: ${c.title}\nИсточник: ${c.url}\nДата подготовки: ${new Date().toISOString().slice(0,10)}\n\n${intro}\n\nУстановленные обстоятельства: [заполнить вручную]\nПроверенные доказательства (${c.evidence.length}): ${c.evidence.map(x=>x.title).join('; ')||'[нет прикреплённых]'}\nОснования решения: [указать нормы и факты вручную]\nИтоговое решение: [уточнить и подтвердить вручную]\n\nТекст подготовлен локально. Отправка на форум выполняется пользователем.`;
+    return `РЕШЕНИЕ ПО ОБРАЩЕНИЮ\nТема: ${c.title}\nИсточник: ${c.url}\nДата подготовки: ${new Date().toISOString().slice(0,10)}\n\n${intro}\n\nУстановленные обстоятельства: [заполнить вручную]\nПроверенные доказательства (${c.evidence.length}): ${c.evidence.map(x=>x.title).join('; ')||'[нет прикреплённых]'}\n${c.timeline.length?'\n'+timelineText(c)+'\n':''}Основания решения: [указать нормы и факты вручную]\nИтоговое решение: [уточнить и подтвердить вручную]\n\nТекст подготовлен локально. Отправка на форум выполняется пользователем.`;
   }
   function deadlineTier(deadline,now=Date.now()){
     if(!deadline)return null;const remaining=Date.parse(deadline)-now;
@@ -136,6 +136,74 @@
     }
     return result;
   }
+  // Evidence Timeline 1.8.2: local reconstruction; media offsets are NOT wall-clock times.
+  const MAX_TIMELINE = 120;
+  const TIMELINE_STATUSES = Object.freeze(['unverified','supported','disputed']);
+  function cleanTimeline(value,evidence) {
+    if(value===undefined||value===null)return [];
+    if(!Array.isArray(value)||value.length>MAX_TIMELINE)throw Error('Неверная хронология или превышен лимит событий');
+    const ids=new Set(),refs=new Map(evidence.map(x=>[x.id,x]));
+    const out=value.map(row=>{
+      if(!row||typeof row!=='object'||Array.isArray(row)||typeof row.id!=='string'||!/^[\w-]{8,120}$/.test(row.id)||ids.has(row.id))throw Error('Неверный или повторный ID события');
+      ids.add(row.id);
+      const title=str(row.title,'Название события',180),description=str(row.description??'','Описание события',2000,true);
+      const occurredAt=date(row.occurredAt??null,'Время события',true);
+      const status=row.status??'unverified';if(!TIMELINE_STATUSES.includes(status))throw Error('Неизвестный статус события');
+      if(!Array.isArray(row.participants)||row.participants.length>15)throw Error('Некорректные участники события');
+      const participants=row.participants.map(x=>str(x,'Участник',80));
+      if(new Set(participants.map(x=>x.toLowerCase())).size!==participants.length)throw Error('Участник указан дважды');
+      if(!Array.isArray(row.evidenceIds)||row.evidenceIds.length>MAX_EVIDENCE)throw Error('Некорректные ссылки на доказательства');
+      const evidenceIds=row.evidenceIds.map(x=>str(x,'ID доказательства',120));
+      if(new Set(evidenceIds).size!==evidenceIds.length||evidenceIds.some(id=>!refs.has(id)))throw Error('Доказательство события не принадлежит жалобе');
+      const clipEvidenceId=row.clipEvidenceId??null;
+      if(clipEvidenceId!==null){
+        if(typeof clipEvidenceId!=='string'||!evidenceIds.includes(clipEvidenceId))throw Error('Видеофрагмент должен быть связан с доказательством события');
+        const media=refs.get(clipEvidenceId);
+        if(!(media.kind==='file'&&['video/mp4','video/webm'].includes(media.mime))&&!(media.kind!=='file'&&(() => {try {const u=new URL(media.url);return VIDEO_HOSTS.includes(u.hostname)||/\.(mp4|webm)$/i.test(u.pathname);}catch{return false;}})()))throw Error('Для фрагмента необходимо видеодоказательство');
+      }
+      const startSeconds=row.startSeconds??null,endSeconds=row.endSeconds??null;
+      if(clipEvidenceId===null&&(startSeconds!==null||endSeconds!==null))throw Error('Таймкод указан без видео');
+      if(startSeconds!==null&&(!Number.isInteger(startSeconds)||startSeconds<0||startSeconds>86400))throw Error('Неверное начало видеофрагмента');
+      if(endSeconds!==null&&(startSeconds===null||!Number.isInteger(endSeconds)||endSeconds<=startSeconds||endSeconds>86400))throw Error('Неверный конец видеофрагмента');
+      return {id:row.id,title,description,occurredAt,status,participants,evidenceIds,clipEvidenceId,startSeconds,endSeconds,createdAt:date(row.createdAt,'Создано событие'),updatedAt:date(row.updatedAt,'Обновлено событие')};
+    });
+    if(JSON.stringify(out).length>48000)throw Error('Хронология превышает 48 000 символов');
+    return out;
+  }
+  function timelineAction(old,action,input={},expected=null){
+    const c=cleanCase(old);
+    if(c.status==='done')throw Error('Для изменения хронологии сначала откройте завершённую жалобу повторно.');
+    if(expected!==null&&expected!==c.updatedAt)throw Error('Жалоба изменена в другой вкладке. Откройте хронологию заново.');
+    const at=new Date(Math.max(Date.now(),Date.parse(c.updatedAt)+1)).toISOString();
+    let timeline=c.timeline;
+    if(action==='add'){
+      if(timeline.length>=MAX_TIMELINE)throw Error('Лимит событий достигнут');
+      timeline=[...timeline,{...input,id:uuid(),createdAt:at,updatedAt:at}];
+    }else if(action==='edit'){
+      if(!timeline.some(x=>x.id===input.id))throw Error('Событие не найдено');
+      timeline=timeline.map(x=>x.id===input.id?{...x,...input,id:x.id,createdAt:x.createdAt,updatedAt:at}:x);
+    }else if(action==='remove'){
+      if(!timeline.some(x=>x.id===input.id))throw Error('Событие не найдено');
+      timeline=timeline.filter(x=>x.id!==input.id);
+    }else throw Error('Неизвестная операция хронологии');
+    const cleaned=cleanTimeline(timeline,c.evidence);
+    const moderation=c.moderation?{...c.moderation,status:'draft',decisionSnapshotId:null,revision:uuid(),updatedAt:at}:undefined;
+    return cleanCase({...c,timeline:cleaned,...(moderation?{moderation}:{}),workflow:event(c.workflow,'evidence',`Таймлайн: ${action==='add'?'создано':action==='remove'?'удалено':'обновлено'} событие; расчёт требует повторной проверки`),updatedAt:at});
+  }
+  function timelineText(item){
+    const c=cleanCase(item);
+    if(!c.timeline.length)return '';
+    return 'Хронология (локальные наблюдения, требуют самостоятельной проверки):\n'+timelineOrdered(c.timeline).map(row=>{
+      const when=row.occurredAt??'время неизвестно';
+      const clip=row.clipEvidenceId?` · видео ${row.startSeconds===null?'без начала':timecode(row.startSeconds)}${row.endSeconds===null?'':'–'+timecode(row.endSeconds)}`:'';
+      const evidences=row.evidenceIds.map(id=>c.evidence.find(x=>x.id===id)?.title??'').filter(Boolean).join(', ');
+      return `${when}: ${row.title} (${row.status})${clip}${row.participants.length?' · '+row.participants.join(', '):''}${evidences?' · '+evidences:''}${row.description?' · '+row.description:''}`;
+    }).join('\n');
+  }
+  function timelineOrdered(value){return [...value].sort((a,b)=>{
+    const d=(x)=>x.occurredAt?Date.parse(x.occurredAt):Number.POSITIVE_INFINITY;
+    return d(a)-d(b)||(a.clipEvidenceId===b.clipEvidenceId?(a.startSeconds??Infinity)-(b.startSeconds??Infinity):0)||a.createdAt.localeCompare(b.createdAt)||a.id.localeCompare(b.id);
+  });}
   // The moderation record is part of the case, so backup/restore and case deletion are atomic.
   function cleanModeration(value,evidence) {
     if(value==null)return undefined;
@@ -219,14 +287,14 @@
       deadline: date(data.deadline, 'Срок', true), watching: data.watching,
       lastSeenPostId: data.lastSeenPostId,
       lastCheckedAt: date(data.lastCheckedAt, 'Дата проверки', true),
-      unread: data.unread, evidence, triage, ...(data.sla==null?{}:{sla:cleanSla(data.sla)}), forumState:cleanForumState(data.forumState), ...(data.moderation==null?{}:{moderation:cleanModeration(data.moderation,evidence)}), workflow:cleanWorkflow(data.workflow,data.status),
+      unread: data.unread, evidence, timeline:cleanTimeline(data.timeline,evidence), triage, ...(data.sla==null?{}:{sla:cleanSla(data.sla)}), forumState:cleanForumState(data.forumState), ...(data.moderation==null?{}:{moderation:cleanModeration(data.moderation,evidence)}), workflow:cleanWorkflow(data.workflow,data.status),
       createdAt: date(data.createdAt, 'Дата создания'), updatedAt: date(data.updatedAt, 'Дата изменения')
     };
   }
   function createCase(data) {
     if(data.status==='done')throw Error('Создание завершённой жалобы требует процесса рассмотрения');
     const now = new Date().toISOString();
-    return cleanCase({ id: uuid(), profileId: data.profileId, title: data.title, url: data.url, status: data.status || 'new', note: data.note ?? '', draft: data.draft ?? '', deadline: data.deadline || null, watching: data.watching ?? true, lastSeenPostId: null, lastCheckedAt: null, unread: false, evidence: [], triage:cleanTriage({...cleanTriage(data.triage),queue:data.status==='waiting'?'waiting':'active',reason:''}), createdAt: now, updatedAt: now });
+    return cleanCase({ id: uuid(), profileId: data.profileId, title: data.title, url: data.url, status: data.status || 'new', note: data.note ?? '', draft: data.draft ?? '', deadline: data.deadline || null, watching: data.watching ?? true, lastSeenPostId: null, lastCheckedAt: null, unread: false, evidence: [], timeline:[], triage:cleanTriage({...cleanTriage(data.triage),queue:data.status==='waiting'?'waiting':'active',reason:''}), createdAt: now, updatedAt: now });
   }
   function updateCase(old, fields) {
     const allowed = ['title','status','note','draft','deadline','watching','unread','triage'];
@@ -260,6 +328,7 @@
   function removeEvidence(old, id) {
     const item = cleanCase(old);
     if (!item.evidence.some(e => e.id === id)) throw Error('Доказательство не найдено');
+    if(item.timeline.some(t=>t.evidenceIds.includes(id)))throw Error('Доказательство используется в хронологии. Сначала удалите связь с событием.');
     const moderation=item.moderation?{...item.moderation,revision:uuid(),status:'draft',updatedAt:new Date().toISOString(),players:item.moderation.players.map(p=>({...p,items:p.items.map(i=>({...i,evidenceIds:i.evidenceIds.filter(e=>e!==id)}))}))}:undefined;
     return cleanCase({ ...item, moderation, evidence: item.evidence.filter(e => e.id !== id),workflow:event(item.workflow,'evidence','Удалено доказательство'), updatedAt: new Date().toISOString() });
   }
@@ -280,5 +349,5 @@
     if (!Number.isInteger(s) || s < 0) return '';
     return `${Math.floor(s/3600) ? Math.floor(s/3600) + ':' : ''}${String(Math.floor(s/60)%60).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`;
   }
-  root.RPNComplaints = Object.freeze({ PREFIX, MAX_CASES, MAX_EVIDENCE, STATUS, PRIORITIES, PRIORITY_LABELS, QUEUE_STATES, cleanTriage, cleanSla, triageAction, ALLOWED_HOSTS, VIDEO_HOSTS, cleanCase, cleanModeration, createCase, updateCase, addEvidence, linkLegacyEvidence, removeEvidence, observeCase, canonicalThreadUrl, threadKey, cleanEvidence, videoLink, timecode, WORKFLOW_STAGES, WORKFLOW_LABELS, WORKFLOW_CHECKS, DECISION_KINDS, initialWorkflow, cleanWorkflow, workflowAction, draftDecision, deadlineTier });
+  root.RPNComplaints = Object.freeze({ PREFIX, MAX_CASES, MAX_EVIDENCE, MAX_TIMELINE, TIMELINE_STATUSES, cleanTimeline, timelineAction, timelineOrdered, timelineText, STATUS, PRIORITIES, PRIORITY_LABELS, QUEUE_STATES, cleanTriage, cleanSla, triageAction, ALLOWED_HOSTS, VIDEO_HOSTS, cleanCase, cleanModeration, createCase, updateCase, addEvidence, linkLegacyEvidence, removeEvidence, observeCase, canonicalThreadUrl, threadKey, cleanEvidence, videoLink, timecode, WORKFLOW_STAGES, WORKFLOW_LABELS, WORKFLOW_CHECKS, DECISION_KINDS, initialWorkflow, cleanWorkflow, workflowAction, draftDecision, deadlineTier });
 })(globalThis);

@@ -223,3 +223,12 @@ body[data-mode=sidebar] .ws-layout .side{height:auto;position:static;overflow:vi
 .mc-overview-lists .button{width:100%;text-align:left;white-space:normal}
 @media(max-width:1050px){.mc-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:650px){.mc-overview-lists{grid-template-columns:minmax(0,1fr)}.mc-tabs .button{flex:1 1 130px}.mc-metric{padding:10px}}
+
+/* Evidence Timeline 1.8.2: chronological, responsive case events. */
+.timeline-list { margin: 12px 0 0; padding-left: 28px; border-left: 2px solid var(--border, #566580); list-style: decimal; }
+.timeline-entry { padding: 10px 12px; margin: 0 0 12px 6px; background: var(--surface, rgba(110,125,148,.07)); border-radius: 10px; }
+.timeline-entry .row { flex-wrap: wrap; margin-top: 6px; }
+#timeline-dialog { max-width: min(760px,96vw); max-height: 92vh; overflow-y: auto; }
+#timeline-dialog form { display: grid; gap: 10px; }
+#timeline-dialog fieldset { max-height: 210px; overflow: auto; border-radius: 9px; }
+#timeline-dialog fieldset .check { display: block; padding: 3px 0; }
