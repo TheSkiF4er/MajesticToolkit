@@ -1093,6 +1093,70 @@ async def experience_workspace(browser):
     await page.locator('#workspace-profile').select_option('profile_majest')
     await hub.locator('[data-ek-tab=graph]').click()
     await hub.locator('#evidence-knowledge-graph').wait_for(state='visible')
+    # 2.0.1 Government & Justice: real browser CRUD, search, tab persistence and profile isolation.
+    await page.locator('.nav [data-view=justice]').click()
+    await page.locator('.justice-tabs').wait_for(timeout=7000)
+    assert await page.locator('.justice-stat').count()==6
+    await page.locator('#justice-panel [data-government-action=new-department]').click()
+    await page.locator('#government-dialog').wait_for()
+    await page.locator('#government-form [name=name]').fill('QA Окружной суд')
+    await page.locator('#government-form [name=code]').fill('QA-DC')
+    await page.locator('#government-form [name=officer]').fill('Test Justice')
+    await page.locator('#government-form [name=position]').fill('Судья')
+    await page.locator('#government-form button[type=submit]').click()
+    await page.locator('#government-dialog').wait_for(state='detached')
+    assert await page.locator('.justice-stat').first.inner_text()=='Суды\n1'
+    await page.locator('.justice-tabs [data-tab=courts]').click()
+    assert await page.locator('#justice-panel').get_by_text('QA Окружной суд',exact=False).count()>=1
+    await page.locator('.justice-tabs [data-tab=overview]').click()
+    await page.locator('#justice-search').fill('QA Окружной суд')
+    assert await page.locator('#justice-results .justice-result').count()==1
+    await page.locator('#justice-results [data-justice-action=open]').click()
+    await page.locator('#government-dialog').wait_for()
+    assert await page.locator('#government-form [name=name]').input_value()=='QA Окружной суд'
+    await page.locator('#government-dialog [data-government-action=close]').first.click()
+    await page.locator('#government-dialog').wait_for(state='detached')
+    # Real Law Codex editor from the common workspace.
+    await page.locator('.justice-tabs [data-tab=overview]').click()
+    await page.locator('#justice-panel [data-law-action=new-book]').click()
+    await page.locator('#law-dialog').wait_for()
+    await page.locator('#law-form [name=title]').fill('QA Судебный кодекс')
+    await page.locator('#law-form [name=articlesText]').fill('Статья 12. Право на защиту\nПроцессуальные гарантии участников.')
+    await page.locator('#law-form button[type=submit]').click()
+    await page.locator('#law-dialog').wait_for(state='detached')
+    await page.locator('#justice-search').fill('процессуальные гарантии')
+    assert await page.locator('#justice-results .justice-result').count()==1
+    # A real decision with a reference to the current law edition.
+    await page.locator('#justice-panel [data-government-action=new-decision]').click()
+    await page.locator('#government-dialog').wait_for()
+    await page.locator('#government-form [name=departmentId]').select_option(index=1)
+    await page.locator('#government-form [name=caseNumber]').fill('QA-SC-201')
+    await page.locator('#government-form [name=subject]').fill('QA Participant')
+    await page.locator('#government-form [name=facts]').fill('Факты установлены')
+    await page.locator('#government-form [name=reason]').fill('Законные основания')
+    await page.locator('#government-form [name=sanction]').fill('Отказать в удовлетворении заявления')
+    await page.locator('#gov-law-edition').select_option(index=1)
+    await page.locator('#gov-law-article').select_option(index=1)
+    await page.locator('#government-form [data-government-action=add-ref]').click()
+    await page.locator('#government-form button[type=submit]').click()
+    await page.locator('#government-dialog').wait_for(state='detached')
+    await page.locator('#justice-search').fill('QA-SC-201')
+    assert await page.locator('#justice-results .justice-result').count()==1
+    await page.locator('#justice-panel [data-document-action=new-document]').click()
+    await page.locator('#studio-dialog').wait_for()
+    await page.locator('#document-form [name=title]').fill('QA Судебный документ')
+    await page.locator('#document-form [name=body]').fill('Итоги дела QA-SC-201')
+    await page.locator('#document-form button[type=submit]').click()
+    await page.locator('#studio-dialog').wait_for(state='detached')
+    await page.locator('#justice-search').fill('QA Судебный документ')
+    assert await page.locator('#justice-results .justice-result').count()==1
+    await page.locator('#workspace-profile').select_option('profile_russia')
+    await page.locator('.justice-tabs').wait_for()
+    assert not await page.locator('#justice-panel').get_by_text('QA Окружной суд').count()
+    await page.locator('#workspace-profile').select_option('profile_majest')
+    await page.locator('.justice-tabs [data-tab=overview]').click()
+    await page.locator('#justice-panel').get_by_text('Недавно открытые записи').wait_for()
+    assert await page.locator('#justice-panel').get_by_text('QA Окружной суд',exact=False).count()>=1
     await page.set_viewport_size({'width':375,'height':780})
     assert await page.evaluate('document.documentElement.scrollWidth<=window.innerWidth+1')
     assert not errors,errors

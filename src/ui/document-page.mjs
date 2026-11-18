@@ -9,6 +9,7 @@ import {governmentRecords} from './government-page.mjs';
 let records=[],tab='documents',previewVersion=null,previewDocId=null;
 const attr=x=>e(String(x??''));
 export const documentRecords=()=>records;
+export function setDocumentTab(value){if(!['documents','templates'].includes(value))throw Error('Неизвестная вкладка документов');tab=value;}
 export async function refreshDocuments(){records=await listDocumentRecords();return records;}
 const filtered=(profile,type)=>records.filter(r=>r.profileId===profile&&r.type===type);
 const titleOf=r=>documentSummary(r).title;

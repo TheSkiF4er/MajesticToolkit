@@ -261,3 +261,19 @@ body[data-mode=sidebar] .ws-layout .side{height:auto;position:static;overflow:vi
 
 /* Status notices are informational, never modal overlays. */
 #notice{pointer-events:none}
+
+/* Government & Justice 2.0.1 — responsive workspace composed from existing editors. */
+.justice-header{gap:14px}
+.justice-tabs{display:flex;gap:8px;flex-wrap:wrap}
+.justice-tabs .button{white-space:nowrap}
+.justice-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:12px}
+.justice-stat{font:inherit;text-align:left;cursor:pointer;color:inherit;background:var(--panel);border:1px solid var(--stroke);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:7px;min-width:0}
+.justice-stat strong{font-size:1.6rem;font-variant-numeric:tabular-nums}
+.justice-stat:hover,.justice-stat:focus-visible{outline:2px solid var(--accent, #477ec1);outline-offset:1px}
+.justice-result{display:flex;justify-content:space-between;align-items:center;gap:14px;border-top:1px solid var(--stroke);padding:12px 0;min-width:0}
+.justice-result>div:first-child{min-width:0;overflow-wrap:anywhere}
+.justice-result .button{flex-shrink:0}
+.justice-result .subtle{margin:5px 0 0}
+.justice-actions{flex-wrap:wrap}
+.justice-results{max-height:620px;overflow:auto;padding-right:4px}
+@media(max-width:640px){.justice-result{align-items:flex-start;flex-direction:column}.justice-result .row{flex-wrap:wrap}.justice-tabs{flex-wrap:nowrap;overflow-x:auto;padding-bottom:6px}.justice-stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
