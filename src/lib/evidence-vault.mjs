@@ -103,3 +103,34 @@ export async function deleteVaultRecord(id,profileId){
 export async function clearVaultProfile(profileId){
  requireId(profileId,'Профиль');await perform('readwrite',(store)=>{const cursor=store.index('profileId').openCursor(profileId);cursor.onsuccess=()=>{if(cursor.result){cursor.result.delete();cursor.result.continue();}};});
 }
+
+/** Atomically install portable ZIP attachments preserving stable IDs.
+ * No existing content is overwritten, even if the backup has the same ID. */
+export async function importVaultPackage(inventory,files){
+ if(!Array.isArray(inventory)||!(files instanceof Map))throw Error('Неверный переносимый архив');
+ const metas=inventory.map(cleanVaultMetadata),ids=new Set(),rows=[];
+ for(const meta of metas){
+  if(ids.has(meta.id))throw Error('Повторное вложение');ids.add(meta.id);
+  let blob=null;
+  if(meta.kind==='file'){
+   const bytes=files.get(meta.id);
+   if(!(bytes instanceof Uint8Array)||bytes.length!==meta.size)throw Error('Отсутствуют байты файла '+meta.id);
+   validateFileSignature(bytes.slice(0,64),meta.mime);
+   if(await sha256(bytes)!==meta.sha256)throw Error('SHA-256 вложения не совпадает: '+meta.id);
+   blob=new Blob([bytes],{type:meta.mime});
+  }
+  rows.push({...meta,...(blob?{blob}:{})});
+ }
+ const before=new Map();let used=0;
+ const db=await openVault();try{
+  await new Promise((resolve,reject)=>{const tx=db.transaction('entries','readonly'),req=tx.objectStore('entries').openCursor();req.onsuccess=()=>{if(req.result){const r=req.result.value;before.set(r.id,r);used+=r.kind==='file'?r.size:0;req.result.continue();}};tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);});
+ }finally{db.close();}
+ const newRecords=rows.filter(r=>!before.has(r.id));
+ for(const r of rows.filter(r=>before.has(r.id))){const stored=cleanVaultMetadata(before.get(r.id));if(JSON.stringify(stored)!==JSON.stringify(cleanVaultMetadata(r)))throw Error('Существующий файл отличается от резервной копии: '+r.id);if(r.kind==='file')await verifyVaultFile(r.id,r.profileId);}
+ if(used+newRecords.reduce((n,r)=>n+(r.kind==='file'?r.size:0),0)>VAULT_LIMITS.totalBytes)throw Error('Недостаточно места в лимите Evidence Vault');
+ for(const p of new Set(newRecords.map(x=>x.profileId)))if([...before.values()].filter(x=>x.profileId===p).length+newRecords.filter(x=>x.profileId===p).length>VAULT_LIMITS.itemsPerProfile)throw Error('Превышен лимит доказательств профиля');
+ if(newRecords.length)await perform('readwrite',s=>{for(const row of newRecords)s.add(row);});
+ return newRecords.map(x=>x.id);
+}
+/** Roll back only objects that were introduced by the failed portable restore. */
+export async function rollbackVaultPackage(ids){if(!Array.isArray(ids))throw Error('Неверный откат Evidence Vault');if(ids.length)await perform('readwrite',s=>{for(const id of ids){requireId(id);s.delete(id);}});}

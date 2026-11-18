@@ -35,7 +35,8 @@ import '../lib/forum-core.js';
 import { economySection, refreshEconomy, handleEconomyAction, handleEconomySubmit, setEconomyFilter, setEconomySearch } from './economy-page.mjs';
 import { replaceEconomy, listEconomy as listEconomyRecords } from '../lib/economy-store.mjs';
 import {exportPunishmentData,replacePunishmentData,validatePunishmentBackup} from '../lib/punishment-backup.mjs';
-import {makeModerationBackup,parseModerationBackup} from '../lib/moderation-backup.mjs';
+import {makeBackupV17,parseBackupV17,inventoryAllVault,makePortableBackup,parsePortableBackup} from '../lib/dossier-backup.mjs';
+import {importVaultPackage,rollbackVaultPackage} from '../lib/evidence-vault.mjs';
 import {mountRulesExperience} from './rules-experience.mjs';
 import {KNOWLEDGE_KEY,emptyKnowledge} from '../lib/knowledge-core.mjs';
 import {loadKnowledge,replaceKnowledge} from '../lib/knowledge-store.mjs';
@@ -115,7 +116,7 @@ function sectionSettings() {
   return `<div class="stack"><section class="card stack"><div class="control"><div><h3>Тема интерфейса</h3><p class="subtle">Влияет на popup, боковую панель и рабочее пространство</p></div><select aria-label="Тема" data-setting="theme"><option value="system" ${p.theme === 'system' ? 'selected' : ''}>Системная</option><option value="light" ${p.theme === 'light' ? 'selected' : ''}>Светлая</option><option value="dark" ${p.theme === 'dark' ? 'selected' : ''}>Тёмная</option><option value="sepia" ${p.theme === 'sepia' ? 'selected' : ''}>Сепия</option><option value="contrast" ${p.theme === 'contrast' ? 'selected' : ''}>Высокая контрастность</option></select></div><div class="divider"></div><div class="control"><div><h3>Начальный раздел</h3><p class="subtle">Выбирается при новом открытии расширения</p></div><select aria-label="Стартовый экран" data-setting="startPage">${NAV.map(([id,label]) => `<option value="${id}" ${p.startPage === id ? 'selected' : ''}>${e(label)}</option>`).join('')}</select></div><div class="divider"></div><div class="control"><div><h3>Компактный интерфейс</h3><p class="subtle">Уменьшает отступы в карточках</p></div><label class="check"><input type="checkbox" data-setting="compact" ${p.compact ? 'checked' : ''}><span>Включить</span></label></div></section><section class="card stack"><h3>Productivity 0.9.0</h3><div class="control"><div><strong>Цветовой акцент</strong><p class="subtle">Для всех окон расширения</p></div><select aria-label="Цветовой акцент" data-productivity-setting="accent">${[['blue','Синий'],['teal','Бирюзовый'],['violet','Фиолетовый'],['amber','Янтарный']].map(([id,label])=>`<option value="${id}" ${productivity.accent===id?'selected':''}>${label}</option>`).join('')}</select></div><div class="control"><div><strong>Горячие клавиши</strong><p class="subtle">Alt+1–8 в окнах MajesticToolkit. Ctrl/⌘+K — поиск.</p></div><label class="check"><input type="checkbox" data-productivity-setting="shortcutsEnabled" ${productivity.shortcutsEnabled?'checked':''}>Включить</label></div><div class="productivity-shortcuts">${productivity.shortcuts.map((target,index)=>`<label class="field">Alt+${index+1}<select data-productivity-shortcut="${index}">${NAV.map(([id,label])=>`<option value="${id}" ${target===id?'selected':''}>${e(label)}</option>`).join('')}</select></label>`).join('')}</div><div class="row"><button class="button secondary" data-productivity-action="reset-shortcuts">Сбросить сочетания</button></div></section></div>`;
 }
 function sectionBackup() {
-  return `<div class="stack"><section class="card"><h3>Скачать резервную копию</h3><p class="lead">Внимание: двоичные вложения Evidence Vault (IndexedDB) не входят в JSON. Перед переносом скачайте их отдельно. JSON-файл с профилями, шаблонами, жалобами, экономическими операциями, сделками, результатами игроков локальной базой законов и Government Tools и документами Document Studio. Авторизационные данные сайтов и содержимое страниц не сохраняются.</p><div class="row" style="margin-top:14px"><button class="button primary" data-action="export">Скачать JSON</button></div></section><section class="card"><h3>Восстановить из файла</h3><p class="lead">Данные проверяются до применения. Импорт заменит текущие профили и настройки. Максимальный размер — 48 МиБ. Поддерживаются копии v1–v16. Формат v16 включает базу правил, редакции, политики и историю калькулятора, черновики оверлея. Копии v15 до 1.7 сохраняют существующие данные наказаний при совместимых профилях. Формат v14 также сохраняет этапы рассмотрения жалоб, журнал действий, связи Центра знаний, ссылки и закладки Navigation 2.0, Server Monitor и импортированные статьи. История посещений не экспортируется. При импорте старой копии новые записи сохраняются, если профили совместимы. Формат v16 также сохраняет настройки SLA, локальную автоматизацию, журнал операций и настройки Moderation Center.</p><div style="margin-top:14px"><label class="field">Выберите .json<input id="backup-file" type="file" accept=".json,application/json"></label></div></section><section class="card"><h3>Точка восстановления после импорта</h3><p class="lead">Перед импортом создаётся проверенный снимок текущих данных (не более 20 МиБ). Он переживает закрытие браузера. OAuth-токены и данные других расширений в снимок не входят.</p><div class="row" style="margin-top:12px"><button class="button secondary" data-action="restore-point">Восстановить предыдущие данные</button><button class="button danger" data-action="discard-point">Удалить точку</button></div></section><section class="card"><h3>Где хранятся данные</h3><p class="lead">Ссылки, жалобы и настройки — в storage.local; загруженные файлы Evidence Vault — в IndexedDB расширения и не входят в JSON Backup v16. Скачайте файлы до удаления расширения.  MajesticToolkit не имеет аккаунта, собственного сервера и телеметрии. Перед удалением расширения скачайте копию.</p></section></div>`;
+  return `<div class="stack"><section class="card"><h3>Скачать резервную копию</h3><p class="lead">JSON содержит только метаданные файлов Evidence Vault. Для переноса вложений используйте ZIP v17. JSON-файл с профилями, шаблонами, жалобами, экономическими операциями, сделками, результатами игроков локальной базой законов и Government Tools и документами Document Studio. Авторизационные данные сайтов и содержимое страниц не сохраняются.</p><div class="row" style="margin-top:14px"><button class="button primary" data-action="export">Скачать JSON v17</button><button class="button secondary" data-action="backup-portable-export">Скачать переносимый ZIP с файлами</button></div></section><section class="card"><h3>Восстановить из файла</h3><p class="lead">Данные проверяются до применения. Импорт заменит текущие профили и настройки. Максимальный размер — 48 МиБ. Поддерживаются копии v1–v17. Форматы v16–v17 включают базу правил, редакции, политики и историю калькулятора, черновики оверлея. Копии v15 до 1.7 сохраняют существующие данные наказаний при совместимых профилях. Формат v14 также сохраняет этапы рассмотрения жалоб, журнал действий, связи Центра знаний, ссылки и закладки Navigation 2.0, Server Monitor и импортированные статьи. История посещений не экспортируется. При импорте старой копии новые записи сохраняются, если профили совместимы. Формат v16 также сохраняет настройки SLA, локальную автоматизацию, журнал операций и настройки Moderation Center.</p><div style="margin-top:14px"><label class="field">Выберите .json<input id="backup-file" type="file" accept=".json,application/json"></label><label class="field">Или переносимый ZIP с бинарными вложениями<input id="backup-package-file" type="file" accept=".zip,application/zip"></label></div></section><section class="card"><h3>Точка восстановления после импорта</h3><p class="lead">Перед импортом создаётся проверенный снимок текущих данных (не более 20 МиБ). Он переживает закрытие браузера. OAuth-токены и данные других расширений в снимок не входят.</p><div class="row" style="margin-top:12px"><button class="button secondary" data-action="restore-point">Восстановить предыдущие данные</button><button class="button danger" data-action="discard-point">Удалить точку</button></div></section><section class="card"><h3>Где хранятся данные</h3><p class="lead">Ссылки, жалобы и настройки — в storage.local; загруженные файлы Evidence Vault — в IndexedDB расширения. JSON Backup v17 содержит только их метаданные; используйте переносимый ZIP v17 для полного сохранения файлов.  MajesticToolkit не имеет аккаунта, собственного сервера и телеметрии. Перед удалением расширения скачайте копию.</p></section></div>`;
 }
 const titles = {moderation:['Moderation Center','Жалобы, входящие темы, реестр решений, SLA, автоматизация и журнал'],rules:['Правила и наказания','База правил, калькулятор и рассмотрение жалоб'],knowledge:['Центр знаний','Цитаты редакций, доказательства, события, правила и решения'],search:['Поиск и локальный помощник','Быстрый индекс всех локальных разделов, ответы с указанием источников'],integrations:['Интеграции','Google Docs, Sheets, Drive, Fletcher Wiki и Docossum'],documents:['Document Studio','Редактор, формы, шаблоны, история локальных версий и PDF'],government:['Government Tools','Конструктор решений, правовые основания, процессуальные шаблоны и ведомства'],law:['Law Codex','Законы, неизменяемые редакции, статьи, избранное и памятки'],economy:['Экономика и аналитика','Сделки, денежные операции, калькуляторы, игроки и семьи'],complaints:['Жалобы · Evidence Timeline','Дела, хронология событий, видеофрагменты, файлы SHA-256 и ссылки'],timers:['Таймеры','Локальные таймеры с системными уведомлениями'],monitor:['Server Monitor','Официальный каталог серверов и сохранённые публичные карточки игроков'],forum:['Forum Experience','Биндер, персональная навигация и оформление в едином пространстве'],home:['Обзор','Рабочая среда под ваши RP-проекты'],profiles:['Профили','Переключение между игровыми серверами'],sites:['Сайты и разрешения','Вы контролируете, где работает расширение'],settings:['Настройки','Настройте интерфейс под себя'],backup:['Резервные копии','Перенос данных между браузерами']};
 function moduleWarning() {
@@ -188,18 +189,18 @@ async function exportBackup() {
   const laws = lawRecords();
   const government = governmentRecords();
   const documents = documentRecords();
-  const text = makeModerationBackup([validateState(state), templates, cases, economy, laws, government, documents, externalLinks(), productivity, await listXenForoLinks(), await loadMonitor(), await loadKnowledge(state.profiles.map(p=>p.id)), globalThis.RPNForumCore.cleanTemplate,await listSources(),await listRules()],await exportPunishmentData(state.profiles),await exportSectionData(state.profiles),await exportRegistryData(state.profiles),await exportModerationOps(state.profiles));
+  const text = await createBackupText();
   const blob = new Blob([text], { type: 'application/json;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
-  anchor.download = `majestictoolkit-backup-v1.8.4-${new Date().toISOString().slice(0,10)}.json`;
+  anchor.download = `majestictoolkit-backup-v1.8.5-${new Date().toISOString().slice(0,10)}.json`;
   document.body.appendChild(anchor); anchor.click(); anchor.remove();
   setTimeout(() => URL.revokeObjectURL(url), 30000);
   feedback(`Копия: ${templates.length} шаблонов, ${cases.length} жалоб, ${economy.length} операций/матчей, ${laws.length} записей законодательства, ${government.length} ведомственных записей, ${documents.length} документов/шаблонов, ${externalLinks().length} внешних закладок`);
 }
 async function createBackupText(){
-  return makeModerationBackup([validateState(state),await listTemplates(),await listCases(),await listEconomyRecords(),lawRecords(),governmentRecords(),documentRecords(),externalLinks(),productivity,await listXenForoLinks(),await loadMonitor(),await loadKnowledge(state.profiles.map(p=>p.id)),globalThis.RPNForumCore.cleanTemplate,await listSources(),await listRules()],await exportPunishmentData(state.profiles),await exportSectionData(state.profiles),await exportRegistryData(state.profiles),await exportModerationOps(state.profiles));
+  return makeBackupV17([validateState(state),await listTemplates(),await listCases(),await listEconomyRecords(),lawRecords(),governmentRecords(),documentRecords(),externalLinks(),productivity,await listXenForoLinks(),await loadMonitor(),await loadKnowledge(state.profiles.map(p=>p.id)),globalThis.RPNForumCore.cleanTemplate,await listSources(),await listRules()],await exportPunishmentData(state.profiles),await exportSectionData(state.profiles),await exportRegistryData(state.profiles),await exportModerationOps(state.profiles),await inventoryAllVault(state.profiles));
 }
 async function requestCaseReplacement(cases) {
   const result=await api.runtime.sendMessage({type:'RP_NEXUS_CASE_MUTATE',action:'replace',cases});
@@ -226,6 +227,18 @@ async function executeAction(button) {
   if (button.dataset.url) { await openTab(button.dataset.url); return; }
   const { action, id } = button.dataset;
   if(action==='forum-pane'){setForumPane(button.dataset.pane);render();document.querySelector(`[data-action="forum-pane"][data-pane="${forumPane}"]`)?.focus();return;}
+  if(action==='backup-portable-export'){
+    const json=await createBackupText();
+    const inventory=await inventoryAllVault(state.profiles);
+    const registry=await exportRegistryData(state.profiles);
+    const referenced=new Set([...(await listCases()).flatMap(c=>c.evidence.map(x=>x.vaultId).filter(Boolean)),...registry.records.flatMap(r=>r.evidence.map(x=>x.vaultId).filter(Boolean))]);
+    const known=new Set(inventory.map(x=>x.id));
+    const missing=[...referenced].filter(id=>!known.has(id));
+    if(missing.length)throw Error(`Невозможно создать полную переносимую копию: ${missing.length} материалов отсутствуют в Evidence Vault. Восстановите или удалите несвязанные записи перед экспортом.`);
+    const {blob,manifest}=await makePortableBackup(json,inventory);
+    const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`majestictoolkit-portable-backup-v1.8.5-${new Date().toISOString().slice(0,10)}.zip`;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);
+    feedback(`Переносимая копия: ${manifest.files.length} файлов Evidence Vault, проверены SHA-256`);return;
+  }
   if(action==='dashboard-refresh'){await refreshDashboard();return;}
   if(action==='case-knowledge-graph'){const c=(await listCases()).find(x=>x.id===id&&x.profileId===state.activeProfileId);if(!c)throw Error('Жалоба не найдена');setGraphCaseFilter(c.id);await refreshKnowledge(state.profiles.map(p=>p.id));navigateTo('knowledge');render();document.getElementById('evidence-knowledge-graph')?.scrollIntoView?.({block:'start'});return;}
   if(action==='dashboard-rule'){const p=getActiveProfile(state);const rule=(await listRules()).find(r=>r.id===id&&r.profileId===p.id&&r.project===p.project&&!r.archived&&(!r.server||r.server===p.server));if(!rule)throw Error('Правило недоступно');await api.tabs.create({url:api.runtime.getURL('ui/workspace.html?rule='+encodeURIComponent(id)+'#rules')});return;}
@@ -390,6 +403,112 @@ document.addEventListener('input', event => {
   if (event.target.id === 'economy-search') {setEconomySearch(event.target.value); const caret=event.target.selectionStart; render(); const input=document.getElementById('economy-search'); input?.focus(); input?.setSelectionRange(caret,caret);}
   if (event.target.matches('[data-case-draft]')) scheduleDraftSave(event.target,feedback);
 });
+async function restoreBackupText(text,portable=null){
+
+      const backup = parseBackupV17(text, validateState, globalThis.RPNForumCore.cleanTemplate);
+      if(portable && (backup.schemaVersion!==17||JSON.stringify(backup.evidenceVault)!==JSON.stringify(portable.inventory)))throw Error('Данные ZIP не совпадают с Backup v17');
+      const replacing = backup.schemaVersion >= 3 ? `, ${backup.cases.length} жалоб` : '';
+      const economyCount = backup.schemaVersion >= 4 ? `, ${backup.economy.length} записей экономики` : '';
+      const lawCount = backup.schemaVersion >= 5 ? `, ${backup.lawRecords.length} записей Law Codex` : '';
+      const govCount = backup.schemaVersion >= 6 ? `, ${backup.government.length} ведомственных записей` : '';
+      const documentsCount = backup.schemaVersion >= 7 ? `, ${backup.documents.length} документов/шаблонов` : '';
+      const linksCount = backup.schemaVersion >= 8 ? `, ${backup.siteLinks.length} внешних закладок` : '';
+      const xfCount=backup.schemaVersion>=10?`, ${backup.xenforoNavigation.length} ссылок XenForo`:'';
+      const knowledgeCount=backup.schemaVersion>=12?`, ${backup.knowledgeWorkspace.relations.length} связей Центра знаний`:'';
+      const rulesCount=backup.rules===null?'':`, ${backup.rules.length} правил проекта`;
+      const sourcesCount=backup.schemaVersion>=14?`, ${backup.sourceLibrary.length} статей форума и Wiki`:'';
+      const monitorCount=backup.schemaVersion>=11?`, ${backup.serverMonitor.players.length} карточек игроков`:'';
+      const attachmentCount=backup.evidenceVault?.filter(x=>x.kind==='file').length??0;
+      const filesNotice=portable?` ZIP включает ${portable.files.size} бинарных файлов.`:attachmentCount?` ВНИМАНИЕ: JSON не содержит ${attachmentCount} бинарных вложений; они могут отсутствовать на этом устройстве. Для полного восстановления используйте ZIP.`:'';
+      if (!confirm(`Восстановить ${backup.state.profiles.length} профилей, ${backup.templates.length} шаблонов${replacing}${economyCount}${lawCount}${govCount}${documentsCount}${linksCount}${xfCount}${monitorCount}${knowledgeCount}${sourcesCount}${rulesCount}? Данные, отсутствующие в старом формате копии, сохранятся.${filesNotice}`)) return;
+      return (async () => {
+        const beforeState = state;
+        const beforeTemplates = await listTemplates();
+        const beforeCases = await listCases();
+        const beforeEconomy = await listEconomyRecords();
+        const beforeLaws = lawRecords().slice();
+        const beforeGovernment = governmentRecords().slice();
+        const beforeDocuments = documentRecords().slice();
+        const beforeLinks = externalLinks().slice();
+        const beforeProductivity = productivity;
+        const beforeXfLinks = await listXenForoLinks();
+        const beforeMonitor=await loadMonitor();
+        const beforeSources=await listSources();
+        const beforeRules=await listRules();
+        const beforePunishments=await exportPunishmentData(beforeState.profiles);
+        const beforeSections=await exportSectionData(beforeState.profiles);
+        const beforeRegistry=await exportRegistryData(beforeState.profiles);
+        const beforeModerationOps=await exportModerationOps(beforeState.profiles);
+        const beforeKnowledge=await loadKnowledge(beforeState.profiles.map(p=>p.id));
+        let newlyInstalledVault=[];
+        try {
+          if (backup.schemaVersion < 3 && beforeCases.some(c => !backup.state.profiles.some(p => p.id === c.profileId))) {
+            throw Error('Старая копия содержит другой набор профилей. Сначала экспортируйте данные 0.3.0, чтобы не потерять доступ к существующим жалобам.');
+          }
+          if (backup.schemaVersion < 4 && beforeEconomy.some(r => !backup.state.profiles.some(p => p.id === r.profileId))) throw Error('Старая копия содержит другой набор профилей. Экспортируйте копию 0.5.0 перед импортом.');
+          if (backup.schemaVersion < 5 && beforeLaws.some(r=>!backup.state.profiles.some(p=>p.id===r.profileId))) throw Error('Старая копия содержит другие профили. Экспортируйте полную копию перед импортом.');
+          if (backup.schemaVersion < 6 && beforeGovernment.some(r=>!backup.state.profiles.some(p=>p.id===r.profileId))) throw Error('Старая копия содержит другие профили. Сначала экспортируйте данные Government Tools.');
+          if (backup.schemaVersion < 7 && beforeDocuments.some(r=>!backup.state.profiles.some(p=>p.id===r.profileId))) throw Error('Старая копия содержит другие профили. Сначала экспортируйте документы.');
+          if (backup.schemaVersion < 10 && (await listXenForoLinks()).some(x=>x.profileId!=='*'&&!backup.state.profiles.some(p=>p.id===x.profileId)))throw Error('Старая копия содержит другой набор профилей. Сначала экспортируйте все пользовательские ссылки XenForo.');
+          if (backup.schemaVersion < 11 && beforeMonitor.players.some(x=>!backup.state.profiles.some(p=>p.id===x.profileId)))throw Error('Старая копия содержит другие профили. Сначала экспортируйте карточки игроков.');
+          if (backup.schemaVersion < 14 && beforeSources.some(x=>!backup.state.profiles.some(p=>p.id===x.profileId)))throw Error('Старая копия не содержит тексты импортированных страниц, привязанные к другим профилям. Сначала экспортируйте копию v14.');
+          if (backup.schemaVersion < 12 && [...beforeKnowledge.resources,...beforeKnowledge.relations].some(x=>!backup.state.profiles.some(p=>p.id===x.profileId)))throw Error('Старая копия содержит другие профили. Сначала экспортируйте связи Центра знаний.');
+          if (backup.rules===null && beforeRules.some(r=>!backup.state.profiles.some(p=>p.id===r.profileId&&p.project===r.project)))throw Error('Старая копия несовместима с профилями базы правил. Сначала экспортируйте v15.');
+          if (backup.punishments===null) validatePunishmentBackup(beforePunishments,backup.state.profiles);
+          if (backup.sectionMonitor===null) validateSectionData(beforeSections,backup.state.profiles);
+          if (backup.punishmentRegistry===null) validateRegistry(beforeRegistry,backup.state.profiles);
+          if (backup.moderationOps===null) validateModerationOpsBackup(beforeModerationOps,backup.state.profiles);
+          await createRestorePoint(api.storage.local);
+          if(portable)newlyInstalledVault=await importVaultPackage(portable.inventory,portable.files);
+          if (backup.schemaVersion >= 2) await replaceTemplates(backup.templates);
+          if (backup.schemaVersion >= 3) await requestCaseReplacement(backup.cases);
+          if (backup.schemaVersion >= 4) await replaceEconomy(backup.economy);
+          if (backup.schemaVersion >= 5) await replaceLawRecords(backup.lawRecords,backup.state.profiles.map(p=>p.id));
+          if (backup.schemaVersion >= 6) await replaceGovernment(backup.government,backup.state.profiles.map(p=>p.id));
+          if (backup.schemaVersion >= 7) await replaceDocumentRecords(backup.documents,backup.state.profiles.map(p=>p.id),backup.government);
+          if (backup.schemaVersion >= 8) await replaceLinks(backup.siteLinks);
+          if (backup.schemaVersion >= 9) productivity = await replaceProductivity(backup.productivity);
+          if (backup.schemaVersion >= 10) await replaceXenForoLinks(backup.xenforoNavigation);
+          if (backup.schemaVersion >= 11) await replaceMonitor(backup.serverMonitor);
+          if (backup.schemaVersion >= 12) await replaceKnowledge(backup.knowledgeWorkspace,backup.state.profiles.map(p=>p.id));
+          if (backup.schemaVersion >= 14) await replaceSources(backup.sourceLibrary);
+          if (backup.rules!==null) await replaceRules(backup.rules,backup.state.profiles);
+          state = await restoreState(backup.state);
+          if (backup.punishments!==null) await replacePunishmentData(backup.punishments,backup.state.profiles);
+          if (backup.sectionMonitor!==null) await replaceSectionData(backup.sectionMonitor,backup.state.profiles);
+          if (backup.punishmentRegistry!==null) await replaceRegistryData(backup.punishmentRegistry,backup.state.profiles);
+          if (backup.moderationOps!==null) await replaceModerationOps(backup.moderationOps,backup.state.profiles);
+          await completeRestorePoint(api.storage.local);
+        } catch (error) {
+          let vaultRollbackError=null;try{await rollbackVaultPackage(newlyInstalledVault);}catch(rollbackError){vaultRollbackError=rollbackError;}
+          if (backup.schemaVersion >= 2) await replaceTemplates(beforeTemplates);
+          if (backup.schemaVersion >= 3) await requestCaseReplacement(beforeCases);
+          if (backup.schemaVersion >= 4) await replaceEconomy(beforeEconomy);
+          if (backup.schemaVersion >= 5) await replaceLawRecords(beforeLaws,beforeState.profiles.map(p=>p.id));
+          if (backup.schemaVersion >= 6) await replaceGovernment(beforeGovernment,beforeState.profiles.map(p=>p.id));
+          if (backup.schemaVersion >= 7) await replaceDocumentRecords(beforeDocuments,beforeState.profiles.map(p=>p.id),beforeGovernment);
+          if (backup.schemaVersion >= 8) await replaceLinks(beforeLinks);
+          if (backup.schemaVersion >= 9) productivity = await replaceProductivity(beforeProductivity);
+          if (backup.schemaVersion >= 10) await replaceXenForoLinks(beforeXfLinks);
+          if (backup.schemaVersion >= 11) await replaceMonitor(beforeMonitor);
+          if (backup.schemaVersion >= 12) await replaceKnowledge(beforeKnowledge,beforeState.profiles.map(p=>p.id));
+          if (backup.schemaVersion >= 14) await replaceSources(beforeSources);
+          if (backup.rules!==null) await replaceRules(beforeRules);
+          await restoreState(beforeState);
+          if (backup.punishments!==null) await replacePunishmentData(beforePunishments,beforeState.profiles);
+          if (backup.sectionMonitor!==null) await replaceSectionData(beforeSections,beforeState.profiles);
+          if (backup.punishmentRegistry!==null) await replaceRegistryData(beforeRegistry,beforeState.profiles);
+          if (backup.moderationOps!==null) await replaceModerationOps(beforeModerationOps,beforeState.profiles);
+          if(vaultRollbackError)throw new AggregateError([error,vaultRollbackError],'Восстановление прервано; откат файлов Evidence Vault также завершился ошибкой');
+          throw error;
+        }
+        await Promise.all([refreshForum(),refreshComplaints(),refreshEconomy(),refreshLaw(),refreshGovernment(),refreshDocuments(),refreshIntegrations()]);
+        view = state.preferences.startPage;
+        clearProductivityCache();render(); feedback('Резервная копия восстановлена');
+      })();
+
+}
+
 document.addEventListener('change', event => {
   if(event.target.id==='knowledge-graph-case-filter'){setGraphCaseFilter(event.target.value);render();return;}
   const el = event.target;
@@ -424,105 +543,11 @@ document.addEventListener('change', event => {
   } else if (el.dataset.setting) {
     const value = el.type === 'checkbox' ? el.checked : el.value;
     void modifyState(s => savePreferences(s, { [el.dataset.setting]: value })).then(next => { state = next; render(); feedback('Настройки сохранены'); }).catch(err => feedback(err.message, true));
-  } else if (el.id === 'backup-file' && el.files?.[0]) {
-    const file = el.files[0];
-    if (file.size > 48 * 1024 * 1024) { feedback('Файл больше 48 МиБ', true); el.value = ''; return; }
-    void file.text().then(text => {
-      const backup = parseModerationBackup(text, validateState, globalThis.RPNForumCore.cleanTemplate);
-      const replacing = backup.schemaVersion >= 3 ? `, ${backup.cases.length} жалоб` : '';
-      const economyCount = backup.schemaVersion >= 4 ? `, ${backup.economy.length} записей экономики` : '';
-      const lawCount = backup.schemaVersion >= 5 ? `, ${backup.lawRecords.length} записей Law Codex` : '';
-      const govCount = backup.schemaVersion >= 6 ? `, ${backup.government.length} ведомственных записей` : '';
-      const documentsCount = backup.schemaVersion >= 7 ? `, ${backup.documents.length} документов/шаблонов` : '';
-      const linksCount = backup.schemaVersion >= 8 ? `, ${backup.siteLinks.length} внешних закладок` : '';
-      const xfCount=backup.schemaVersion>=10?`, ${backup.xenforoNavigation.length} ссылок XenForo`:'';
-      const knowledgeCount=backup.schemaVersion>=12?`, ${backup.knowledgeWorkspace.relations.length} связей Центра знаний`:'';
-      const rulesCount=backup.rules===null?'':`, ${backup.rules.length} правил проекта`;
-      const sourcesCount=backup.schemaVersion>=14?`, ${backup.sourceLibrary.length} статей форума и Wiki`:'';
-      const monitorCount=backup.schemaVersion>=11?`, ${backup.serverMonitor.players.length} карточек игроков`:'';
-      if (!confirm(`Восстановить ${backup.state.profiles.length} профилей, ${backup.templates.length} шаблонов${replacing}${economyCount}${lawCount}${govCount}${documentsCount}${linksCount}${xfCount}${monitorCount}${knowledgeCount}${sourcesCount}${rulesCount}? Данные, отсутствующие в старом формате копии, сохранятся.`)) return;
-      return (async () => {
-        const beforeState = state;
-        const beforeTemplates = await listTemplates();
-        const beforeCases = await listCases();
-        const beforeEconomy = await listEconomyRecords();
-        const beforeLaws = lawRecords().slice();
-        const beforeGovernment = governmentRecords().slice();
-        const beforeDocuments = documentRecords().slice();
-        const beforeLinks = externalLinks().slice();
-        const beforeProductivity = productivity;
-        const beforeXfLinks = await listXenForoLinks();
-        const beforeMonitor=await loadMonitor();
-        const beforeSources=await listSources();
-        const beforeRules=await listRules();
-        const beforePunishments=await exportPunishmentData(beforeState.profiles);
-        const beforeSections=await exportSectionData(beforeState.profiles);
-        const beforeRegistry=await exportRegistryData(beforeState.profiles);
-        const beforeModerationOps=await exportModerationOps(beforeState.profiles);
-        const beforeKnowledge=await loadKnowledge(beforeState.profiles.map(p=>p.id));
-        try {
-          if (backup.schemaVersion < 3 && beforeCases.some(c => !backup.state.profiles.some(p => p.id === c.profileId))) {
-            throw Error('Старая копия содержит другой набор профилей. Сначала экспортируйте данные 0.3.0, чтобы не потерять доступ к существующим жалобам.');
-          }
-          if (backup.schemaVersion < 4 && beforeEconomy.some(r => !backup.state.profiles.some(p => p.id === r.profileId))) throw Error('Старая копия содержит другой набор профилей. Экспортируйте копию 0.5.0 перед импортом.');
-          if (backup.schemaVersion < 5 && beforeLaws.some(r=>!backup.state.profiles.some(p=>p.id===r.profileId))) throw Error('Старая копия содержит другие профили. Экспортируйте полную копию перед импортом.');
-          if (backup.schemaVersion < 6 && beforeGovernment.some(r=>!backup.state.profiles.some(p=>p.id===r.profileId))) throw Error('Старая копия содержит другие профили. Сначала экспортируйте данные Government Tools.');
-          if (backup.schemaVersion < 7 && beforeDocuments.some(r=>!backup.state.profiles.some(p=>p.id===r.profileId))) throw Error('Старая копия содержит другие профили. Сначала экспортируйте документы.');
-          if (backup.schemaVersion < 10 && (await listXenForoLinks()).some(x=>x.profileId!=='*'&&!backup.state.profiles.some(p=>p.id===x.profileId)))throw Error('Старая копия содержит другой набор профилей. Сначала экспортируйте все пользовательские ссылки XenForo.');
-          if (backup.schemaVersion < 11 && beforeMonitor.players.some(x=>!backup.state.profiles.some(p=>p.id===x.profileId)))throw Error('Старая копия содержит другие профили. Сначала экспортируйте карточки игроков.');
-          if (backup.schemaVersion < 14 && beforeSources.some(x=>!backup.state.profiles.some(p=>p.id===x.profileId)))throw Error('Старая копия не содержит тексты импортированных страниц, привязанные к другим профилям. Сначала экспортируйте копию v14.');
-          if (backup.schemaVersion < 12 && [...beforeKnowledge.resources,...beforeKnowledge.relations].some(x=>!backup.state.profiles.some(p=>p.id===x.profileId)))throw Error('Старая копия содержит другие профили. Сначала экспортируйте связи Центра знаний.');
-          if (backup.rules===null && beforeRules.some(r=>!backup.state.profiles.some(p=>p.id===r.profileId&&p.project===r.project)))throw Error('Старая копия несовместима с профилями базы правил. Сначала экспортируйте v15.');
-          if (backup.punishments===null) validatePunishmentBackup(beforePunishments,backup.state.profiles);
-          if (backup.sectionMonitor===null) validateSectionData(beforeSections,backup.state.profiles);
-          if (backup.punishmentRegistry===null) validateRegistry(beforeRegistry,backup.state.profiles);
-          if (backup.moderationOps===null) validateModerationOpsBackup(beforeModerationOps,backup.state.profiles);
-          await createRestorePoint(api.storage.local);
-          if (backup.schemaVersion >= 2) await replaceTemplates(backup.templates);
-          if (backup.schemaVersion >= 3) await requestCaseReplacement(backup.cases);
-          if (backup.schemaVersion >= 4) await replaceEconomy(backup.economy);
-          if (backup.schemaVersion >= 5) await replaceLawRecords(backup.lawRecords,backup.state.profiles.map(p=>p.id));
-          if (backup.schemaVersion >= 6) await replaceGovernment(backup.government,backup.state.profiles.map(p=>p.id));
-          if (backup.schemaVersion >= 7) await replaceDocumentRecords(backup.documents,backup.state.profiles.map(p=>p.id),backup.government);
-          if (backup.schemaVersion >= 8) await replaceLinks(backup.siteLinks);
-          if (backup.schemaVersion >= 9) productivity = await replaceProductivity(backup.productivity);
-          if (backup.schemaVersion >= 10) await replaceXenForoLinks(backup.xenforoNavigation);
-          if (backup.schemaVersion >= 11) await replaceMonitor(backup.serverMonitor);
-          if (backup.schemaVersion >= 12) await replaceKnowledge(backup.knowledgeWorkspace,backup.state.profiles.map(p=>p.id));
-          if (backup.schemaVersion >= 14) await replaceSources(backup.sourceLibrary);
-          if (backup.rules!==null) await replaceRules(backup.rules,backup.state.profiles);
-          state = await restoreState(backup.state);
-          if (backup.punishments!==null) await replacePunishmentData(backup.punishments,backup.state.profiles);
-          if (backup.sectionMonitor!==null) await replaceSectionData(backup.sectionMonitor,backup.state.profiles);
-          if (backup.punishmentRegistry!==null) await replaceRegistryData(backup.punishmentRegistry,backup.state.profiles);
-          if (backup.moderationOps!==null) await replaceModerationOps(backup.moderationOps,backup.state.profiles);
-          await completeRestorePoint(api.storage.local);
-        } catch (error) {
-          if (backup.schemaVersion >= 2) await replaceTemplates(beforeTemplates);
-          if (backup.schemaVersion >= 3) await requestCaseReplacement(beforeCases);
-          if (backup.schemaVersion >= 4) await replaceEconomy(beforeEconomy);
-          if (backup.schemaVersion >= 5) await replaceLawRecords(beforeLaws,beforeState.profiles.map(p=>p.id));
-          if (backup.schemaVersion >= 6) await replaceGovernment(beforeGovernment,beforeState.profiles.map(p=>p.id));
-          if (backup.schemaVersion >= 7) await replaceDocumentRecords(beforeDocuments,beforeState.profiles.map(p=>p.id),beforeGovernment);
-          if (backup.schemaVersion >= 8) await replaceLinks(beforeLinks);
-          if (backup.schemaVersion >= 9) productivity = await replaceProductivity(beforeProductivity);
-          if (backup.schemaVersion >= 10) await replaceXenForoLinks(beforeXfLinks);
-          if (backup.schemaVersion >= 11) await replaceMonitor(beforeMonitor);
-          if (backup.schemaVersion >= 12) await replaceKnowledge(beforeKnowledge,beforeState.profiles.map(p=>p.id));
-          if (backup.schemaVersion >= 14) await replaceSources(beforeSources);
-          if (backup.rules!==null) await replaceRules(beforeRules);
-          await restoreState(beforeState);
-          if (backup.punishments!==null) await replacePunishmentData(beforePunishments,beforeState.profiles);
-          if (backup.sectionMonitor!==null) await replaceSectionData(beforeSections,beforeState.profiles);
-          if (backup.punishmentRegistry!==null) await replaceRegistryData(beforeRegistry,beforeState.profiles);
-          if (backup.moderationOps!==null) await replaceModerationOps(beforeModerationOps,beforeState.profiles);
-          throw error;
-        }
-        await Promise.all([refreshForum(),refreshComplaints(),refreshEconomy(),refreshLaw(),refreshGovernment(),refreshDocuments(),refreshIntegrations()]);
-        view = state.preferences.startPage;
-        clearProductivityCache();render(); feedback('Резервная копия восстановлена');
-      })();
-    }).catch(err => feedback(err.message, true)).finally(() => { if (el.isConnected) el.value = ''; });
+  } else if ((el.id === 'backup-file'||el.id==='backup-package-file') && el.files?.[0]) {
+    const file = el.files[0],archive=el.id==='backup-package-file';
+    if (file.size > (archive?300:48) * 1024 * 1024) {feedback('Файл превышает допустимый размер',true);el.value='';return;}
+    void (async()=>{const portable=archive?await parsePortableBackup(file):null;await restoreBackupText(portable?.json??await file.text(),portable);})().catch(err=>feedback(err.message,true)).finally(()=>{if(el.isConnected)el.value='';});
+
 
   }
 });

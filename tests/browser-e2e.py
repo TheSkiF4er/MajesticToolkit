@@ -1036,6 +1036,8 @@ async def evidence_vault_workspace(browser):
         modules[key]='data:text/javascript;base64,'+base64.b64encode(source.encode()).decode()
         return key
     add(ROOT/'src/ui/evidence-vault-page.mjs')
+    add(ROOT/'src/ui/case-dossier-page.mjs')
+    add(ROOT/'src/lib/dossier-backup.mjs')
     origin='https://evidence-vault.fixture.invalid/'
     html='<html><head><meta charset="utf-8"><script type="importmap">'+json.dumps({'imports':modules})+'</script></head><body><div id="vault"></div></body></html>'
     context=await browser.new_context(accept_downloads=True)
@@ -1104,6 +1106,38 @@ async def evidence_vault_workspace(browser):
     assert await page.evaluate("""async()=>{const s=await import('mt:lib/complaints-store.mjs');const c=await s.getCase(window.__vaultCase.id);return c.evidence.length===1&&c.evidence[0].kind==='file'&&c.evidence[0].sha256.length===64;}""")
     await page.locator('#vault-items [data-vault-action=delete]').click()
     await page.wait_for_function("window.__vaultNotice?.message.includes('прикреплён к жалобе')")
+    # 1.8.5: actual dossier dialog; ZIP includes binary IndexedDB attachment and SHA-256 manifest.
+    await page.evaluate("""async()=>{
+      const ui=await import('mt:ui/case-dossier-page.mjs');const state=window.__vaultData.rpNexusStateV1;
+      await ui.openCaseDossier(state,window.__vaultCase.id,(message,error)=>{window.__dossierNotice={message,error}});
+    }""")
+    await page.locator('#case-dossier-dialog').get_by_text('Досье дела',exact=False).first.wait_for()
+    import zipfile,io,hashlib
+    async with page.expect_download(timeout=10000) as dl:
+        await page.locator('#case-dossier-dialog').get_by_role('button',name='Проверить и скачать').click()
+    download=await dl.value
+    archive=Path(await download.path()).read_bytes()
+    with zipfile.ZipFile(io.BytesIO(archive)) as z:
+        manifest=json.loads(z.read('manifest.json'))
+        dossier=json.loads(z.read('dossier.json'))
+        assert manifest['format']=='majestictoolkit-dossier-manifest'
+        assert dossier['case']['id']==await page.evaluate('window.__vaultCase.id')
+        assert len([x for x in manifest['files'] if x['status']=='included'])==1
+        meta=manifest['files'][0]
+        assert hashlib.sha256(z.read(meta['name'])).hexdigest()==meta['sha256']
+        assert all(hashlib.sha256(z.read(x['name'])).hexdigest()==x['sha256'] for x in manifest['items'])
+    await page.locator('#case-dossier-dialog').get_by_role('button',name='Закрыть').click()
+    # Portable backup restores the same bytes under stable IDs, not just file metadata.
+    assert await page.evaluate("""async()=>{
+      const v=await import('mt:lib/evidence-vault.mjs'),b=await import('mt:lib/dossier-backup.mjs');
+      const state=window.__vaultData.rpNexusStateV1,p=state.profiles[0],inventory=await v.listVault(p.id);
+      const json=JSON.stringify({format:'majestictoolkit-backup',schemaVersion:17,payload:{profiles:[p]},evidenceVault:inventory});
+      const {blob}=await b.makePortableBackup(json,inventory),parsed=await b.parsePortableBackup(blob);
+      const file=inventory.find(x=>x.kind==='file'),db=await v.openVault();
+      await new Promise((resolve,reject)=>{const tx=db.transaction('entries','readwrite');tx.objectStore('entries').delete(file.id);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);});db.close();
+      const ids=await v.importVaultPackage(parsed.inventory,parsed.files),verified=await v.verifyVaultFile(file.id,p.id);
+      return parsed.manifest.files.length===1&&parsed.files.size===1&&ids.length===1&&ids[0]===file.id&&verified.meta.sha256===file.sha256;
+    }""")
     async with page.expect_download() as download_info:
         await page.locator('#vault-items [data-vault-action=download]').click()
     download=await download_info.value
@@ -1125,7 +1159,7 @@ async def evidence_vault_workspace(browser):
     assert await page.evaluate("""async()=>{const s=await import('mt:lib/complaints-store.mjs');const c=await s.getCase(window.__vaultCase.id);return c.evidence[0].id===window.__legacyId&&c.evidence[0].seconds===42&&!!c.evidence[0].vaultId;}""")
     assert not errors,errors
     await context.close()
-    return 1
+    return 2
 
 async def evidence_timeline_workspace(browser):
     """Real complaint Timeline UI, live serialized mutations and linked HTTPS video offsets."""
