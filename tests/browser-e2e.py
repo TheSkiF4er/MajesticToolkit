@@ -949,9 +949,53 @@ async def experience_workspace(browser):
     await page.locator('#workspace-profile').select_option('profile_majest')
     await center.locator('[data-mc-tab=overview]').click()
     await center.locator('#mc-summary .mc-metric').first.wait_for()
+    # Knowledge Center 2.0: actual source import, revision compare, collections, metadata and restore.
+    await page.evaluate("""async()=>{
+      const lib=await import('mt:lib/source-library.mjs');
+      const url='https://forum.majestic-rp.ru/threads/knowledge.183/';
+      await lib.saveSource({profileId:'profile_majest',kind:'forum',url,title:'QA Правила версии один',body:'Старая формулировка правила о безопасности на территории организации.'});
+      await lib.saveSource({profileId:'profile_majest',kind:'forum',url,title:'QA Правила версии два',body:'Новая формулировка правила о безопасности на территории организации.'});
+    }""")
+    await page.locator('.nav [data-view=knowledge]').click()
+    library=page.locator('#knowledge-library')
+    await library.get_by_text('QA Правила версии два',exact=True).wait_for()
+    await library.locator('article.knowledge-item').filter(has_text='QA Правила версии два').locator('[data-library-action=inspect]').click()
+    detail=page.locator('#knowledge-article-detail')
+    await detail.get_by_text('Новая формулировка правила',exact=False).first.wait_for()
+    assert await detail.locator('[data-library-action=compare]').count()==1
+    await detail.locator('[data-library-action=compare]').click()
+    assert await detail.locator('.knowledge-diff .knowledge-added').count()>0
+    assert await detail.locator('.knowledge-diff .knowledge-removed').count()>0
+    await detail.locator('[name=tags]').fill('Безопасность, QA')
+    await detail.locator('[name=status]').select_option('reviewed')
+    await detail.locator('[name=favorite]').check()
+    await detail.locator('button[type=submit]').click()
+    await page.wait_for_function("window.__data.majesticToolkitSourceLibraryV154?.some(x=>x.title==='QA Правила версии два'&&x.status==='reviewed'&&x.favorite&&x.tags.includes('QA'))")
+    await page.locator('#knowledge-collection-form [name=title]').fill('QA Коллекция')
+    await page.locator('#knowledge-collection-form button[type=submit]').click()
+    await page.wait_for_function("window.__data.majesticToolkitKnowledgeV13?.collections?.some(x=>x.title==='QA Коллекция')")
+    member=page.locator('#knowledge-collection-member-form')
+    await member.locator('[name=node]').select_option(label='QA Правила версии два (external)')
+    await member.locator('button[type=submit]').click()
+    await page.wait_for_function("window.__data.majesticToolkitKnowledgeV13?.collections?.some(x=>x.title==='QA Коллекция'&&x.members.length===1)")
+    await library.locator('#knowledge-library-collection').select_option(label='QA Коллекция')
+    await library.get_by_text('QA Правила версии два',exact=True).wait_for()
+    await library.locator('#knowledge-library-search').fill('безопасности')
+    assert await library.get_by_text('QA Правила версии два',exact=True).count()==1
+    await library.locator('#knowledge-library-status').select_option('reviewed')
+    assert await library.get_by_text('QA Правила версии два',exact=True).count()==1
+    await library.locator('#knowledge-library-status').select_option('unverified')
+    await library.get_by_text('Подходящих статей нет.').wait_for()
+    await library.locator('#knowledge-library-status').select_option('all')
+    await detail.locator('[data-library-action=restore]').click()
+    await page.wait_for_function("window.__data.majesticToolkitSourceLibraryV154?.some(x=>x.title==='QA Правила версии один'&&x.revisions.length===2&&x.status==='unverified')")
+    await page.locator('#workspace-profile').select_option('profile_russia')
+    assert not await page.locator('#knowledge-library').get_by_text('QA Правила версии один').count()
+    await page.locator('#workspace-profile').select_option('profile_majest')
+    assert not errors,errors
     assert not errors,errors
     await context.close()
-    return 11
+    return 12
 
 
 

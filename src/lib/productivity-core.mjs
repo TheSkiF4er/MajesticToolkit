@@ -48,7 +48,7 @@ export function buildSearchRecords({templates=[],cases=[],economy=[],laws=[],gov
   }
   for(const x of links)add('integrations',x.id,'*',x.title,'Закладка · '+(x.url||''),x.notes||'',{url:x.url||''});
   for(const x of navigation)add('navigation',x.id,x.profileId,x.title,`${x.group||''} · ${x.url}`,`${x.note||''} ${(x.tags||[]).join(' ')}`,{url:x.url,host:x.host||'*'});
-  for(const x of sources)add('sources',x.id,x.profileId,x.title,(x.kind==='forum'?'Форум XenForo':'Fletcher Wiki')+' · '+x.url,x.body,{url:x.url||''});
+  for(const x of sources)add('sources',x.id,x.profileId,x.title,(x.kind==='forum'?'Форум XenForo':'Fletcher Wiki')+' · '+x.url+' · '+(x.tags||[]).join(' ')+' · '+(x.status==='reviewed'?'Проверено пользователем':'Требует проверки'),x.body+' '+(x.notes||''),{url:x.url||''});
   return out;
 }
 export function tokenize(input){return [...new Set(clean(input).split(/[^\p{L}\p{N}_-]+/u).filter(x=>x.length>1||/^\d$/.test(x)))].slice(0,12);}

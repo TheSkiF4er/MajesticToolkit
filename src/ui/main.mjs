@@ -38,7 +38,8 @@ import {makeModerationBackup,parseModerationBackup} from '../lib/moderation-back
 import {mountRulesExperience} from './rules-experience.mjs';
 import {KNOWLEDGE_KEY,emptyKnowledge} from '../lib/knowledge-core.mjs';
 import {loadKnowledge,replaceKnowledge} from '../lib/knowledge-store.mjs';
-import {knowledgeSection,knowledgeSnapshot,refreshKnowledge,handleKnowledgeAction,handleKnowledgeSubmit,setKnowledgeQuery,setKnowledgeKind} from './knowledge-page.mjs';
+import {knowledgeSection,knowledgeSnapshot,knowledgeSourceRows,knowledgeNodes,refreshKnowledge,handleKnowledgeAction,handleKnowledgeSubmit,setKnowledgeQuery,setKnowledgeKind} from './knowledge-page.mjs';
+import {handleLibraryAction,handleLibrarySubmit,setLibraryQuery,setLibraryFilter} from './knowledge-library-page.mjs';
 import {loadMonitor,replaceMonitor} from '../lib/monitor-store.mjs';
 import {MONITOR_KEY,emptyMonitor,validateMonitor} from '../lib/monitor-core.mjs';
 import {monitorSection,refreshMonitor,monitorRecords,setMonitorFilter,setMonitorAutoRefresh,tickMonitor,handleMonitorAction} from './monitor-page.mjs';
@@ -133,7 +134,7 @@ async function refreshAllModules() {
 }
 function renderPopup() {
   const p = getActiveProfile(state);
-  return `<div class="popup-shell stack ws-popup"><div class="brand"><span class="logo" aria-label="Логотип MajesticToolkit">MT</span><div><h1>MajesticToolkit</h1><p>Evidence Timeline · 1.8.2</p></div></div><div class="card stack"><div class="row spread"><strong>Активный профиль</strong>${tag(projectLabel(p.project))}</div><select aria-label="Выбрать профиль" id="popup-profile">${state.profiles.map(x => `<option value="${e(x.id)}" ${x.id === state.activeProfileId ? 'selected' : ''}>${e(x.name)} · ${e(x.server)}</option>`).join('')}</select><p class="subtle">${e(p.server)}</p>${p.forumUrl ? `<button class="button secondary" data-url="${e(p.forumUrl)}">Открыть форум ↗</button>` : ''}</div><div class="row"><button class="button primary" data-action="panel">Боковая панель</button><button class="button secondary" data-action="workspace">Рабочее пространство ↗</button></div><div class="ws-popup-grid"><button class="button secondary" data-action="popup-search">Поиск</button><button class="button secondary" data-action="popup-forum">Биндер</button><button class="button secondary" data-action="popup-navigation">Навигация</button><button class="button secondary" data-action="popup-customization">Оформление</button><button class="button secondary" data-action="popup-monitor">Серверы и игроки</button><button class="button secondary" data-action="popup-moderation">Центр модерации</button><button class="button secondary" data-action="popup-complaints">Жалобы</button><button class="button secondary" data-action="popup-timers">Таймеры</button><button class="button secondary" data-action="popup-economy">Экономика</button><button class="button secondary" data-action="popup-rules">Правила проекта</button><button class="button secondary" data-action="popup-law">Законы</button><button class="button secondary" data-action="popup-government">Ведомства</button><button class="button secondary" data-action="popup-documents">Документы</button><button class="button secondary" data-action="popup-integrations">Интеграции</button><button class="button secondary" data-action="popup-knowledge">Центр знаний</button><button class="button secondary" data-action="popup-settings">Настройки и профили</button><button class="button link" data-url="https://docossum.com/">Docossum ↗</button><button class="button link" data-url="https://fletcher-wiki.com/">Fletcher ↗</button></div><footer class="copyright">© <a href="https://github.com/TheSkiF4er" target="_blank" rel="noopener noreferrer">SkiF4er</a></footer></div>`;
+  return `<div class="popup-shell stack ws-popup"><div class="brand"><span class="logo" aria-label="Логотип MajesticToolkit">MT</span><div><h1>MajesticToolkit</h1><p>Knowledge Center 2.0 · 1.8.3</p></div></div><div class="card stack"><div class="row spread"><strong>Активный профиль</strong>${tag(projectLabel(p.project))}</div><select aria-label="Выбрать профиль" id="popup-profile">${state.profiles.map(x => `<option value="${e(x.id)}" ${x.id === state.activeProfileId ? 'selected' : ''}>${e(x.name)} · ${e(x.server)}</option>`).join('')}</select><p class="subtle">${e(p.server)}</p>${p.forumUrl ? `<button class="button secondary" data-url="${e(p.forumUrl)}">Открыть форум ↗</button>` : ''}</div><div class="row"><button class="button primary" data-action="panel">Боковая панель</button><button class="button secondary" data-action="workspace">Рабочее пространство ↗</button></div><div class="ws-popup-grid"><button class="button secondary" data-action="popup-search">Поиск</button><button class="button secondary" data-action="popup-forum">Биндер</button><button class="button secondary" data-action="popup-navigation">Навигация</button><button class="button secondary" data-action="popup-customization">Оформление</button><button class="button secondary" data-action="popup-monitor">Серверы и игроки</button><button class="button secondary" data-action="popup-moderation">Центр модерации</button><button class="button secondary" data-action="popup-complaints">Жалобы</button><button class="button secondary" data-action="popup-timers">Таймеры</button><button class="button secondary" data-action="popup-economy">Экономика</button><button class="button secondary" data-action="popup-rules">Правила проекта</button><button class="button secondary" data-action="popup-law">Законы</button><button class="button secondary" data-action="popup-government">Ведомства</button><button class="button secondary" data-action="popup-documents">Документы</button><button class="button secondary" data-action="popup-integrations">Интеграции</button><button class="button secondary" data-action="popup-knowledge">Центр знаний</button><button class="button secondary" data-action="popup-settings">Настройки и профили</button><button class="button link" data-url="https://docossum.com/">Docossum ↗</button><button class="button link" data-url="https://fletcher-wiki.com/">Fletcher ↗</button></div><footer class="copyright">© <a href="https://github.com/TheSkiF4er" target="_blank" rel="noopener noreferrer">SkiF4er</a></footer></div>`;
 }
 function render() {
   if (!state) return;
@@ -144,7 +145,7 @@ function render() {
   const title = titles[view];
   const contents = {moderation:()=>moderationCenterSection(state,complaintsSection(state)), rules: rulesSection, home: sectionHome, timers: timersSection, search: () => productivitySection(state), forum: () => forumSection(state), monitor: () => monitorSection(state), complaints: () => complaintsSection(state), economy: () => economySection(state), law: () => lawSection(state), government: () => governmentSection(state), documents: () => documentSection(state), integrations: () => integrationsSection(state), knowledge:()=>knowledgeSection(state), profiles: sectionProfiles, sites: sectionSites, settings: sectionSettings, backup: sectionBackup };
   const wasOpen=document.querySelector('.ws-dashboard details')?.open; if(wasOpen!==undefined)dashboardConfigOpen=wasOpen;
-  replaceHtml(app, `<div class="layout ws-layout"><aside class="side"><div class="brand"><div class="logo" aria-label="Логотип MajesticToolkit">MT</div><div><h1>MajesticToolkit</h1><p>Evidence Timeline · 1.8.2</p></div></div>${profileSelect()}<nav class="nav" aria-label="Разделы">${groupedNav()}</nav><div class="side-footer">Локальные данные · Без облачной регистрации<div class="copyright">© <a href="https://github.com/TheSkiF4er" target="_blank" rel="noopener noreferrer">SkiF4er</a></div></div></aside><main class="main" id="workspace-main"><header class="topline"><div><p class="eyebrow">MajesticToolkit / ${e(title[0])}</p><h2>${e(title[0])}</h2><p class="lead">${e(title[1])}</p></div><button class="button secondary ws-search" data-action="nav" data-view="search" aria-label="Единый поиск">⌕ Поиск <kbd>Ctrl K</kbd></button></header>${moduleWarning()}${view==='forum'?`<nav class="ws-forum-tabs" aria-label="Разделы форума">${FORUM_TABS.map(([id,label])=>`<button class="button ${forumPane===id?'primary':'secondary'}" data-action="forum-pane" data-pane="${id}" aria-pressed="${forumPane===id}">${label}</button>`).join('')}</nav>`:''}${contents[view]()}</main></div>`);
+  replaceHtml(app, `<div class="layout ws-layout"><aside class="side"><div class="brand"><div class="logo" aria-label="Логотип MajesticToolkit">MT</div><div><h1>MajesticToolkit</h1><p>Knowledge Center 2.0 · 1.8.3</p></div></div>${profileSelect()}<nav class="nav" aria-label="Разделы">${groupedNav()}</nav><div class="side-footer">Локальные данные · Без облачной регистрации<div class="copyright">© <a href="https://github.com/TheSkiF4er" target="_blank" rel="noopener noreferrer">SkiF4er</a></div></div></aside><main class="main" id="workspace-main"><header class="topline"><div><p class="eyebrow">MajesticToolkit / ${e(title[0])}</p><h2>${e(title[0])}</h2><p class="lead">${e(title[1])}</p></div><button class="button secondary ws-search" data-action="nav" data-view="search" aria-label="Единый поиск">⌕ Поиск <kbd>Ctrl K</kbd></button></header>${moduleWarning()}${view==='forum'?`<nav class="ws-forum-tabs" aria-label="Разделы форума">${FORUM_TABS.map(([id,label])=>`<button class="button ${forumPane===id?'primary':'secondary'}" data-action="forum-pane" data-pane="${id}" aria-pressed="${forumPane===id}">${label}</button>`).join('')}</nav>`:''}${contents[view]()}</main></div>`);
   if(view==='complaints'){
     mountSectionMonitor(document.getElementById('section-monitor-root'),state,feedback);
     void mountEvidenceVault(document.getElementById('evidence-vault-root'),state,feedback,async()=>{await refreshComplaints();render();}).catch(error=>feedback(error.message,true));
@@ -191,7 +192,7 @@ async function exportBackup() {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
-  anchor.download = `majestictoolkit-backup-v1.8.2-${new Date().toISOString().slice(0,10)}.json`;
+  anchor.download = `majestictoolkit-backup-v1.8.3-${new Date().toISOString().slice(0,10)}.json`;
   document.body.appendChild(anchor); anchor.click(); anchor.remove();
   setTimeout(() => URL.revokeObjectURL(url), 30000);
   feedback(`Копия: ${templates.length} шаблонов, ${cases.length} жалоб, ${economy.length} операций/матчей, ${laws.length} записей законодательства, ${government.length} ведомственных записей, ${documents.length} документов/шаблонов, ${externalLinks().length} внешних закладок`);
@@ -273,7 +274,7 @@ async function executeAction(button) {
       await replaceMonitor({...previousMonitor,players:previousMonitor.players.filter(x=>x.profileId!==id)});
       await replaceSources(previousSources.filter(x=>x.profileId!==id));
       await removeRuleProfile(id);
-      await replaceKnowledge({...previousKnowledge,resources:previousKnowledge.resources.filter(r=>r.profileId!==id),relations:previousKnowledge.relations.filter(r=>r.profileId!==id)},state.profiles.filter(p=>p.id!==id).map(p=>p.id));
+      await replaceKnowledge({...previousKnowledge,resources:previousKnowledge.resources.filter(r=>r.profileId!==id),relations:previousKnowledge.relations.filter(r=>r.profileId!==id),collections:(previousKnowledge.collections||[]).filter(c=>c.profileId!==id)},state.profiles.filter(p=>p.id!==id).map(p=>p.id));
       if (relatedGovernment.length) await replaceGovernment(previousGovernment.filter(r=>r.profileId!==id),state.profiles.filter(p=>p.id!==id).map(p=>p.id));
       await removeRegistryProfile(id);
       state = await modifyState(s => deleteProfile(s, id));
@@ -341,7 +342,7 @@ async function executeAction(button) {
   if (action === 'workspace') { await openWorkspace(); return; }
 }
 document.addEventListener('click', event => {
-  const button = event.target.closest('button[data-timer-action],button[data-productivity-action],button[data-action],button[data-url],button[data-forum-action],button[data-case-action],button[data-economy-action],button[data-law-action],button[data-government-action],button[data-document-action],button[data-integration-action],button[data-monitor-action],button[data-knowledge-action],button[data-source-action]');
+  const button = event.target.closest('button[data-timer-action],button[data-productivity-action],button[data-action],button[data-url],button[data-forum-action],button[data-case-action],button[data-economy-action],button[data-law-action],button[data-government-action],button[data-document-action],button[data-integration-action],button[data-monitor-action],button[data-knowledge-action],button[data-source-action],button[data-library-action]');
   if (!button || button.disabled) return;
   if(button.dataset.timerAction){void handleTimerAction(button,render,feedback).catch(err=>feedback(err.message,true));return;}
   if(button.dataset.sourceAction){
@@ -350,6 +351,10 @@ document.addEventListener('click', event => {
     const task=action==='delete' ? removeSource(button.dataset.id,active.id).then(()=>feedback('Импортированная статья удалена')) : importOpenedPage(action,active).then(row=>feedback('Сохранён текст страницы: '+row.title));
     void task.then(async()=>{clearProductivityCache();await refreshKnowledge(state.profiles.map(p=>p.id));if(view==='search')await refreshProductivitySearch();render();}).catch(err=>feedback(err.message,true));
     return;
+  }
+  if(button.dataset.libraryAction){
+    void handleLibraryAction(button,state,knowledgeSourceRows(),knowledgeSnapshot(),()=>refreshKnowledge(state.profiles.map(p=>p.id)),render,feedback)
+      .then(()=>{clearProductivityCache();}).catch(err=>feedback(err.message,true));return;
   }
   if(button.dataset.productivityAction==='reset-shortcuts'){
     const task=saveProductivity({shortcuts:[...defaultProductivity().shortcuts]}).then(next=>{productivity=next;render();feedback('Горячие клавиши сброшены');});
@@ -371,6 +376,9 @@ document.addEventListener('click', event => {
 document.addEventListener('input', event => {
   handleDocumentInput(event);
   if(event.target.id==='knowledge-search'){const pos=event.target.selectionStart;setKnowledgeQuery(event.target.value);render();const el=document.getElementById('knowledge-search');el?.focus();el?.setSelectionRange(pos,pos);return;}
+  if(event.target.id==='knowledge-library-search'){
+    const pos=event.target.selectionStart;setLibraryQuery(event.target.value);render();const node=document.getElementById('knowledge-library-search');node?.focus();node?.setSelectionRange(pos,pos);return;
+  }
   if(event.target.id==='productivity-search') {setSearchQuery(event.target.value,state);return;}
   if (event.target.id === 'forum-search') {filterForum(event.target.value);return;}
   if (event.target.id === 'complaint-search') setComplaintQuery(event.target.value);
@@ -383,6 +391,9 @@ document.addEventListener('change', event => {
   if(handleComplaintQueueChange(el,state,render))return;
   if(['binder-category','binder-filter'].includes(el.id)){setBinderFilter(el.id,el.value);render();return;}
   if(el.dataset.caseWorkflowCheck!==undefined||el.dataset.caseDecision!==undefined){void handleComplaintWorkflowChange(el,state,render,feedback).catch(err=>feedback(err.message,true));return;}
+  if(['knowledge-library-kind','knowledge-library-status','knowledge-library-collection','knowledge-library-favorites'].includes(el.id)){
+    setLibraryFilter(el.id.slice('knowledge-library-'.length),el.type==='checkbox'?el.checked:el.value);render();return;
+  }
   if(el.id==='knowledge-kind'){setKnowledgeKind(el.value);render();return;}
   if(event.target.id==='monitor-filter'){setMonitorFilter(el.value);render();return;}
   if(el.id==='monitor-auto-refresh'){void setMonitorAutoRefresh(el.checked).then(render).catch(err=>feedback(err.message,true));return;}
@@ -519,6 +530,9 @@ document.addEventListener('submit', event => {
     void modifyState(current=>savePreferences(current,{forum:updateForumSettings(current.preferences.forum,scope,patch)})).then(next=>{state=next;render();feedback('Настройки форума сохранены');}).catch(err=>feedback(err.message,true));return;
   }
   const formId = event.target.getAttribute('id');
+  if(['knowledge-source-meta-form','knowledge-collection-form','knowledge-collection-member-form'].includes(formId)){
+    event.preventDefault();void handleLibrarySubmit(event.target,state,knowledgeSourceRows(),knowledgeSnapshot(),()=>refreshKnowledge(state.profiles.map(p=>p.id)),render,feedback,knowledgeNodes(state.activeProfileId)).then(()=>clearProductivityCache()).catch(err=>feedback(err.message,true));return;
+  }
   if(['knowledge-google-form','knowledge-relation-form','knowledge-bookmark-form'].includes(formId)){event.preventDefault();void handleKnowledgeSubmit(event.target,state,render,feedback).catch(err=>feedback(err.message,true));return;}
   if(formId==='timer-create-form'){event.preventDefault();void submitTimer(event,render,feedback).catch(err=>feedback(err.message,true));return;}
   if(formId==='productivity-assistant-form'){

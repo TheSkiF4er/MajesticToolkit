@@ -1,7 +1,7 @@
 /** MajesticToolkit 1.3.0 local knowledge graph. No remote data collection. */
 import {googleFileId} from './integration-core.mjs';
 export const KNOWLEDGE_KEY='majesticToolkitKnowledgeV13';
-export const KNOWLEDGE_LIMITS=Object.freeze({resources:300,relations:2500});
+export const KNOWLEDGE_LIMITS=Object.freeze({resources:300,relations:2500,collections:60,members:200});
 export const KNOWLEDGE_KINDS=Object.freeze(['document','document-template','law','law-memo','government-template','forum-template','external','google-doc','google-sheet']);
 export const KNOWLEDGE_LABELS=Object.freeze({'document':'Документ','document-template':'Шаблон документа',law:'Закон','law-memo':'Памятка','government-template':'Процессуальный шаблон','forum-template':'Шаблон форума',external:'Fletcher Wiki / Docossum','google-doc':'Google Docs','google-sheet':'Google Sheets'});
 export const KNOWLEDGE_PORTALS=Object.freeze({
@@ -11,18 +11,30 @@ export const KNOWLEDGE_PORTALS=Object.freeze({
 });
 const identifier=v=>{if(typeof v!=='string'||!/^[\w-]{8,128}$/.test(v))throw Error('Неверный идентификатор');return v;};
 const text=(s,max,required=true)=>{if(typeof s!=='string'||s.trim().length>max||(required&&!s.trim()))throw Error('Некорректный текст записи');return s.trim();};
-export const emptyKnowledge=()=>({version:1,resources:[],relations:[]});
+export const emptyKnowledge=()=>({version:1,resources:[],relations:[],collections:[]});
 export function googleResourceUrl(kind,id){const file=googleFileId(id);if(kind==='google-doc')return `https://docs.google.com/document/d/${file}/edit`;if(kind==='google-sheet')return `https://docs.google.com/spreadsheets/d/${file}/edit`;throw Error('Неверный вид файла Google');}
 export function googleResourceId(kind,urlOrId){const input=text(urlOrId,1000);if(/^[\w-]{10,180}$/.test(input))return googleFileId(input);let u;try{u=new URL(input);}catch{throw Error('Укажите ссылку Google Docs / Sheets или ID');}if(u.protocol!=='https:'||u.hostname!=='docs.google.com'||u.username||u.password||u.port)throw Error('Нужна HTTPS-ссылка Google Docs/Sheets');const type=kind==='google-doc'?'document':'spreadsheets';const m=new RegExp(`^/${type}/d/([\\w-]{10,180})(?:/|$)`).exec(u.pathname);if(!m)throw Error('Неверная ссылка Google');return googleFileId(m[1]);}
 export function validateKnowledge(raw,profileIds){if(!raw||typeof raw!=='object'||Array.isArray(raw)||raw.version!==1||!Array.isArray(raw.resources)||!Array.isArray(raw.relations)||raw.resources.length>KNOWLEDGE_LIMITS.resources||raw.relations.length>KNOWLEDGE_LIMITS.relations)throw Error('Некорректный формат Центра знаний');
- const profiles=profileIds?new Set(profileIds):null,rs=new Set(),rels=new Set();
+ const profiles=profileIds?new Set(profileIds):null,rs=new Set(),rels=new Set(),collectionIds=new Set();
  const resources=raw.resources.map(r=>{if(!r||typeof r!=='object'||!['google-doc','google-sheet'].includes(r.kind))throw Error('Неверный Google-шаблон');const id=identifier(r.id),profileId=identifier(r.profileId);if(profiles&&!profiles.has(profileId))throw Error('Google-шаблон относится к отсутствующему профилю');if(rs.has(id))throw Error('Дублирующийся ресурс');rs.add(id);const fileId=googleFileId(r.fileId);return{id,profileId,kind:r.kind,fileId,title:text(r.title,180),notes:text(r.notes??'',1500,false),createdAt:text(r.createdAt,40)};});
  const relations=raw.relations.map(r=>{if(!r||typeof r!=='object')throw Error('Неверная связь');const id=identifier(r.id),profileId=identifier(r.profileId);if(rels.has(id))throw Error('Дублирующийся ID связи');rels.add(id);if(profiles&&!profiles.has(profileId))throw Error('Связь с отсутствующим профилем');const end=x=>{if(!x||!KNOWLEDGE_KINDS.includes(x.kind))throw Error('Недопустимый тип связанного объекта');return {kind:x.kind,id:identifier(x.id)};};const from=end(r.from),to=end(r.to);if(from.kind===to.kind&&from.id===to.id)throw Error('Нельзя связать запись с собой');return{id,profileId,from,to,label:text(r.label,120),notes:text(r.notes??'',1500,false),createdAt:text(r.createdAt,40)};});
  const googleRefs=new Map(resources.map(r=>[`${r.kind}:${r.id}`,r.profileId]));
  for(const r of relations)for(const ref of [r.from,r.to])if(ref.kind==='google-doc'||ref.kind==='google-sheet'){
    if(googleRefs.get(`${ref.kind}:${ref.id}`)!==r.profileId)throw Error('Связь с Google-файлом другого профиля или удалённым файлом');
  }
- return {version:1,resources,relations};
+ const collections=(raw.collections??[]);
+ if(!Array.isArray(collections)||collections.length>KNOWLEDGE_LIMITS.collections)throw Error('Превышен лимит коллекций');
+ const cleanCollections=collections.map(c=>{
+  if(!c||typeof c!=='object'||Array.isArray(c))throw Error('Некорректная коллекция');
+  const id=identifier(c.id),profileId=identifier(c.profileId);
+  if(collectionIds.has(id)||profiles&&!profiles.has(profileId))throw Error('Повторная или чужая коллекция');collectionIds.add(id);
+  if(!Array.isArray(c.members)||c.members.length>KNOWLEDGE_LIMITS.members)throw Error('Некорректный состав коллекции');
+  const members=c.members.map(m=>{if(typeof m!=='string'||!/^[-\w]+:[-\w]{8,128}$/.test(m)||!KNOWLEDGE_KINDS.includes(m.split(':')[0]))throw Error('Некорректный объект коллекции');return m;});
+  if(new Set(members).size!==members.length)throw Error('Дубликат в коллекции');
+  for(const key of members){const [kind,nodeId]=key.split(':');if(['google-doc','google-sheet'].includes(kind)&&googleRefs.get(`${kind}:${nodeId}`)!==profileId)throw Error('Коллекция с Google-файлом другого профиля');}
+  return{id,profileId,title:text(c.title,120),notes:text(c.notes??'',800,false),members,createdAt:text(c.createdAt,40)};
+ });
+ return {version:1,resources,relations,collections:cleanCollections};
 }
 export function sourceNodes(profileId,{documents=[],laws=[],government=[],forum=[],links=[],resources=[],sources=[]}={}){
  const nodes=[];const push=(kind,row,title,extra={})=>{if(row?.profileId&&row.profileId!==profileId&&row.profileId!=='*')return;nodes.push({kind,id:row.id,title:String(title||'Без названия'),profileId:row.profileId??'*',...extra});};
@@ -43,3 +55,18 @@ export function visibleKnowledge(data,profileId,nodes,query='',kind='all'){
 }
 export function addKnowledgeResource(current,profileId,{kind,title,googleUrl,notes=''}){const obj=validateKnowledge(current);if(!['google-doc','google-sheet'].includes(kind))throw Error('Укажите Google Docs или Sheets');if(obj.resources.length>=KNOWLEDGE_LIMITS.resources)throw Error('Лимит шаблонов Google');const fileId=googleResourceId(kind,googleUrl);if(obj.resources.some(r=>r.profileId===profileId&&r.kind===kind&&r.fileId===fileId))throw Error('Этот Google-шаблон уже сохранён');const row={id:crypto.randomUUID(),profileId,kind,fileId,title,notes,createdAt:new Date().toISOString()};return validateKnowledge({...obj,resources:[...obj.resources,row]});}
 export function addKnowledgeRelation(current,profileId,{from,to,label,notes=''}){const obj=validateKnowledge(current);if(obj.relations.length>=KNOWLEDGE_LIMITS.relations)throw Error('Лимит связей');if(obj.relations.some(r=>r.profileId===profileId&&((nodeKey(r.from)===nodeKey(from)&&nodeKey(r.to)===nodeKey(to))||(nodeKey(r.from)===nodeKey(to)&&nodeKey(r.to)===nodeKey(from)))))throw Error('Связь уже существует');const row={id:crypto.randomUUID(),profileId,from,to,label,notes,createdAt:new Date().toISOString()};return validateKnowledge({...obj,relations:[...obj.relations,row]});}
+
+/** Collections store typed node references; they never clone source texts. */
+export function addKnowledgeCollection(current,profileId,{title,notes=''}){
+ const data=validateKnowledge(current);if(data.collections.length>=KNOWLEDGE_LIMITS.collections)throw Error('Достигнут лимит коллекций');
+ if(data.collections.some(c=>c.profileId===profileId&&c.title.toLocaleLowerCase('ru')===String(title).trim().toLocaleLowerCase('ru')))throw Error('Коллекция с этим названием существует');
+ return validateKnowledge({...data,collections:[...data.collections,{id:crypto.randomUUID(),profileId,title,notes,members:[],createdAt:new Date().toISOString()}]});
+}
+export function setKnowledgeCollectionMember(current,profileId,collectionId,node,enabled){
+ const data=validateKnowledge(current),index=data.collections.findIndex(c=>c.profileId===profileId&&c.id===collectionId);
+ if(index<0)throw Error('Коллекция не найдена');
+ if(!node||!KNOWLEDGE_KINDS.includes(node.kind)||!identifier(node.id))throw Error('Некорректный объект коллекции');
+ const key=nodeKey(node),old=data.collections[index],members=enabled?[...new Set([...old.members,key])]:old.members.filter(m=>m!==key);
+ const collections=data.collections.slice();collections[index]={...old,members};return validateKnowledge({...data,collections});
+}
+export function removeKnowledgeCollection(current,profileId,id){const data=validateKnowledge(current);if(!data.collections.some(c=>c.id===id&&c.profileId===profileId))throw Error('Коллекция не найдена');return validateKnowledge({...data,collections:data.collections.filter(c=>c.id!==id)});}
