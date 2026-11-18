@@ -345,3 +345,17 @@ body[data-mode=sidebar] .ws-layout .side{height:auto;position:static;overflow:vi
 .studio-item .tag{display:inline-block;max-width:100%;white-space:normal;overflow-wrap:anywhere}
 .studio-item .row{flex-wrap:wrap}
 @media(max-width:650px){.court-procedural-generator{padding:9px}.studio-item .row{justify-content:flex-start}}
+
+/* Economy & Crime Workspace 2.1.1 */
+.economy-tabs{display:flex;gap:8px;flex-wrap:wrap;overflow-x:auto;padding-bottom:4px}
+.economy-tabs .button{font-size:12px;flex-shrink:0}
+.economy-workspace-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.economy-workspace-columns>.card{min-width:0}
+.economy-hit{display:flex;justify-content:space-between;gap:16px;align-items:center;border-top:1px solid var(--stroke);padding:11px 0}
+.economy-hit>div{min-width:0;overflow-wrap:anywhere}
+.economy-hit p{margin:5px 0 0}
+.economy-hit>.button{flex-shrink:0}
+.economy-workspace .economy-shortcuts{margin:7px 0}
+.economy-workspace .economy-filter{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+@media(max-width:950px){.economy-workspace-columns{grid-template-columns:1fr}}
+@media(max-width:550px){.economy-hit{align-items:flex-start;flex-direction:column}.economy-tabs{flex-wrap:nowrap;scrollbar-width:thin}}

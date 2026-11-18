@@ -3,8 +3,20 @@ const { replaceHtml, insertHtml } = globalThis.MTSafeDOM;
 import { listEconomy, addEconomy, updateEconomy, removeEconomy, getEconomy } from '../lib/economy-store.mjs';
 import { resaleCalc, craftCalc, workCalc, dealTotals, summarizeEconomy, summarizeMatches, formatCurrency, DEAL_CATEGORIES, toCsv } from '../lib/economy-core.mjs';
 import { escapeHtml as e } from '../lib/sites.mjs';
+import {api} from '../lib/browser.mjs';
+import {ECONOMY_UI_KEY,ECONOMY_TABS,ECONOMY_TAB_LABELS,cleanEconomyUI,selectEconomyTab,setEconomyPref,rememberEconomyRecord,economySearch,economySnapshot} from '../lib/economy-workspace-core.mjs';
 let entries=[];
-let selectedType='all', search='', visible=40;
+let ui={tabs:{},filters:{},queries:{},recent:[]},visible=40;
+const lookups=new Map();
+let serial=Promise.resolve();
+function persist(change){const job=serial.then(async()=>{const next=change(ui);await api.storage.local.set({[ECONOMY_UI_KEY]:next});ui=next;return next;});serial=job.catch(()=>{});return job;}
+const profiles=state=>state.profiles.map(p=>p.id);
+export async function loadEconomyWorkspace(state){ui=cleanEconomyUI((await api.storage.local.get(ECONOMY_UI_KEY))[ECONOMY_UI_KEY],profiles(state));lookups.clear();visible=40;}
+export const currentEconomyTab=profileId=>ECONOMY_TABS.includes(ui.tabs[profileId])?ui.tabs[profileId]:'overview';
+export async function changeEconomyTab(state,tab){await persist(previous=>selectEconomyTab(previous,state.activeProfileId,tab,profiles(state)));visible=40;}
+export async function rememberEconomyOpen(state,id){await persist(previous=>rememberEconomyRecord(previous,state.activeProfileId,id,profiles(state)));}
+export async function forgetEconomyProfile(state){for(const id of lookups.keys())if(!profiles(state).includes(id))lookups.delete(id);await persist(previous=>cleanEconomyUI(previous,profiles(state)));}
+
 export async function refreshEconomy(){entries=await listEconomy();}
 export function currentEconomy(){return entries;}
 const money = value=>formatCurrency(value);
@@ -62,16 +74,37 @@ return `<div class="economy-list">${records.slice(0,visible).map(item=>{
   else {subtitle=`${e(item.mode)} · ${item.result==='win'?'Победа':item.result==='loss'?'Поражение':'Ничья'} · K/D ${item.kills}/${item.deaths} · ${e(number(item.damage))} урона`;amount=e(item.family||'Без семьи');}
   return `<article class="economy-record"><div><small class="subtle">${e(item.date)} · ${e(formTypes[item.type])}</small><h4>${e(item.type==='match'?item.player:item.title)}</h4><p class="subtle">${subtitle}</p>${item.note?`<p class="subtle">${e(item.note)}</p>`:''}</div><div class="economy-record-actions"><strong>${e(amount)}</strong><div class="row"><button class="button secondary" data-economy-action="edit" data-id="${e(item.id)}">Изменить</button><button class="button danger" data-economy-action="remove" data-id="${e(item.id)}">Удалить</button></div></div></article>`;
 }).join('')}</div>${records.length>visible?`<button type="button" class="button secondary" data-economy-action="more">Ещё ${Math.min(40,records.length-visible)} записей</button>`:''}`;}
+const recordTitle=item=>item.type==='match'?item.player:item.title;
+const recordDescription=item=>item.type==='deal'?`${item.category} · ${item.status==='open'?'Не продано':'Продано'} · ${item.quantity} шт.`:item.type==='cash'?`${item.kind==='income'?'Поступление':'Расход'} · ${money(item.amount)}`:`${item.family||'Без семьи'} · ${item.mode} · ${item.result==='win'?'Победа':item.result==='loss'?'Поражение':'Ничья'}`;
+function lookupHTML(state){
+ const lookup=lookups.get(state.activeProfileId)||'';
+ const hits=economySearch(entries,state.activeProfileId,lookup,'all',60);
+ return `<p class="subtle" role="status">${lookup?`Найдено: ${hits.length}${hits.length===60?' (первые 60)':''}`:'Недавно изменённые записи'}</p>${hits.length?hits.slice(0,12).map(item=>`<article class="economy-hit"><div><strong>${e(recordTitle(item))}</strong><p class="subtle">${e(item.date)} · ${e(formTypes[item.type])} · ${e(recordDescription(item))}</p></div><button type="button" class="button secondary" data-economy-action="edit" data-id="${e(item.id)}">Открыть</button></article>`).join(''):'<p class="empty">Записей не найдено.</p>'}`;
+}
+export function economyLookupHTML(state){return lookupHTML(state);}
+export function setEconomyLookup(value,state){lookups.set(state.activeProfileId,String(value??'').slice(0,160));}
+function quickActions(){return `<div class="row economy-shortcuts"><button type="button" class="button primary" data-economy-action="new" data-type="deal">+ Сделка</button><button type="button" class="button secondary" data-economy-action="new" data-type="cash">+ Доход / расход</button><button type="button" class="button secondary" data-economy-action="new" data-type="match">+ Матч игрока</button></div>`;}
+function recentSection(state){
+ const inProfile=new Map(entries.filter(r=>r.profileId===state.activeProfileId).map(r=>[r.id,r]));
+ const recently=ui.recent.filter(r=>r.profileId===state.activeProfileId).map(r=>inProfile.get(r.id)).filter(Boolean).slice(0,8);
+ return `<section class="card stack"><h3>Недавно открытые записи</h3>${recently.length?recently.map(item=>`<article class="economy-hit"><div><strong>${e(recordTitle(item))}</strong><p class="subtle">${e(item.date)} · ${e(recordDescription(item))}</p></div><button class="button secondary" data-economy-action="edit" data-id="${e(item.id)}">Открыть</button></article>`).join(''):'<p class="subtle">Откройте сделку, операцию или матч, чтобы запись появилась в истории профиля.</p>'}</section>`;
+}
+function groupsSection(snap){return `<section class="card stack"><div class="row spread"><h3>Игроки и семьи</h3><span class="tag">${snap.matches.length} матчей · ${snap.families.length} групп</span></div><p class="subtle">Группы строятся по сохранённому полю «Семья» в матчах. Отдельный реестр организаций появится в следующих релизах.</p><div class="economy-analysis"><div><h4>Урон по игрокам</h4>${bars(snap.players)}${snap.players.length?`<div class="table-scroll"><table class="economy-table"><thead><tr><th>Игрок</th><th>Матчи</th><th>Победы</th><th>Winrate</th><th>K/D</th><th>Ср. урон</th></tr></thead><tbody>${snap.players.map(p=>`<tr><td>${e(p.name)}</td><td>${p.matches}</td><td>${p.wins}</td><td>${e(number(p.winRate))}%</td><td>${e(number(p.kd))}</td><td>${e(number(p.avgDamage))}</td></tr>`).join('')}</tbody></table></div>`:''}</div><div><h4>Рейтинг семей и групп</h4>${snap.families.length?`<div class="table-scroll"><table class="economy-table"><thead><tr><th>Семья / группа</th><th>Матчи</th><th>Победы</th><th>Winrate</th><th>Урон</th><th>Матчи группы</th></tr></thead><tbody>${snap.families.map(p=>`<tr><td>${e(p.name)}</td><td>${p.matches}</td><td>${p.wins}</td><td>${e(number(p.winRate))}%</td><td>${e(number(p.damage))}</td><td><button type="button" class="button secondary" data-economy-action="family" data-family="${e(p.name)}">Показать</button></td></tr>`).join('')}</tbody></table></div>`:'<p class="subtle">Данные появятся после записи результатов матчей.</p>'}</div></div></section>`;}
+function journalSection(state,tab){
+ const type=tab==='market'?'deal':tab==='finance'?'cash':tab==='groups'?'match':(ui.filters[state.activeProfileId]||'all');
+ const query=ui.queries[state.activeProfileId]||'';
+ const count=entries.filter(r=>r.profileId===state.activeProfileId&&(type==='all'||r.type===type)&&(!query||economySearch([r],state.activeProfileId,query).length)).length;
+ // Keep the existing 40-record paging for ordinary journals, without including other profiles.
+ const all=entries.filter(r=>r.profileId===state.activeProfileId&&(type==='all'||r.type===type)&&(!query||economySearch([r],state.activeProfileId,query).length));
+ return `<section class="card stack"><div class="row spread"><h3>${tab==='market'?'Реестр рыночных сделок':tab==='finance'?'Денежные операции':tab==='groups'?'История матчей':'Журнал операций и матчей'} (${count})</h3><div class="row"><button class="button secondary" data-economy-action="csv" data-type="deal">CSV сделок</button><button class="button secondary" data-economy-action="csv" data-type="cash">CSV операций</button><button class="button secondary" data-economy-action="csv" data-type="match">CSV матчей</button></div></div><div class="economy-filter">${tab==='journal'?`<label class="field">Тип<select id="economy-filter"><option value="all" ${type==='all'?'selected':''}>Все</option>${Object.entries(formTypes).map(([k,v])=>`<option value="${k}" ${type===k?'selected':''}>${e(v)}</option>`).join('')}</select></label>`:''}<label class="field">Поиск<input id="economy-search" type="search" maxlength="160" autocomplete="off" value="${e(query)}" placeholder="Название, игрок, семья, дата"></label></div>${listing(all)}</section>`;
+}
 export function economySection(state){
-  const rows=entries.filter(r=>r.profileId===state.activeProfileId);
-  const stats=summarizeEconomy(rows),matchRows=rows.filter(r=>r.type==='match'),players=summarizeMatches(matchRows),families=summarizeMatches(matchRows,'family');
-  const filtered=rows.filter(r=>(selectedType==='all'||r.type===selectedType)&&(!search||[r.title,r.player,r.family,r.opponent,r.note,r.category].some(s=>String(s||'').toLocaleLowerCase('ru').includes(search))));
-  return `<div class="stack"><section class="card"><div class="row spread"><div><h3>Учёт и аналитика</h3><p class="subtle">Все данные принадлежат активному профилю. Статистика вводится вручную, без подключения к игровому API.</p></div><span class="tag">${rows.length} записей</span></div>${statGrid(stats,matchRows)}<div class="row"><button class="button primary" data-economy-action="new" data-type="deal">+ Сделка</button><button class="button secondary" data-economy-action="new" data-type="cash">+ Доход / расход</button><button class="button secondary" data-economy-action="new" data-type="match">+ Результат игрока</button></div></section>
-  <section class="card stack"><h3>Финансовая динамика</h3><p class="subtle">Накопленная прибыль/убыток по завершённым сделкам и денежным операциям (открытые сделки учитываются как вложенный капитал)</p>${chart(stats.days)}</section>
-  <section class="card stack"><h3>Игроки и семьи</h3><div class="economy-analysis"><div><h4>Урон по игрокам</h4>${bars(players)}${players.length?`<div class="table-scroll"><table class="economy-table"><thead><tr><th>Игрок</th><th>Матчи</th><th>Победы</th><th>Winrate</th><th>K/D</th><th>Ср. урон</th></tr></thead><tbody>${players.map(p=>`<tr><td>${e(p.name)}</td><td>${p.matches}</td><td>${p.wins}</td><td>${e(number(p.winRate))}%</td><td>${e(number(p.kd))}</td><td>${e(number(p.avgDamage))}</td></tr>`).join('')}</tbody></table></div>`:''}</div><div><h4>Рейтинг семей</h4>${families.length?`<div class="table-scroll"><table class="economy-table"><thead><tr><th>Семья</th><th>Матчи</th><th>Победы</th><th>Winrate</th><th>Урон</th></tr></thead><tbody>${families.map(p=>`<tr><td>${e(p.name)}</td><td>${p.matches}</td><td>${p.wins}</td><td>${e(number(p.winRate))}%</td><td>${e(number(p.damage))}</td></tr>`).join('')}</tbody></table></div>`:'<p class="subtle">Данные появятся после записи результатов.</p>'}</div></div></section>
-  ${calcSection()}
-  <section class="card stack"><div class="row spread"><h3>Журнал операций и матчей</h3><div class="row"><button class="button secondary" data-economy-action="csv" data-type="deal">CSV сделок</button><button class="button secondary" data-economy-action="csv" data-type="cash">CSV операций</button><button class="button secondary" data-economy-action="csv" data-type="match">CSV матчей</button></div></div><div class="economy-filter"><label class="field">Тип<select id="economy-filter"><option value="all" ${selectedType==='all'?'selected':''}>Все</option>${Object.entries(formTypes).map(([k,v])=>`<option value="${k}" ${selectedType===k?'selected':''}>${e(v)}</option>`).join('')}</select></label><label class="field">Поиск<input id="economy-search" type="search" value="${e(search)}" placeholder="Название, игрок, семья"></label></div>${listing(filtered)}</section>
-  <dialog id="economy-dialog" aria-label="Запись экономики"><form id="economy-form" class="stack"><input type="hidden" name="recordId"><input type="hidden" name="recordType"><h3 id="economy-dialog-title">Новая запись</h3><div id="economy-fields" class="economy-fields"></div><div class="row spread"><button class="button secondary" type="button" data-economy-action="cancel">Отмена</button><button class="button primary" type="submit">Сохранить</button></div></form></dialog></div>`;
+ const snap=economySnapshot(entries,state.activeProfileId),tab=currentEconomyTab(state.activeProfileId),p=state.profiles.find(x=>x.id===state.activeProfileId);
+ const tabButtons=ECONOMY_TABS.map(id=>`<button type="button" class="button ${id===tab?'primary':'secondary'}" role="tab" aria-selected="${id===tab}" data-economy-action="tab" data-tab="${id}">${e(ECONOMY_TAB_LABELS[id])}</button>`).join('');
+ const header=`<section class="card stack economy-workspace-header"><div class="row spread"><div><h3>Economy & Crime · 2.1.1</h3><p class="subtle">${e(p?.name||'Профиль')} · ${e(p?.server||'')} · Локальный учёт рынка, финансов и результатов семей.</p></div><span class="tag">${snap.rows.length} записей</span></div><nav class="economy-tabs" aria-label="Разделы экономики" role="tablist">${tabButtons}</nav></section>`;
+ const overview=`<section class="card stack"><div class="row spread"><h3>Финансовая сводка</h3><button type="button" class="button secondary" data-economy-action="refresh">Обновить</button></div>${statGrid(snap.stats,snap.matches)}${quickActions()}<p class="subtle">Результат учитывает закрытые сделки и денежные операции. Открытые сделки выделены как вложенный капитал.</p></section><div class="economy-workspace-columns"><section class="card stack"><h3>Накопленный финансовый результат</h3>${chart(snap.stats.days)}<button class="button secondary" data-economy-action="tab" data-tab="finance">К финансам</button></section><section class="card stack"><h3>Активность игроков и семей</h3>${bars(snap.players)}<p class="subtle">${snap.families.length} семей / групп, ${snap.matches.length} матчей</p><button class="button secondary" data-economy-action="tab" data-tab="groups">К статистике</button></section></div><section class="card stack"><h3>Поиск по всем операциям профиля</h3><label class="field">Название, игрок, семья, категория, дата, примечание<input id="economy-global-search" type="search" maxlength="160" autocomplete="off" value="${e(lookups.get(state.activeProfileId)||'')}" placeholder="Найти сделку, игрока, семейную группу…"></label><div id="economy-global-results">${lookupHTML(state)}</div></section>${recentSection(state)}`;
+ const content=tab==='overview'?overview:tab==='market'?`<section class="card stack"><h3>Торговля и рыночные сделки</h3>${statGrid(snap.stats,snap.matches)}${quickActions()}<p class="subtle">Реальные сохранённые покупки и продажи; рыночные котировки без источника не генерируются.</p></section>${journalSection(state,tab)}`:tab==='finance'?`<section class="card stack"><h3>Денежный поток</h3>${chart(snap.stats.days)}${quickActions()}</section>${journalSection(state,tab)}`:tab==='groups'?groupsSection(snap)+quickActions()+journalSection(state,tab):tab==='calculators'?calcSection():`<section class="card stack"><h3>Все записи активного профиля</h3>${quickActions()}</section>${journalSection(state,tab)}`;
+ return `<div class="stack economy-workspace">${header}<div id="economy-tab-panel" role="tabpanel" aria-label="${e(ECONOMY_TAB_LABELS[tab])}" class="stack">${content}</div><dialog id="economy-dialog" aria-label="Запись экономики"><form id="economy-form" class="stack"><input type="hidden" name="recordId"><input type="hidden" name="recordType"><h3 id="economy-dialog-title">Новая запись</h3><div id="economy-fields" class="economy-fields"></div><div class="row spread"><button class="button secondary" type="button" data-economy-action="cancel">Отмена</button><button class="button primary" type="submit">Сохранить</button></div></form></dialog></div>`;
 }
 function download(filename,content,type){const blob=new Blob([content],{type});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);}
 function openEditor(type,item=null){const dialog=document.getElementById('economy-dialog');if(!dialog)throw Error('Откройте раздел экономики');
@@ -79,10 +112,13 @@ function openEditor(type,item=null){const dialog=document.getElementById('econom
   dialog.querySelector('#economy-dialog-title').textContent=(item?'Изменить: ':'Добавить: ')+formTypes[type];
   replaceHtml(dialog.querySelector('#economy-fields'), formFields(type,item||{}));dialog.showModal();}
 export async function handleEconomyAction(button,state,render,feedback){const action=button.dataset.economyAction;
+  if(action==='tab'){await changeEconomyTab(state,button.dataset.tab);render();return;}
+  if(action==='refresh'){await refreshEconomy();render();feedback('Данные экономики обновлены');return;}
+  if(action==='family'){await persist(previous=>setEconomyPref(previous,state.activeProfileId,'queries',button.dataset.family||'',profiles(state)));await changeEconomyTab(state,'groups');visible=40;render();document.getElementById('economy-search')?.focus();return;}
   if(action==='new'){openEditor(button.dataset.type);return;}
   if(action==='cancel'){document.getElementById('economy-dialog')?.close();return;}
   if(action==='more'){visible+=40;render();return;}
-  if(action==='edit'){const item=await getEconomy(button.dataset.id);if(item.profileId!==state.activeProfileId)throw Error('Запись другого профиля');openEditor(item.type,item);return;}
+  if(action==='edit'){const item=await getEconomy(button.dataset.id);if(item.profileId!==state.activeProfileId)throw Error('Запись другого профиля');try{await rememberEconomyOpen(state,item.id);}catch(error){console.warn('Economy: не удалось сохранить историю открытий',error);}openEditor(item.type,item);return;}
   if(action==='remove'){const item=await getEconomy(button.dataset.id);if(item.profileId!==state.activeProfileId)throw Error('Запись другого профиля');if(!confirm('Удалить выбранную запись? Восстановление возможно только из резервной копии.'))return;
     await removeEconomy(item.id);await refreshEconomy();render();feedback('Запись удалена');return;}
   if(action==='csv'){const type=button.dataset.type;const records=entries.filter(r=>r.profileId===state.activeProfileId);download(`rp-nexus-${type}-${new Date().toISOString().slice(0,10)}.csv`,toCsv(records,type),'text/csv;charset=utf-8');feedback('CSV выгружен');}
@@ -91,8 +127,10 @@ export async function handleEconomySubmit(event,state,render,feedback){const for
   const values=Object.fromEntries(new FormData(form).entries());
   if(form.getAttribute('id')==='economy-form'){
     const id=values.recordId,type=values.recordType;delete values.recordId;delete values.recordType;
-    if(id){const original=await getEconomy(id);if(original.profileId!==state.activeProfileId || original.type!==type)throw Error('Профиль или тип записи изменился');await updateEconomy(id,values);}
-    else await addEconomy(type,state.activeProfileId,values);
+    let saved;
+    if(id){const original=await getEconomy(id);if(original.profileId!==state.activeProfileId || original.type!==type)throw Error('Профиль или тип записи изменился');saved=await updateEconomy(id,values);}
+    else saved=await addEconomy(type,state.activeProfileId,values);
+    try{await rememberEconomyOpen(state,saved.id);}catch(error){console.warn('Economy: запись сохранена, история открытий недоступна',error);}
     form.closest('dialog').close();await refreshEconomy();render();feedback(id?'Запись обновлена':'Запись добавлена');return;
   }
   if(form.dataset.economyCalc){let result,lines;
@@ -102,5 +140,5 @@ export async function handleEconomySubmit(event,state,render,feedback){const for
     form.querySelector('output').textContent=lines.join('\n');return;
   }
 }
-export function setEconomyFilter(value){selectedType=value;visible=40;}
-export function setEconomySearch(value){search=value.toLocaleLowerCase('ru').trim();visible=40;}
+export async function setEconomyFilter(value,state){await persist(previous=>setEconomyPref(previous,state.activeProfileId,'filters',value,profiles(state)));visible=40;}
+export async function setEconomySearch(value,state){await persist(previous=>setEconomyPref(previous,state.activeProfileId,'queries',value,profiles(state)));visible=40;}
