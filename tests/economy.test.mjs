@@ -35,6 +35,15 @@ test('storage isolates profiles, persists create/update/remove and rehydrates',a
  await store.updateEconomy(a.id,{buyPrice:1500});assert.equal((await store.getEconomy(a.id)).buyPrice,1500);await store.removeEconomy(a.id);assert.deepEqual((await store.listEconomy()).map(r=>r.id),[b.id]);});
 test('storage refuses corrupt entry, duplicate snapshots and oversized counts',async()=>{const item=await store.addEconomy('deal',pid,deal);mem.set(PREFIX+'bad-identifier',{...item,id:'bad'});assert.equal((await store.listEconomy()).length,1);
  await assert.rejects(store.replaceEconomy([item,item]));assert.equal((await store.listEconomy()).length,1);assert.throws(()=>validateRecords([item,item]));});
+test('GA backup read fails closed on corrupt legacy rows instead of silently omitting money',async()=>{
+ const item=await store.addEconomy('cash',pid,cash);
+ mem.set(PREFIX+'bad-identifier',{...item,id:'bad'});
+ assert.equal((await store.listEconomy()).length,1); // Legacy UI can still show healthy entries.
+ await assert.rejects(store.listEconomyStrict(),/Поврежден|Повреждён/);
+ await assert.rejects(store.addEconomy('deal',pid,deal),/Поврежден|Повреждён/);
+ mem.delete(PREFIX+'bad-identifier');
+ assert.equal((await store.listEconomyStrict()).length,1);
+});
 test('replace records removes obsolete keys and keeps snapshot on invalid replacement',async()=>{await store.addEconomy('deal',pid,deal);const x=createRecord('cash',pid,cash);await store.replaceEconomy([x]);assert.deepEqual((await store.listEconomy()).map(r=>r.id),[x.id]);await assert.rejects(store.replaceEconomy([{...x,amount:-1}]));assert.deepEqual((await store.listEconomy()).map(r=>r.id),[x.id]);});
 test('v4 backup round-trip includes economy and v3 artifacts',()=>{const r=createRecord('deal',pid,deal);const json=backup.makeBackupV4(state,[],[],[r],globalThis.RPNForumCore.cleanTemplate);const parsed=backup.parseBackupV4(json,validateState,globalThis.RPNForumCore.cleanTemplate);assert.equal(parsed.schemaVersion,4);assert.deepEqual(parsed.economy,[r]);assert.deepEqual(parsed.cases,[]);});
 test('v1 and v3 backup migration reads without economy records',()=>{const ts=new Date().toISOString();for(const schemaVersion of [1,3]){const data=JSON.stringify({format:'rp-nexus-backup',schemaVersion,exportedAt:ts,payload:state,...(schemaVersion>=3?{forumTemplates:[],complaints:[]}: {})});const parsed=backup.parseBackupV4(data,validateState,globalThis.RPNForumCore.cleanTemplate);assert.deepEqual(parsed.economy,[]);assert.equal(parsed.schemaVersion,schemaVersion);}});

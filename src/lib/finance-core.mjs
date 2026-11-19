@@ -84,7 +84,13 @@ export function financeSnapshot(batch,owners=null){
  const active=movements.filter(e=>!reversed.has(e.id));
  const totals={income:0,expense:0,transfers:0};
  for(const e of active)totals[e.kind==='income'?'income':e.kind==='expense'?'expense':'transfers']=sum(totals[e.kind==='income'?'income':e.kind==='expense'?'expense':'transfers'],e.amount);
- const resultBudgets=[...budgets.values()].map(b=>{const used=active.filter(e=>e.kind==='expense'&&e.accountId===b.accountId&&e.category.toLocaleLowerCase('ru')===b.category.toLocaleLowerCase('ru')&&e.date.slice(0,7)===b.month).reduce((n,e)=>sum(n,e.amount),0);return {...b,used,remaining:b.limit-used,overLimit:used>b.limit};});
+ // Aggregate once, rather than rescanning all movements for every monthly budget.
+ const budgetSpent=new Map();
+ for(const e of active){if(e.kind!=='expense')continue;
+  const key=JSON.stringify([e.accountId,e.date.slice(0,7),e.category.toLocaleLowerCase('ru')]);
+  budgetSpent.set(key,sum(budgetSpent.get(key)??0,e.amount));
+ }
+ const resultBudgets=[...budgets.values()].map(b=>{const used=budgetSpent.get(JSON.stringify([b.accountId,b.month,b.category.toLocaleLowerCase('ru')]))??0;return {...b,used,remaining:b.limit-used,overLimit:used>b.limit};});
  return {profileId,events,accounts:[...accounts.values()],budgets:resultBudgets,movements:active,totals,totalBalance:[...accounts.values()].reduce((n,a)=>sum(n,a.balance),0),reversed:[...reversed]};
 }
 export function validateFinanceBatches(batches,profileIds=null,owners=null){

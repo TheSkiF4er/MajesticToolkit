@@ -6,11 +6,24 @@ export function parseStored(raw){return Object.entries(raw).filter(([key])=>key.
   try {const item=cleanRecord(value);return key===PREFIX+item.id?[item]:[];}
   catch(err){console.warn('MajesticToolkit: повреждённая запись экономики пропущена',key,err);return [];}
 });}
+/** Release-critical read: never omit corrupt legacy financial entries from backup/export. */
+export function parseStoredStrict(raw){
+ const rows=[];
+ for(const [key,value] of Object.entries(raw)){
+  if(!key.startsWith(PREFIX))continue;
+  let item;
+  try{item=cleanRecord(value);}catch(error){throw new Error(`Повреждена экономическая запись ${key}: ${error.message}`);}
+  if(key!==PREFIX+item.id)throw new Error(`Повреждён ключ экономической записи ${key}`);
+  rows.push(item);
+ }
+ return validateRecords(rows);
+}
+export async function listEconomyStrict(){return parseStoredStrict(await api.storage.local.get(null)).sort((a,b)=>b.date.localeCompare(a.date)||b.createdAt.localeCompare(a.createdAt));}
 export async function listEconomy(){return parseStored(await api.storage.local.get(null)).sort((a,b)=>b.date.localeCompare(a.date)||b.createdAt.localeCompare(a.createdAt));}
 export async function getEconomy(id){if(typeof id!=='string'||!/^[\w-]{8,120}$/.test(id))throw Error('Неверный ID');
   const entry=(await api.storage.local.get(PREFIX+id))[PREFIX+id];if(!entry)throw Error('Запись не найдена');return cleanRecord(entry);}
 export function addEconomy(type,profileId,data){return enqueue(async()=>{
-  if((await listEconomy()).length>=MAX_RECORDS)throw Error('Достигнут лимит записей');
+  if((await listEconomyStrict()).length>=MAX_RECORDS)throw Error('Достигнут лимит записей');
   const item=createRecord(type,profileId,data);await api.storage.local.set({[PREFIX+item.id]:item});return item;
 });}
 export function updateEconomy(id,fields){return enqueue(async()=>{

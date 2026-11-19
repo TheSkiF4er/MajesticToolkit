@@ -40,7 +40,7 @@ import '../lib/complaints-core.js';
 import '../lib/forum-core.js';
 import {handleAnalyticsAction,handleAnalyticsFilter} from './analytics-page.mjs';
 import {economySection,refreshEconomy,loadEconomyWorkspace,handleEconomyAction,handleEconomySubmit,setEconomyFilter,setEconomySearch,setEconomyLookup,economyLookupHTML,forgetEconomyProfile} from './economy-page.mjs';
-import { replaceEconomy, listEconomy as listEconomyRecords } from '../lib/economy-store.mjs';
+import { replaceEconomy, listEconomyStrict as listEconomyRecords } from '../lib/economy-store.mjs';
 import {listMarketplace,replaceMarketplace} from '../lib/marketplace-store.mjs';
 import {handleMarketplaceAction,handleMarketplaceSubmit,setMarketplaceQuery,setMarketplaceArchived} from './marketplace-page.mjs';
 import {handleTradingAction,handleTradingSubmit,refreshTrading,setTradingSearch} from './trading-page.mjs';
@@ -242,7 +242,7 @@ async function exportBackup() {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
-  anchor.download = `majestictoolkit-backup-v2.1.9-${new Date().toISOString().slice(0,10)}.json`;
+  anchor.download = `majestictoolkit-backup-v2.2.0-${new Date().toISOString().slice(0,10)}.json`;
   document.body.appendChild(anchor); anchor.click(); anchor.remove();
   setTimeout(() => URL.revokeObjectURL(url), 30000);
   feedback(`Копия: ${templates.length} шаблонов, ${cases.length} жалоб, ${economy.length} операций/матчей, ${market.length} товаров/наблюдений/объявлений, ${trading.reduce((n,b)=>n+b.events.length,0)} складских операций, ${familyRows.length} семей, ${organizations.length} организаций, ${crime.territories.length} территорий и ${crime.operations.length} RP-событий, ${finance.reduce((n,b)=>n+b.events.length,0)} финансовых событий, ${laws.length} записей законодательства, ${government.length} ведомственных записей, ${documents.length} документов/шаблонов, ${externalLinks().length} внешних закладок`);
@@ -286,7 +286,7 @@ async function executeAction(button) {
     const missing=[...referenced].filter(id=>!known.has(id));
     if(missing.length)throw Error(`Невозможно создать полную переносимую копию: ${missing.length} материалов отсутствуют в Evidence Vault. Восстановите или удалите несвязанные записи перед экспортом.`);
     const {blob,manifest}=await makePortableBackup(json,inventory);
-    const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`majestictoolkit-portable-backup-v2.1.9-${new Date().toISOString().slice(0,10)}.zip`;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);
+    const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`majestictoolkit-portable-backup-v2.2.0-${new Date().toISOString().slice(0,10)}.zip`;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);
     feedback(`Переносимая копия: ${manifest.files.length} файлов Evidence Vault, проверены SHA-256`);return;
   }
   if(action==='ai-support'){navigateTo('ai');render();document.getElementById('ai-support-root')?.scrollIntoView?.({block:'start'});return;}
