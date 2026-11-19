@@ -1,4 +1,4 @@
-/** Cloud Identity 2.3.1: privileged background-only credential store + authenticated requests. */
+/** Cloud Identity 2.3.2: privileged background-only credential store + authenticated requests. */
 export const CLOUD_CONFIG_KEY='mtCloudIdentityConfigV231';
 export const CLOUD_SESSION_KEY='mtCloudIdentitySessionV231';
 export function cloudEndpoint(raw){
@@ -83,6 +83,34 @@ export function createCloudIdentityService({storage,permissions,fetchImpl=fetch,
       const result=await request(origin,action==='register'?'/v1/auth/register':'/v1/auth/login',{method:'POST',body});
       return accept(origin,result);
     }
+    // Team credentials are never sent to the page. Every team operation runs in background
+    // with the current access token and is independently authorized by the server.
+    const teamId=input.teamId;
+    const teamPath=()=>{
+      if(typeof teamId!=='string'||!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(teamId))throw Error('Некорректный идентификатор команды');
+      return '/v1/teams/'+teamId;
+    };
+    const memberPath=()=>{
+      if(typeof input.accountId!=='string'||!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(input.accountId))throw Error('Некорректный участник');
+      return teamPath()+'/members/'+input.accountId;
+    };
+    if(action==='teams')return authed('/v1/teams');
+    if(action==='teamCreate')return authed('/v1/teams',{method:'POST',body:{name:input.name}});
+    if(action==='teamDetail')return authed(teamPath());
+    if(action==='teamMembers')return authed(teamPath()+'/members');
+    if(action==='teamInvitations')return authed(teamPath()+'/invitations');
+    if(action==='teamActivity')return authed(teamPath()+'/activity');
+    if(action==='teamInvite')return authed(teamPath()+'/invitations',{method:'POST',body:{role:input.role,targetUsername:input.targetUsername}});
+    if(action==='teamAccept')return authed('/v1/teams/invitations/accept',{method:'POST',body:{token:input.token}});
+    if(action==='teamInviteRevoke'){
+      if(typeof input.invitationId!=='string'||!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(input.invitationId))throw Error('Некорректное приглашение');
+      return authed(teamPath()+'/invitations/'+input.invitationId,{method:'DELETE'});
+    }
+    if(action==='teamMemberRole')return authed(memberPath(),{method:'PATCH',body:{role:input.role}});
+    if(action==='teamMemberRemove')return authed(memberPath(),{method:'DELETE'});
+    if(action==='teamTransfer')return authed(teamPath()+'/transfer',{method:'POST',body:{accountId:input.accountId}});
+    if(action==='teamLeave')return authed(teamPath()+'/leave',{method:'POST'});
+    if(action==='teamDelete')return authed(teamPath(),{method:'DELETE'});
     if(action==='sessions')return authed('/v1/auth/sessions');
     if(action==='revoke'){
       if(typeof input.id!=='string'||!/^[0-9a-f-]{36}$/.test(input.id))throw Error('Некорректный идентификатор сессии');

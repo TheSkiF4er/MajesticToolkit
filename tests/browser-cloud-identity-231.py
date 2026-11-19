@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Cloud Identity 2.3.1 Chromium UI smoke (isolated extension API adapter)."""
+"""Cloud Identity 2.3.2 Chromium UI smoke (isolated extension API adapter)."""
 import asyncio,base64,json,re
 from pathlib import Path
 from playwright.async_api import async_playwright
@@ -26,13 +26,25 @@ async def main():
             await page.set_content('<!doctype html><html><head><script type="importmap">'+json.dumps({'imports':modules})+'</script></head><body><div id="root"></div></body></html>')
             await page.add_style_tag(content=(ROOT/'src/ui/styles.css').read_text())
             await page.evaluate("""() => {
-              window.__calls=[];window.__auth={configured:false,origin:'',authenticated:false};
+              window.__calls=[];window.__auth={configured:false,origin:'',authenticated:false};window.__teams=[];window.__teamInvite=null;
               window.browser={runtime:{async sendMessage({type,action,input}){
                 if(type!=='MT_CLOUD_IDENTITY')throw Error('unexpected RPC');__calls.push({action,input:action==='register'||action==='login'?{username:input.username,deviceName:input.deviceName}:input});
                 const s=__auth;
                 if(action==='configure'){s.configured=true;s.origin=input.origin;return {ok:true,value:{configured:true,origin:s.origin}};}
                 if(action==='register'||action==='login'){s.authenticated=true;s.account={id:'account1',username:input.username};return {ok:true,value:{authenticated:true,account:s.account}};}
                 if(action==='status')return {ok:true,value:{...s}};
+                if(action==='teams')return {ok:true,value:{teams:__teams}};
+                if(action==='teamCreate'){
+                  const t={id:'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',name:input.name,role:'owner',memberCount:1};__teams.push(t);return {ok:true,value:{team:t}};
+                }
+                if(action==='teamMembers')return {ok:true,value:{members:[{id:'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',username:'<img src=x onerror=alert(1)>',role:'owner',joinedAt:new Date().toISOString()}]}};
+                if(action==='teamInvitations')return {ok:true,value:{invitations:__teamInvite?[__teamInvite]:[]}};
+                if(action==='teamInvite'){
+                  __teamInvite={id:'cccccccc-cccc-cccc-cccc-cccccccccccc',role:input.role,status:'active',expiresAt:new Date(Date.now()+604800000).toISOString()};
+                  return {ok:true,value:{token:'a'.repeat(43),invitation:__teamInvite}};
+                }
+                if(action==='teamInviteRevoke'){__teamInvite.status='revoked';return {ok:true,value:{ok:true}};}
+                if(action==='teamDelete'){__teams.length=0;return {ok:true,value:{ok:true}};}
                 if(action==='sessions')return {ok:true,value:{sessions:[{id:'00000000-0000-0000-0000-000000000001',deviceName:'PC <b>untrusted</b>',createdAt:new Date().toISOString(),lastSeenAt:new Date().toISOString(),expiresAt:new Date().toISOString(),current:true}]}};
                 if(action==='logout'){s.authenticated=false;return {ok:true,value:{ok:true}};}
                 return {ok:false,error:'unsupported'};
@@ -55,11 +67,23 @@ async def main():
             assert await page.locator('.cloud-session [data-cloud-action=revoke]').count()==1
             assert await page.locator('.cloud-session b').count()==0,'server-supplied device name must be escaped'
             assert 'PC <b>untrusted</b>' in await page.locator('.cloud-session').inner_text()
+            assert await page.locator('#cloud-team-create-form').count()==1
+            await page.locator('#cloud-team-create-form input[name=name]').fill('Watch & Team')
+            await page.evaluate("""async()=>__ui.handleCloudSubmit(document.getElementById('cloud-team-create-form'),()=>{})""")
+            assert 'Watch & Team' in await page.locator('.cloud-team-detail h4').first.inner_text()
+            assert await page.locator('.cloud-team-row img').count()==0,'member names must be escaped'
+            await page.locator('#cloud-team-invite-form select[name=role]').select_option('editor')
+            await page.evaluate("""async()=>__ui.handleCloudSubmit(document.getElementById('cloud-team-invite-form'),()=>{})""")
+            assert await page.locator('.cloud-invite-secret input').input_value()=='a'*43
+            await page.evaluate("""async()=>__ui.handleCloudAction(document.querySelector('[data-cloud-action=teamInviteRevoke]'),()=>{})""")
+            assert await page.locator('[data-cloud-action=teamInviteRevoke]').count()==0
+            await page.evaluate("""async()=>__ui.handleCloudAction(document.querySelector('[data-cloud-action=teamDelete]'),()=>{})""")
+            assert await page.locator('.cloud-team-detail').count()==0
             await page.evaluate("""async()=>__ui.handleCloudAction(document.querySelector('[data-cloud-action=logout]'),()=>{})""")
             assert await page.locator('#cloud-login-form').count()==1
             details=await page.evaluate("""() => ({origins:__requestedOrigins,calls:__calls.map(c=>c.action)})""")
             assert details['origins']==['http://127.0.0.1/*'],details
-            assert details['calls']==['status','configure','status','register','status','sessions','logout','status'],details
+            assert details['calls'].count('teamMembers')>=2 and 'teamInvite' in details['calls'] and 'teamDelete' in details['calls'],details
             assert not errors,errors
             print('Cloud Identity Chromium UI: PASS',details)
         finally:await browser.close()

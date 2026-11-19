@@ -1,4 +1,4 @@
-/** MajesticToolkit 2.3.1: standalone, stateful cloud identity service.
+/** MajesticToolkit 2.3.2: standalone, stateful cloud identity service.
  * Production: direct TLS (CLOUD_TLS_CERT_FILE/CLOUD_TLS_KEY_FILE); no reverse-proxy trust.
  */
 import {createServer as createHttpServer} from 'node:http';
@@ -9,6 +9,7 @@ import {pathToFileURL} from 'node:url';
 import {randomBytes, randomUUID, createHash, scrypt as scryptCallback, timingSafeEqual} from 'node:crypto';
 import {promisify} from 'node:util';
 import {DatabaseSync} from 'node:sqlite';
+import {installTeams,handleTeams} from './teams.mjs';
 const scrypt=promisify(scryptCallback);
 const TOKEN_BYTES=32, ACCESS_MS=15*60_000, REFRESH_MS=30*24*60*60_000;
 const encoder = value => createHash('sha256').update(value).digest();
@@ -46,6 +47,7 @@ function database(dbPath){
   const cutoff=Date.now()-31*24*60*60_000;
   db.prepare('DELETE FROM auth_attempts WHERE window_at<? AND blocked_until<?').run(cutoff,Date.now());
   db.prepare('DELETE FROM sessions WHERE expires_at<?').run(cutoff);
+  installTeams(db);
   return db;
 }
 async function credentialHash(password,salt){return Buffer.from(await scrypt(password,salt,64,{N:32768,r:8,p:1,maxmem:64*1024*1024}));}
@@ -95,7 +97,7 @@ export function createIdentityServer({dbPath=resolve('cloud-identity/data/identi
       if(origin&&!Object.keys(cors).length)bad(403,'Источник запроса не разрешён');
       if(req.method==='OPTIONS'){
         if(!origin)bad(400,'Отсутствует Origin');
-        res.writeHead(204,{...cors,'Access-Control-Allow-Methods':'GET,POST,DELETE,OPTIONS','Access-Control-Allow-Headers':'Authorization,Content-Type','Access-Control-Max-Age':'600','Cache-Control':'no-store'});res.end();return;
+        res.writeHead(204,{...cors,'Access-Control-Allow-Methods':'GET,POST,PATCH,DELETE,OPTIONS','Access-Control-Allow-Headers':'Authorization,Content-Type','Access-Control-Max-Age':'600','Cache-Control':'no-store'});res.end();return;
       }
       const path=new URL(req.url,'https://identity.internal').pathname;
       if(path==='/v1/health'&&req.method==='GET'){returnJson(res,200,{ok:true,service:'MajesticToolkit Cloud Identity'},cors);return;}
@@ -140,8 +142,11 @@ export function createIdentityServer({dbPath=resolve('cloud-identity/data/identi
         }catch(error){if(db.isTransaction)db.exec('ROLLBACK');throw error;}
         returnJson(res,200,result,cors);return;
       }
-      if(!path.startsWith('/v1/auth/'))bad(404,'Не найдено');
+      if(!path.startsWith('/v1/auth/')&&!path.startsWith('/v1/teams'))bad(404,'Не найдено');
       const identity=getAuthorized(db,req.headers.authorization,now);
+      if(path.startsWith('/v1/teams')){
+        await handleTeams({db,req,res,path,identity,now,cors,readJson,returnJson,bad});return;
+      }
       if(path==='/v1/auth/me'&&req.method==='GET'){
         db.prepare('UPDATE sessions SET last_seen_at=? WHERE id=?').run(now,identity.id);
         returnJson(res,200,{account:{id:identity.account_id,username:identity.username,createdAt:new Date(identity.account_created_at).toISOString()},session:sessionView({...identity,last_seen_at:now},identity.id)},cors);return;
