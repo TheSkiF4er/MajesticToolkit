@@ -396,3 +396,24 @@ body[data-mode=sidebar] .ws-layout .side{height:auto;position:static;overflow:vi
 .tactical-record .row{flex-wrap:wrap;justify-content:flex-end}
 @media(max-width:950px){.tactical-columns{grid-template-columns:1fr}}
 @media(max-width:650px){.tactical-filters{grid-template-columns:1fr}.tactical-record{align-items:flex-start;flex-direction:column}.tactical-record .row{justify-content:flex-start}}
+
+/* Tactical World Map 2.2.2: decoded local images, no network tiles or embedded markup. */
+.tactical-map-workspace{min-width:0}
+.tactical-map-actions{align-items:center;gap:8px;flex-wrap:wrap}
+.tactical-map-viewport{position:relative;width:100%;height:clamp(290px,58vh,760px);min-height:290px;overflow:hidden;border-radius:12px;background:#111a29;border:1px solid var(--stroke);touch-action:none}
+#tactical-map-canvas-host{position:absolute;inset:0;width:100%;height:100%}
+#tactical-map-canvas{display:block;width:100%;height:100%;cursor:grab;touch-action:none;outline-offset:-4px}
+#tactical-map-canvas:active{cursor:grabbing}
+.tactical-map-viewport:fullscreen{height:100vh;width:100vw;border:0;border-radius:0}
+.tactical-map-viewport:fullscreen #tactical-map-canvas-host{width:100%;height:100%}
+#tactical-map-coordinates{font-size:12px;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+#tactical-map-calibration{border:1px solid var(--stroke);border-radius:10px;padding:13px}
+#tactical-map-calibration summary{cursor:pointer;font-weight:700}
+#tactical-map-calibration>.stack{margin-top:14px}
+.tactical-map-anchor{display:grid;grid-template-columns:100px minmax(115px,1fr) minmax(100px,1fr) minmax(100px,1fr);gap:10px;align-items:end}
+.tactical-map-anchor>label{display:grid;gap:4px}
+.tactical-map-anchor>span{align-self:center;font-size:12px}
+.tactical-map-anchor button[aria-pressed="true"]{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.tactical-map-replace{flex:1;min-width:180px}
+.tactical-map-replace input{max-width:480px}
+@media(max-width:650px){.tactical-map-anchor{grid-template-columns:1fr 1fr}.tactical-map-anchor>span{justify-self:end}.tactical-map-viewport{height:420px}}
