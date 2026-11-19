@@ -103,3 +103,19 @@ export async function mutateTacticalTerritoryLinks(profileId,action,payload,{exp
   };
  });
 }
+
+/** Atomically restore or replace all IndexedDB map records after verifying bytes and geometry. */
+export async function replaceTacticalMaps(maps,files){
+ if(!Array.isArray(maps)||!(files instanceof Map))throw Error('Некорректный набор карт Backup v21');
+ const rows=[],seen=new Set();
+ for(const value of maps){
+  const meta=cleanMapMeta(value),bytes=files.get(meta.profileId);
+  if(seen.has(meta.profileId)||!(bytes instanceof Uint8Array)||bytes.length!==meta.size||!imageSignature(bytes.subarray(0,16),meta.mime)||await digest(bytes)!==meta.sha256)throw Error('Повреждённая подложка Backup v21');
+  seen.add(meta.profileId);
+  const blob=new Blob([bytes],{type:meta.mime});
+  const dimensions=await decodeImage(blob);
+  if(dimensions.width!==meta.width||dimensions.height!==meta.height)throw Error('Размер подложки не совпадает с Backup v21');
+  rows.push({...meta,blob});
+ }
+ return transact('readwrite',(store)=>{store.clear();for(const value of rows)store.put(value);});
+}

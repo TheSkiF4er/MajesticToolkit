@@ -78,7 +78,7 @@ async def economy_browser_smoke(browser):
     await board.locator('#plan-create-form [name="title"]').fill('План тестового капта')
     await board.locator('#plan-create-form [name="brief"]').fill('Точка сбора и движение группы')
     await board.locator('#plan-create-form button[type="submit"]').click()
-    await expect(board.locator('h3')).to_contain_text('Tactical Planning')
+    await expect(board.locator('h3').first).to_contain_text('Tactical Planning')
     await expect(board.locator('#plan-edit-form [name="title"]')).to_have_value('План тестового капта')
     squad=board.locator('#plan-squad-form')
     await squad.locator('[name="name"]').fill('Команда А')

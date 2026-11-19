@@ -48,6 +48,9 @@ import {clearOrphanTacticalPlans} from '../lib/tactical-planning-store.mjs';
 import {mountTacticalSimulations,disposeTacticalSimulations} from './tactical-simulation-page.mjs';
 import {clearOrphanTacticalSimulations} from '../lib/tactical-simulation-store.mjs';
 import {mountTacticalAnalytics,disposeTacticalAnalytics,clearOrphanTacticalReplayPreferences} from './tactical-analytics-page.mjs';
+import {mountTacticalLinks} from './tactical-links-page.mjs';
+import {listTacticalLinks,clearOrphanTacticalLinks} from '../lib/tactical-links-store.mjs';
+import {TACTICAL_LINK_PREFIX} from '../lib/tactical-links-core.mjs';
 import {clearOrphanAirdrops} from '../lib/tactical-airdrop-store.mjs';
 import {clearOrphanTacticalMaps} from '../lib/tactical-map-store.mjs';
 import { replaceEconomy, listEconomyStrict as listEconomyRecords } from '../lib/economy-store.mjs';
@@ -68,7 +71,8 @@ import {handleFinanceAction,handleFinanceSubmit,refreshFinance,setFinanceQuery} 
 import {exportPunishmentData,replacePunishmentData,validatePunishmentBackup} from '../lib/punishment-backup.mjs';
 import {inventoryAllVault,makePortableBackup,parsePortableBackup} from '../lib/dossier-backup.mjs';
 import {exportAIWorkspaces,replaceAIWorkspaces,disableAIOnRestore} from '../lib/ai-backup.mjs';
-import {makeBackupV20,parseBackupV20} from '../lib/economy-backup-v20.mjs';
+import {makeBackupV21,parseBackupV21,validateTacticalSnapshot} from '../lib/tactical-backup-v21.mjs';
+import {collectTacticalBackup,replaceTacticalBackup,resolveTacticalFiles} from '../lib/tactical-backup-store.mjs';
 import {listEconomyLinks,replaceEconomyLinks} from '../lib/economy-links-store.mjs';
 import {validateEconomyLinks} from '../lib/economy-links-core.mjs';
 import {handleEconomyIntegrationAction,handleEconomyIntegrationSubmit,handleEconomyIntegrationFile,refreshEconomyIntegrations} from './economy-integrations-page.mjs';
@@ -160,11 +164,11 @@ function sectionSettings() {
   return `<div class="stack"><section class="card stack"><div class="control"><div><h3>Тема интерфейса</h3><p class="subtle">Влияет на popup, боковую панель и рабочее пространство</p></div><select aria-label="Тема" data-setting="theme"><option value="system" ${p.theme === 'system' ? 'selected' : ''}>Системная</option><option value="light" ${p.theme === 'light' ? 'selected' : ''}>Светлая</option><option value="dark" ${p.theme === 'dark' ? 'selected' : ''}>Тёмная</option><option value="sepia" ${p.theme === 'sepia' ? 'selected' : ''}>Сепия</option><option value="contrast" ${p.theme === 'contrast' ? 'selected' : ''}>Высокая контрастность</option></select></div><div class="divider"></div><div class="control"><div><h3>Начальный раздел</h3><p class="subtle">Выбирается при новом открытии расширения</p></div><select aria-label="Стартовый экран" data-setting="startPage">${NAV.map(([id,label]) => `<option value="${id}" ${p.startPage === id ? 'selected' : ''}>${e(label)}</option>`).join('')}</select></div><div class="divider"></div><div class="control"><div><h3>Компактный интерфейс</h3><p class="subtle">Уменьшает отступы в карточках</p></div><label class="check"><input type="checkbox" data-setting="compact" ${p.compact ? 'checked' : ''}><span>Включить</span></label></div></section><section class="card stack"><h3>AI Technical Support</h3><p class="subtle">Проверьте разрешения, хранилища и локальный AI-шлюз. Диагностика работает без облачного AI; отправка в OpenAI только по отдельному согласию.</p><button class="button secondary" data-action="ai-support">Открыть диагностику и техподдержку</button></section><section class="card stack"><h3>Productivity 0.9.0</h3><div class="control"><div><strong>Цветовой акцент</strong><p class="subtle">Для всех окон расширения</p></div><select aria-label="Цветовой акцент" data-productivity-setting="accent">${[['blue','Синий'],['teal','Бирюзовый'],['violet','Фиолетовый'],['amber','Янтарный']].map(([id,label])=>`<option value="${id}" ${productivity.accent===id?'selected':''}>${label}</option>`).join('')}</select></div><div class="control"><div><strong>Горячие клавиши</strong><p class="subtle">Alt+1–8 в окнах MajesticToolkit. Ctrl/⌘+K — поиск.</p></div><label class="check"><input type="checkbox" data-productivity-setting="shortcutsEnabled" ${productivity.shortcutsEnabled?'checked':''}>Включить</label></div><div class="productivity-shortcuts">${productivity.shortcuts.map((target,index)=>`<label class="field">Alt+${index+1}<select data-productivity-shortcut="${index}">${NAV.map(([id,label])=>`<option value="${id}" ${target===id?'selected':''}>${e(label)}</option>`).join('')}</select></label>`).join('')}</div><div class="row"><button class="button secondary" data-productivity-action="reset-shortcuts">Сбросить сочетания</button></div></section></div>`;
 }
 function sectionBackup() {
-  return `<div class="stack"><section class="card stack"><h3>Скачать резервную копию · Backup v20</h3><p class="lead">JSON содержит профили, записи Toolkit, правила, жалобы и метаданные Evidence Vault; для переноса бинарных файлов используйте ZIP v20. История AI и черновики по умолчанию исключены. Секреты, токены и согласия никогда не экспортируются.</p>
+  return `<div class="stack"><section class="card stack"><h3>Скачать резервную копию · Backup v21</h3><p class="lead">JSON содержит профили, данные Toolkit, тактические журналы, разметку и метаданные карт; для переноса изображений и файлов Evidence Vault используйте ZIP v21. История AI и черновики по умолчанию исключены. Секреты, токены и согласия никогда не экспортируются.</p>
 <label class="check"><input type="checkbox" id="backup-include-ai"><span>Я осознанно включаю сохранённые AI-диалоги, контекстные ссылки и черновики ВСЕХ профилей в экспорт (могут содержать личные данные)</span></label>
-<div class="row"><button class="button primary" data-action="export">Скачать JSON v20</button><button class="button secondary" data-action="backup-portable-export">Скачать переносимый ZIP v20 с файлами</button></div></section>
-<section class="card stack"><h3>Восстановить из файла</h3><p class="lead">Поддерживаются Backup v1–v20. Импорт проверяется до применения. Для v18–v20 история AI восстанавливается только если она включена в копию; иначе существующая история не заменяется. При восстановлении AI-ключи, токены и согласия не импортируются. Для бинарных файлов требуется переносимый ZIP.</p><label class="field">Файл JSON<input id="backup-file" type="file" accept=".json,application/json"></label><label class="field">Переносимый ZIP<input id="backup-package-file" type="file" accept=".zip,application/zip"></label></section>
-<section class="card stack"><h3>Точка восстановления</h3><p class="lead">Перед импортом создаётся проверенный снимок локальных данных, включая сохранённую AI-историю, если она есть. Лимит 20 МиБ. Бинарные файлы IndexedDB не включаются.</p><div class="row"><button class="button secondary" data-action="restore-point">Восстановить предыдущие данные</button><button class="button danger" data-action="discard-point">Удалить точку</button></div></section></div>`;
+<div class="row"><button class="button primary" data-action="export">Скачать JSON v21</button><button class="button secondary" data-action="backup-portable-export">Скачать переносимый ZIP v21 с файлами</button></div></section>
+<section class="card stack"><h3>Восстановить из файла</h3><p class="lead">Поддерживаются Backup v1–v21. Импорт проверяется до применения. Для v18–v21 история AI восстанавливается только если она включена в копию; иначе существующая история не заменяется. При восстановлении AI-ключи, токены и согласия не импортируются. Для бинарных файлов требуется переносимый ZIP.</p><label class="field">Файл JSON<input id="backup-file" type="file" accept=".json,application/json"></label><label class="field">Переносимый ZIP<input id="backup-package-file" type="file" accept=".zip,application/zip"></label></section>
+<section class="card stack"><h3>Точка восстановления</h3><p class="lead">Перед импортом создаётся проверенный снимок локальных данных, включая сохранённую AI-историю, если она есть. Лимит 20 МиБ. Бинарные карты IndexedDB не включаются в точку восстановления: для полного отката используйте ZIP v21.</p><div class="row"><button class="button secondary" data-action="restore-point">Восстановить предыдущие данные</button><button class="button danger" data-action="discard-point">Удалить точку</button></div></section></div>`;
 }
 
 const titles = {justice:['Government & Justice','Единый интерфейс судов, ведомств, нормативных актов, решений и документов'],ai:['AI Assistant & Support · Workspace & Productivity','AI-ответы по правилам, анализ жалоб, техническая поддержка и диагностика'],evidence:['Evidence & Knowledge','Материалы, таймлайны, источники, цитаты, граф и досье'],moderation:['Moderation Center','Жалобы, входящие темы, реестр решений, SLA, автоматизация и журнал'],rules:['Правила и наказания','База правил, калькулятор и рассмотрение жалоб'],knowledge:['Центр знаний','Цитаты редакций, доказательства, события, правила и решения'],search:['Поиск и локальный помощник','Быстрый индекс всех локальных разделов, ответы с указанием источников'],integrations:['Интеграции','Google Docs, Sheets, Drive, Fletcher Wiki и Docossum'],documents:['Document Studio','Редактор, формы, шаблоны, история локальных версий и PDF'],government:['Government Tools','Конструктор решений, правовые основания, процессуальные шаблоны и ведомства'],law:['Law Codex','Законы, неизменяемые редакции, статьи, избранное и памятки'],economy:['Economy & Crime','Рынок, финансовые операции, статистика игроков, семей и калькуляторы'],tactical:['Tactical Toolkit','Интерактивная локальная карта, территории, капты и составы активного профиля'],complaints:['Жалобы · Evidence Timeline','Дела, хронология событий, видеофрагменты, файлы SHA-256 и ссылки'],timers:['Таймеры','Локальные таймеры с системными уведомлениями'],monitor:['Server Monitor','Официальный каталог серверов и сохранённые публичные карточки игроков'],forum:['Forum Experience','Биндер, персональная навигация и оформление в едином пространстве'],home:['Обзор','Рабочая среда под ваши RP-проекты'],profiles:['Профили','Переключение между игровыми серверами'],sites:['Сайты и разрешения','Вы контролируете, где работает расширение'],settings:['Настройки','Настройте интерфейс под себя'],backup:['Резервные копии','Перенос данных между браузерами']};
@@ -185,7 +189,7 @@ async function refreshAllModules() {
 }
 function renderPopup() {
   const p = getActiveProfile(state);
-  return `<div class="popup-shell stack ws-popup"><div class="brand"><span class="logo" aria-label="Логотип MajesticToolkit">MT</span><div><h1>MajesticToolkit</h1><p>Tactical Toolkit · 2.2.8</p></div></div><div class="card stack"><div class="row spread"><strong>Активный профиль</strong>${tag(projectLabel(p.project))}</div><select aria-label="Выбрать профиль" id="popup-profile">${state.profiles.map(x => `<option value="${e(x.id)}" ${x.id === state.activeProfileId ? 'selected' : ''}>${e(x.name)} · ${e(x.server)}</option>`).join('')}</select><p class="subtle">${e(p.server)}</p>${p.forumUrl ? `<button class="button secondary" data-url="${e(p.forumUrl)}">Открыть форум ↗</button>` : ''}</div><div class="row"><button class="button primary" data-action="panel">Боковая панель</button><button class="button secondary" data-action="workspace">Рабочее пространство ↗</button></div><div class="ws-popup-grid"><button class="button secondary" data-action="popup-search">Поиск</button><button class="button secondary" data-action="popup-forum">Биндер</button><button class="button secondary" data-action="popup-navigation">Навигация</button><button class="button secondary" data-action="popup-customization">Оформление</button><button class="button secondary" data-action="popup-monitor">Серверы и игроки</button><button class="button secondary" data-action="popup-moderation">Центр модерации</button><button class="button secondary" data-action="popup-complaints">Жалобы</button><button class="button secondary" data-action="popup-timers">Таймеры</button><button class="button secondary" data-action="popup-economy">Экономика</button><button class="button secondary" data-action="popup-tactical">Tactical Toolkit</button><button class="button secondary" data-action="popup-rules">Правила проекта</button><button class="button secondary" data-action="popup-law">Законы</button><button class="button secondary" data-action="popup-government">Ведомства</button><button class="button secondary" data-action="popup-justice">Government & Justice</button><button class="button secondary" data-action="popup-documents">Документы</button><button class="button secondary" data-action="popup-integrations">Интеграции</button><button class="button secondary" data-action="popup-knowledge">Центр знаний</button><button class="button secondary" data-action="popup-settings">Настройки и профили</button><button class="button link" data-url="https://docossum.com/">Docossum ↗</button><button class="button link" data-url="https://fletcher-wiki.com/">Fletcher ↗</button></div><footer class="copyright">© <a href="https://github.com/TheSkiF4er" target="_blank" rel="noopener noreferrer">SkiF4er</a></footer></div>`;
+  return `<div class="popup-shell stack ws-popup"><div class="brand"><span class="logo" aria-label="Логотип MajesticToolkit">MT</span><div><h1>MajesticToolkit</h1><p>Tactical Toolkit · 2.2.9</p></div></div><div class="card stack"><div class="row spread"><strong>Активный профиль</strong>${tag(projectLabel(p.project))}</div><select aria-label="Выбрать профиль" id="popup-profile">${state.profiles.map(x => `<option value="${e(x.id)}" ${x.id === state.activeProfileId ? 'selected' : ''}>${e(x.name)} · ${e(x.server)}</option>`).join('')}</select><p class="subtle">${e(p.server)}</p>${p.forumUrl ? `<button class="button secondary" data-url="${e(p.forumUrl)}">Открыть форум ↗</button>` : ''}</div><div class="row"><button class="button primary" data-action="panel">Боковая панель</button><button class="button secondary" data-action="workspace">Рабочее пространство ↗</button></div><div class="ws-popup-grid"><button class="button secondary" data-action="popup-search">Поиск</button><button class="button secondary" data-action="popup-forum">Биндер</button><button class="button secondary" data-action="popup-navigation">Навигация</button><button class="button secondary" data-action="popup-customization">Оформление</button><button class="button secondary" data-action="popup-monitor">Серверы и игроки</button><button class="button secondary" data-action="popup-moderation">Центр модерации</button><button class="button secondary" data-action="popup-complaints">Жалобы</button><button class="button secondary" data-action="popup-timers">Таймеры</button><button class="button secondary" data-action="popup-economy">Экономика</button><button class="button secondary" data-action="popup-tactical">Tactical Toolkit</button><button class="button secondary" data-action="popup-rules">Правила проекта</button><button class="button secondary" data-action="popup-law">Законы</button><button class="button secondary" data-action="popup-government">Ведомства</button><button class="button secondary" data-action="popup-justice">Government & Justice</button><button class="button secondary" data-action="popup-documents">Документы</button><button class="button secondary" data-action="popup-integrations">Интеграции</button><button class="button secondary" data-action="popup-knowledge">Центр знаний</button><button class="button secondary" data-action="popup-settings">Настройки и профили</button><button class="button link" data-url="https://docossum.com/">Docossum ↗</button><button class="button link" data-url="https://fletcher-wiki.com/">Fletcher ↗</button></div><footer class="copyright">© <a href="https://github.com/TheSkiF4er" target="_blank" rel="noopener noreferrer">SkiF4er</a></footer></div>`;
 }
 function render() {
   if (!state) return;
@@ -202,8 +206,8 @@ function render() {
   const title = titles[view];
   const contents = {ai:aiSection,evidence:()=>evidenceKnowledgeSection(state,complaintsSection(state),knowledgeSection(state)),moderation:()=>moderationCenterSection(state,complaintsSection(state)), rules: rulesSection, home: sectionHome, timers: timersSection, search: () => productivitySection(state), forum: () => forumSection(state), monitor: () => monitorSection(state), complaints: () => complaintsSection(state), economy: () => economySection(state), tactical: () => tacticalSection(state), law: () => lawSection(state), justice: () => governmentJusticeSection(state), government: () => governmentSection(state), documents: () => documentSection(state), integrations: () => integrationsSection(state), knowledge:()=>knowledgeSection(state), profiles: sectionProfiles, sites: sectionSites, settings: sectionSettings, backup: sectionBackup };
   const wasOpen=document.querySelector('.ws-dashboard details')?.open; if(wasOpen!==undefined)dashboardConfigOpen=wasOpen;
-  replaceHtml(app, `<div class="layout ws-layout"><aside class="side"><div class="brand"><div class="logo" aria-label="Логотип MajesticToolkit">MT</div><div><h1>MajesticToolkit</h1><p>Tactical Toolkit · 2.2.8</p></div></div>${profileSelect()}<nav class="nav" aria-label="Разделы">${groupedNav()}</nav><div class="side-footer">Локальные данные · AI только по согласию<div class="copyright">© <a href="https://github.com/TheSkiF4er" target="_blank" rel="noopener noreferrer">SkiF4er</a></div></div></aside><main class="main" id="workspace-main"><header class="topline"><div><p class="eyebrow">MajesticToolkit / ${e(title[0])}</p><h2>${e(title[0])}</h2><p class="lead">${e(title[1])}</p></div><button class="button secondary ws-search" data-action="nav" data-view="search" aria-label="Единый поиск">⌕ Поиск <kbd>Ctrl K</kbd></button></header>${moduleWarning()}${view==='forum'?`<nav class="ws-forum-tabs" aria-label="Разделы форума">${FORUM_TABS.map(([id,label])=>`<button class="button ${forumPane===id?'primary':'secondary'}" data-action="forum-pane" data-pane="${id}" aria-pressed="${forumPane===id}">${label}</button>`).join('')}</nav>`:''}${contents[view]()}</main></div>`);
-  if(view==='tactical'){void mountTacticalMap(document.getElementById('tactical-map-root'),state,feedback,openFromTactical);void mountTacticalAirdrops(document.getElementById('tactical-airdrop-root'),state,feedback);void mountTacticalPlanning(document.getElementById('tactical-planning-root'),state,feedback);void mountTacticalSimulations(document.getElementById('tactical-simulation-root'),state,feedback);void mountTacticalAnalytics(document.getElementById('tactical-analytics-root'),state,feedback);}
+  replaceHtml(app, `<div class="layout ws-layout"><aside class="side"><div class="brand"><div class="logo" aria-label="Логотип MajesticToolkit">MT</div><div><h1>MajesticToolkit</h1><p>Tactical Toolkit · 2.2.9</p></div></div>${profileSelect()}<nav class="nav" aria-label="Разделы">${groupedNav()}</nav><div class="side-footer">Локальные данные · AI только по согласию<div class="copyright">© <a href="https://github.com/TheSkiF4er" target="_blank" rel="noopener noreferrer">SkiF4er</a></div></div></aside><main class="main" id="workspace-main"><header class="topline"><div><p class="eyebrow">MajesticToolkit / ${e(title[0])}</p><h2>${e(title[0])}</h2><p class="lead">${e(title[1])}</p></div><button class="button secondary ws-search" data-action="nav" data-view="search" aria-label="Единый поиск">⌕ Поиск <kbd>Ctrl K</kbd></button></header>${moduleWarning()}${view==='forum'?`<nav class="ws-forum-tabs" aria-label="Разделы форума">${FORUM_TABS.map(([id,label])=>`<button class="button ${forumPane===id?'primary':'secondary'}" data-action="forum-pane" data-pane="${id}" aria-pressed="${forumPane===id}">${label}</button>`).join('')}</nav>`:''}${contents[view]()}</main></div>`);
+  if(view==='tactical'){void mountTacticalMap(document.getElementById('tactical-map-root'),state,feedback,openFromTactical);void mountTacticalAirdrops(document.getElementById('tactical-airdrop-root'),state,feedback);void mountTacticalPlanning(document.getElementById('tactical-planning-root'),state,feedback);void mountTacticalSimulations(document.getElementById('tactical-simulation-root'),state,feedback);void mountTacticalAnalytics(document.getElementById('tactical-analytics-root'),state,feedback);void mountTacticalLinks(document.getElementById('tactical-links-root'),state,feedback);}
   if(view==='ai')void mountAI(document.getElementById('ai-connection'),state,feedback).catch(error=>feedback(error.message,true));
   if(view==='complaints'){
     mountSectionMonitor(document.getElementById('section-monitor-root'),state,feedback);
@@ -258,15 +262,17 @@ async function exportBackup() {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
-  anchor.download = `majestictoolkit-backup-v2.2.0-${new Date().toISOString().slice(0,10)}.json`;
+  anchor.download = `majestictoolkit-backup-v2.2.9-${new Date().toISOString().slice(0,10)}.json`;
   document.body.appendChild(anchor); anchor.click(); anchor.remove();
   setTimeout(() => URL.revokeObjectURL(url), 30000);
   feedback(`Копия: ${templates.length} шаблонов, ${cases.length} жалоб, ${economy.length} операций/матчей, ${market.length} товаров/наблюдений/объявлений, ${trading.reduce((n,b)=>n+b.events.length,0)} складских операций, ${familyRows.length} семей, ${organizations.length} организаций, ${crime.territories.length} территорий и ${crime.operations.length} RP-событий, ${finance.reduce((n,b)=>n+b.events.length,0)} финансовых событий, ${laws.length} записей законодательства, ${government.length} ведомственных записей, ${documents.length} документов/шаблонов, ${externalLinks().length} внешних закладок`);
 }
-async function createBackupText({includeAI=document.getElementById('backup-include-ai')?.checked===true}={}){
+async function createBackupText({includeAI=document.getElementById('backup-include-ai')?.checked===true,tacticalBundle=null}={}){
   verifyJusticeStorageRows(await api.storage.local.get(null));
   const {territories,operations}=await listCrime();
-  return makeBackupV20([validateState(state),await listTemplates(),await listCases(),await listEconomyRecords(),lawRecords(),governmentRecords(),documentRecords(),externalLinks(),productivity,await listXenForoLinks(),await loadMonitor(),await loadKnowledge(state.profiles.map(p=>p.id)),globalThis.RPNForumCore.cleanTemplate,await listSources(),await listRules()],await exportPunishmentData(state.profiles),await exportSectionData(state.profiles),await exportRegistryData(state.profiles),await exportModerationOps(state.profiles),await inventoryAllVault(state.profiles),includeAI?await exportAIWorkspaces(state.profiles):null,await listMarketplace(),await listInventory(),await listFamilies(),await listOrganizations(),territories,operations,await listFinance(),await listEconomyLinks());
+  const backupArgs=[[validateState(state),await listTemplates(),await listCases(),await listEconomyRecords(),lawRecords(),governmentRecords(),documentRecords(),externalLinks(),productivity,await listXenForoLinks(),await loadMonitor(),await loadKnowledge(state.profiles.map(p=>p.id)),globalThis.RPNForumCore.cleanTemplate,await listSources(),await listRules()],await exportPunishmentData(state.profiles),await exportSectionData(state.profiles),await exportRegistryData(state.profiles),await exportModerationOps(state.profiles),await inventoryAllVault(state.profiles),includeAI?await exportAIWorkspaces(state.profiles):null,await listMarketplace(),await listInventory(),await listFamilies(),await listOrganizations(),territories,operations,await listFinance(),await listEconomyLinks()];
+  const tactical=tacticalBundle??await collectTacticalBackup(state.profiles);
+  return makeBackupV21(backupArgs,tactical.snapshot);
 }
 async function requestCaseReplacement(cases) {
   const result=await api.runtime.sendMessage({type:'RP_NEXUS_CASE_MUTATE',action:'replace',cases});
@@ -294,16 +300,17 @@ async function executeAction(button) {
   const { action, id } = button.dataset;
   if(action==='forum-pane'){setForumPane(button.dataset.pane);render();document.querySelector(`[data-action="forum-pane"][data-pane="${forumPane}"]`)?.focus();return;}
   if(action==='backup-portable-export'){
-    const json=await createBackupText();
+    const tacticalBundle=await collectTacticalBackup(state.profiles);
+    const json=await createBackupText({tacticalBundle});
     const inventory=await inventoryAllVault(state.profiles);
     const registry=await exportRegistryData(state.profiles);
     const referenced=new Set([...(await listCases()).flatMap(c=>c.evidence.map(x=>x.vaultId).filter(Boolean)),...registry.records.flatMap(r=>r.evidence.map(x=>x.vaultId).filter(Boolean))]);
     const known=new Set(inventory.map(x=>x.id));
     const missing=[...referenced].filter(id=>!known.has(id));
     if(missing.length)throw Error(`Невозможно создать полную переносимую копию: ${missing.length} материалов отсутствуют в Evidence Vault. Восстановите или удалите несвязанные записи перед экспортом.`);
-    const {blob,manifest}=await makePortableBackup(json,inventory);
-    const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`majestictoolkit-portable-backup-v2.2.0-${new Date().toISOString().slice(0,10)}.zip`;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);
-    feedback(`Переносимая копия: ${manifest.files.length} файлов Evidence Vault, проверены SHA-256`);return;
+    const {blob,manifest}=await makePortableBackup(json,inventory,tacticalBundle.files);
+    const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`majestictoolkit-portable-backup-v2.2.9-${new Date().toISOString().slice(0,10)}.zip`;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);
+    feedback(`Переносимая копия: ${manifest.files.length} файлов Evidence Vault и ${manifest.maps.length} карт, проверены SHA-256`);return;
   }
   if(action==='ai-support'){navigateTo('ai');render();document.getElementById('ai-support-root')?.scrollIntoView?.({block:'start'});return;}
   if(action==='ai-rule'||action==='ai-source'){
@@ -363,6 +370,8 @@ async function executeAction(button) {
     const previousCrime = await listCrime();
     const previousFinance = await listFinance();
     const previousEconomyLinks=await listEconomyLinks();
+    const previousTacticalLinks=await listTacticalLinks();
+    const relatedTacticalLinks=previousTacticalLinks.filter(r=>r.profileId===id);
     const relatedEconomyLinks=previousEconomyLinks.filter(r=>r.profileId===id);
     const relatedFinance = previousFinance.filter(b=>b.profileId===id);
     const relatedCrime = [...previousCrime.territories,...previousCrime.operations].filter(r=>r.profileId===id);
@@ -374,8 +383,10 @@ async function executeAction(button) {
     const previousDocuments = documentRecords().slice();
     const relatedDocuments = previousDocuments.filter(r=>r.profileId===id);
     const relatedGovernment = previousGovernment.filter(r=>r.profileId===id);
-    if (!confirm(`Удалить профиль «${p.name}» и связанных с ним шаблонов: ${dependent.length}, жалоб: ${related.length}, записей экономики: ${relatedEconomy.length}, товаров и рыночных записей: ${relatedMarket.length}, складских журналов: ${relatedTrading.length}, семей: ${relatedFamilies.length}, организаций: ${relatedOrganizations.length}, территорий / RP-событий: ${relatedCrime.length}, финансовых журналов: ${relatedFinance.length}, связей с документами/доказательствами: ${relatedEconomyLinks.length}, записей законодательства: ${relatedLaws.length}, ведомственных записей: ${relatedGovernment.length}, документов: ${relatedDocuments.length}, правил: ${previousRules.filter(r=>r.profileId===id).length}, записей реестра: ${previousRegistry.records.filter(r=>r.profileId===id).length}? Это действие нельзя отменить без резервной копии.`)) return;
+    if (!confirm(`Удалить профиль «${p.name}» и связанных с ним шаблонов: ${dependent.length}, жалоб: ${related.length}, записей экономики: ${relatedEconomy.length}, товаров и рыночных записей: ${relatedMarket.length}, складских журналов: ${relatedTrading.length}, семей: ${relatedFamilies.length}, организаций: ${relatedOrganizations.length}, территорий / RP-событий: ${relatedCrime.length}, финансовых журналов: ${relatedFinance.length}, экономических связей: ${relatedEconomyLinks.length}, тактических связей: ${relatedTacticalLinks.length}, записей законодательства: ${relatedLaws.length}, ведомственных записей: ${relatedGovernment.length}, документов: ${relatedDocuments.length}, правил: ${previousRules.filter(r=>r.profileId===id).length}, записей реестра: ${previousRegistry.records.filter(r=>r.profileId===id).length}? Это действие нельзя отменить без резервной копии.`)) return;
     try {
+      // Detach the removed profile's source links before deleting its documents.
+      if(relatedTacticalLinks.length)await api.storage.local.remove(relatedTacticalLinks.map(x=>TACTICAL_LINK_PREFIX+x.id));
       if(relatedEconomyLinks.length)await replaceEconomyLinks(previousEconomyLinks.filter(r=>r.profileId!==id),state.profiles.filter(p=>p.id!==id).map(p=>p.id),{marketplace:previousMarket.filter(r=>r.profileId!==id),families:previousFamilies.filter(r=>r.profileId!==id),organizations:previousOrganizations.filter(r=>r.profileId!==id),territories:previousCrime.territories.filter(r=>r.profileId!==id),documents:previousDocuments.filter(r=>r.profileId!==id),evidenceVault:await inventoryAllVault(state.profiles.filter(p=>p.id!==id))});
       await replaceXenForoLinks(previousXfLinks.filter(x=>x.profileId!==id));
       if (dependent.length) await replaceTemplates(previousTemplates.filter(t => t.profileId !== id));
@@ -408,11 +419,13 @@ async function executeAction(button) {
       await clearOrphanAirdrops(state.profiles.map(p=>p.id)).catch(error=>console.warn('MajesticToolkit: не удалось очистить аирдропы удалённого профиля',error));
       await clearOrphanTacticalPlans(state.profiles.map(p=>p.id)).catch(error=>console.warn('MajesticToolkit: не удалось очистить планы удалённого профиля',error));
       await clearOrphanTacticalSimulations(state.profiles.map(p=>p.id)).catch(error=>console.warn('MajesticToolkit: не удалось очистить симуляции удалённого профиля',error));
+      await clearOrphanTacticalLinks(state.profiles.map(p=>p.id)).catch(error=>console.warn('MajesticToolkit: не удалось очистить связи удалённого профиля',error));
       await clearOrphanTacticalReplayPreferences(state.profiles.map(p=>p.id)).catch(error=>console.warn('MajesticToolkit: не удалось очистить настройки replay',error));
       await clearNavigationHistory(id).catch(error=>console.warn('MajesticToolkit: не удалось очистить историю удалённого профиля',error));
       await clearVaultProfile(id).catch(error=>console.warn('MajesticToolkit: не удалось удалить файлы удалённого профиля',error));
       await api.storage.local.remove(moderationOpsKey(id)).catch(error=>console.warn('MajesticToolkit: не удалось удалить локальный аудит профиля',error));
     } catch (error) {
+      if(relatedTacticalLinks.length)await api.storage.local.set(Object.fromEntries(relatedTacticalLinks.map(x=>[TACTICAL_LINK_PREFIX+x.id,x])));
       await replaceRegistryData(previousRegistry,state.profiles);
       await replaceXenForoLinks(previousXfLinks);
       await replaceMonitor(previousMonitor);
@@ -627,8 +640,8 @@ document.addEventListener('input', event => {
 });
 async function restoreBackupText(text,portable=null){
 
-      const backup = await parseBackupV20(text, validateState, globalThis.RPNForumCore.cleanTemplate);
-      if(portable && (![17,18,19,20].includes(backup.schemaVersion)||JSON.stringify(backup.evidenceVault)!==JSON.stringify(portable.inventory)))throw Error('Данные ZIP не совпадают с Backup v17–v20');
+      const backup = await parseBackupV21(text, validateState, globalThis.RPNForumCore.cleanTemplate);
+      if(portable && (![17,18,19,20,21].includes(backup.schemaVersion)||JSON.stringify(backup.evidenceVault)!==JSON.stringify(portable.inventory)))throw Error('Данные ZIP не совпадают с Backup v17–v21');
       const replacing = backup.schemaVersion >= 3 ? `, ${backup.cases.length} жалоб` : '';
       const economyCount = backup.schemaVersion >= 4 ? `, ${backup.economy.length} записей экономики` : '';
       const familyCount=backup.families===null?'':`, ${backup.families.length} семей`;
@@ -644,9 +657,10 @@ async function restoreBackupText(text,portable=null){
       const sourcesCount=backup.schemaVersion>=14?`, ${backup.sourceLibrary.length} статей форума и Wiki`:'';
       const monitorCount=backup.schemaVersion>=11?`, ${backup.serverMonitor.players.length} карточек игроков`:'';
       const attachmentCount=backup.evidenceVault?.filter(x=>x.kind==='file').length??0;
+      const mapNotice=backup.tactical?.maps.length&&!portable?` Backup v21 содержит ${backup.tactical.maps.length} карт без изображений: на этом устройстве должны быть идентичные подложки, иначе используйте ZIP v21.`:'';
       const aiNotice=backup.aiWorkspace!==null?` Будут восстановлены сохранённые диалоги и черновики ${backup.aiWorkspace.length} профилей.`:' История AI останется без изменений.';
-      const filesNotice=portable?` ZIP включает ${portable.files.size} бинарных файлов.`:attachmentCount?` ВНИМАНИЕ: JSON не содержит ${attachmentCount} бинарных вложений; они могут отсутствовать на этом устройстве. Для полного восстановления используйте ZIP.`:'';
-      if (!confirm(`Восстановить ${backup.state.profiles.length} профилей, ${backup.templates.length} шаблонов${replacing}${economyCount}${familyCount}${orgCount}${crimeCount}${lawCount}${govCount}${documentsCount}${linksCount}${xfCount}${monitorCount}${knowledgeCount}${sourcesCount}${rulesCount}? Данные, отсутствующие в старом формате копии, сохранятся.${filesNotice}${aiNotice}`)) return;
+      const filesNotice=portable?` ZIP включает ${portable.files.size} вложений и ${portable.maps?.size??0} карт.`:attachmentCount?` ВНИМАНИЕ: JSON не содержит ${attachmentCount} бинарных вложений; они могут отсутствовать на этом устройстве. Для полного восстановления используйте ZIP.`:'';
+      if (!confirm(`Восстановить ${backup.state.profiles.length} профилей, ${backup.templates.length} шаблонов${replacing}${economyCount}${familyCount}${orgCount}${crimeCount}${lawCount}${govCount}${documentsCount}${linksCount}${xfCount}${monitorCount}${knowledgeCount}${sourcesCount}${rulesCount}? Данные, отсутствующие в старом формате копии, сохранятся.${filesNotice}${mapNotice}${aiNotice}`)) return;
       return (async () => {
         const beforeState = state;
         const beforeTemplates = await listTemplates();
@@ -675,6 +689,7 @@ async function restoreBackupText(text,portable=null){
         const beforeKnowledge=await loadKnowledge(beforeState.profiles.map(p=>p.id));
         const beforeAIWorkspaces=backup.aiWorkspace===null?null:await exportAIWorkspaces(beforeState.profiles);
         const beforeAISettings=(await api.storage.local.get('mtAiConnectionV191')).mtAiConnectionV191||{};
+        const beforeTactical=await collectTacticalBackup(beforeState.profiles);
         let newlyInstalledVault=[];
         try {
           if (backup.schemaVersion < 3 && beforeCases.some(c => !backup.state.profiles.some(p => p.id === c.profileId))) {
@@ -711,6 +726,12 @@ async function restoreBackupText(text,portable=null){
               documents:backup.schemaVersion>=7?backup.documents:beforeDocuments,evidenceVault:futureVault
             });
           }
+          // Preflight all tactical references and image checksums before modifying any store.
+          const nextTactical=backup.tactical??beforeTactical.snapshot;
+          const expectedTactical=validateTacticalSnapshot(nextTactical,backup.state.profiles,{
+            families:backup.families??beforeFamilies,organizations:backup.organizations??beforeOrganizations,territories:backup.territories??beforeCrime.territories,documents:backup.schemaVersion>=7?backup.documents:beforeDocuments,evidenceVault:backup.evidenceVault??await inventoryAllVault(beforeState.profiles)
+          });
+          const nextTacticalFiles=await resolveTacticalFiles(expectedTactical,portable?.maps??new Map(),beforeTactical.files);
           await createRestorePoint(api.storage.local);
           if(portable)newlyInstalledVault=await importVaultPackage(portable.inventory,portable.files);
           if(backup.economyLinks!==null)await replaceEconomyLinks([],beforeState.profiles.map(p=>p.id),{marketplace:beforeMarket,families:beforeFamilies,organizations:beforeOrganizations,territories:beforeCrime.territories,documents:beforeDocuments,evidenceVault:await inventoryAllVault(beforeState.profiles)});
@@ -743,6 +764,9 @@ async function restoreBackupText(text,portable=null){
           if (backup.moderationOps!==null) await replaceModerationOps(backup.moderationOps,backup.state.profiles);
           if(backup.aiWorkspace!==null)await replaceAIWorkspaces(backup.aiWorkspace,backup.state.profiles,api.storage.local);
           if(backup.economyLinks!==null)await replaceEconomyLinks(backup.economyLinks,backup.state.profiles.map(p=>p.id),{marketplace:backup.marketplace,families:backup.families,organizations:backup.organizations,territories:backup.territories,documents:backup.documents,evidenceVault:backup.evidenceVault});
+          await replaceTacticalBackup(expectedTactical,nextTacticalFiles,backup.state.profiles,{
+            families:backup.families??beforeFamilies,organizations:backup.organizations??beforeOrganizations,territories:backup.territories??beforeCrime.territories,documents:backup.schemaVersion>=7?backup.documents:beforeDocuments,evidenceVault:backup.evidenceVault??await inventoryAllVault(beforeState.profiles)
+          });
           await disableAIOnRestore(backup.state.profiles,api.storage.local);
           await completeRestorePoint(api.storage.local);
         } catch (error) {
@@ -777,7 +801,11 @@ async function restoreBackupText(text,portable=null){
           if(beforeAIWorkspaces!==null)await replaceAIWorkspaces(beforeAIWorkspaces,beforeState.profiles,api.storage.local);
           await api.storage.local.set({mtAiConnectionV191:beforeAISettings});
           if(backup.economyLinks!==null)await replaceEconomyLinks(beforeEconomyLinks,beforeState.profiles.map(p=>p.id),{marketplace:beforeMarket,families:beforeFamilies,organizations:beforeOrganizations,territories:beforeCrime.territories,documents:beforeDocuments,evidenceVault:await inventoryAllVault(beforeState.profiles)});
-          if(vaultRollbackError)throw new AggregateError([error,vaultRollbackError],'Восстановление прервано; откат файлов Evidence Vault также завершился ошибкой');
+          let tacticalRollback=null;
+          try{await replaceTacticalBackup(beforeTactical.snapshot,beforeTactical.files,beforeState.profiles,{
+            families:beforeFamilies,organizations:beforeOrganizations,territories:beforeCrime.territories,documents:beforeDocuments,evidenceVault:await inventoryAllVault(beforeState.profiles)
+          });}catch(failure){tacticalRollback=failure;}
+          if(vaultRollbackError||tacticalRollback)throw new AggregateError([error,...[vaultRollbackError,tacticalRollback].filter(Boolean)],'Восстановление прервано; откат не завершён полностью');
           throw error;
         }
         await Promise.all([refreshForum(),refreshComplaints(),refreshEconomy(),refreshTrading(state.activeProfileId),refreshLaw(),refreshGovernment(),refreshDocuments(),refreshIntegrations()]);

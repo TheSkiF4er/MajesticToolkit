@@ -91,7 +91,11 @@ export async function verifyVaultFile(id,profileId){const {meta,blob}=await getV
 export async function downloadVaultFile(id,profileId){const {meta,blob}=await verifyVaultFile(id,profileId);const url=URL.createObjectURL(blob);try{const a=document.createElement('a');a.href=url;a.download=meta.name;document.body.append(a);a.click();a.remove();}finally{setTimeout(()=>URL.revokeObjectURL(url),30000);}return meta;}
 export async function deleteVaultRecord(id,profileId){
  const localStorage=globalThis.browser?.storage?.local??globalThis.chrome?.storage?.local;
- if(localStorage&&Object.entries(await localStorage.get(null)).some(([k,v])=>k.startsWith('mtEconomyLinkV219:')&&v.sourceType==='evidence'&&v.sourceId===id&&v.profileId===profileId))throw Error('Доказательство связано с экономическим объектом. Сначала удалите связь.');const record=await getVaultRecord(id);if(record.meta.profileId!==profileId)throw Error('Материал другого профиля');
+ if(localStorage){
+  const linked=Object.entries(await localStorage.get(null)).filter(([k,v])=>(k.startsWith('mtEconomyLinkV219:')||k.startsWith('mtTacticalLinkV229:'))&&v?.sourceType==='evidence'&&v.sourceId===id&&v.profileId===profileId);
+  if(linked.some(([k])=>k.startsWith('mtEconomyLinkV219:')))throw Error('Доказательство связано с экономическим объектом. Сначала удалите связь.');
+  if(linked.length)throw Error('Доказательство связано с тактическим объектом. Сначала удалите связь.');
+ }const record=await getVaultRecord(id);if(record.meta.profileId!==profileId)throw Error('Материал другого профиля');
  const {listCases}=await import('./complaints-store.mjs');const cases=await listCases();
  if(cases.some(c=>c.evidence.some(e=>e.vaultId===id)))throw Error('Материал прикреплён к жалобе. Сначала удалите связь из дела.');
  const {exportRegistryData}=await import('./punishment-registry-store.mjs');const {loadState}=await import('./state.mjs');
