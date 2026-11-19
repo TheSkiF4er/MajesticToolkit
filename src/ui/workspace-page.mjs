@@ -11,7 +11,7 @@ import {loadMonitor} from '../lib/monitor-store.mjs';
 import {remainingLabel} from '../lib/timers-core.mjs';
 import {projectLabel,getActiveProfile} from '../lib/model.mjs';
 import '../lib/xenforo-core.js';
-export const NAV_GROUPS=[['Рабочее пространство',['home','search','ai','forum','timers']],['Модерация',['moderation','complaints','rules']],['Работа с делами',['evidence','knowledge','law','justice','documents']],['RP и интеграции',['monitor','economy','tactical','integrations']],['Система',['profiles','sites','settings','backup']]];
+export const NAV_GROUPS=[['Рабочее пространство',['home','search','ai','forum','timers']],['Модерация',['moderation','complaints','rules']],['Работа с делами',['evidence','knowledge','law','justice','documents']],['RP и интеграции',['monitor','economy','tactical','integrations']],['Система',['profiles','cloud','sites','settings','backup']]];
 export const FORUM_TABS=[['binder','Биндер'],['navigation','Навигация'],['customization','Оформление'],['settings','Настройки форума']];
 const labels={binder:'Шаблоны',bookmarks:'Закладки',complaints:'Жалобы и сроки',timers:'Активные таймеры',documents:'Документы',servers:'Избранные серверы',rules:'Избранные правила',calculations:'Незавершённые расчёты',violations:'Недавние нарушения'};
 const date=x=>x?new Date(x).toLocaleString('ru-RU'):'—';

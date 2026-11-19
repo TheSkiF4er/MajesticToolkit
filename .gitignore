@@ -28,3 +28,10 @@ Thumbs.db
 
 # Extracted local installation bundles (untracked)
 install/
+
+# Cloud Identity runtime secrets and persistence
+/cloud-identity/data/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.pem

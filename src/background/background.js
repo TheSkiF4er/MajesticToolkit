@@ -1,3 +1,4 @@
+import {createCloudIdentityService} from '../lib/cloud-identity-client.mjs';
 import {getVaultRecord,verifyVaultFile} from '../lib/evidence-vault.mjs';
 import {moderationOpsFor} from '../lib/moderation-ops-store.mjs';
 import {registryAction} from '../lib/punishment-registry-store.mjs';
@@ -21,6 +22,7 @@ import '../lib/xenforo-core.js';
 import '../lib/complaints-core.js';
 import {contentSender,extensionPageSender,matchingForumProfile,validatePayloadSize} from '../lib/message-security.mjs';
 const api = globalThis.browser ?? globalThis.chrome;
+const cloudIdentity=createCloudIdentityService({storage:api.storage.local,permissions:api.permissions});
 const FORUMS = [
   { id:'rp-nexus-majestic-forum-v3', origin:'https://forum.majestic-rp.ru/*' },
   { id:'rp-nexus-russia-forum-v3', origin:'https://forum.russia.online/*' }
@@ -191,6 +193,7 @@ api.runtime.onMessage.addListener((message,sender,sendResponse) => {
   async function task() {
     validatePayloadSize(message,isTrustedExtension&&message.type==='RP_NEXUS_CASE_MUTATE'&&message.action==='moderation'?350000:65536);
     if(isForum && message.type!=='RP_NEXUS_FORUM_DATA' && !await api.permissions.contains({origins:[`https://${new URL(sender.url).hostname}/*`]}))throw Error('Доступ к форуму отозван');
+    if(message.type==='MT_CLOUD_IDENTITY'){if(!isTrustedExtension)throw Error('Недоверенный источник Cloud Identity');return cloudIdentity.handle(message.action,message.input);}
     if(message.type==='MT_SECTION_MONITOR'){if(!isTrustedExtension)throw Error('Недоверенный источник');if(message.action==='list')return sectionView(message.profileId);if(message.action==='scan')return scanSections(message.profileId,message.input?.id??null);return sectionAction(message.profileId,message.action,message.input);}
     if(message.type==='MT_NATIVE_MODERATION'){
       if(!isForum)throw Error('Недоверенный источник');
@@ -404,7 +407,7 @@ api.runtime.onMessage.addListener((message,sender,sendResponse) => {
     }
     throw Error('Неизвестный запрос');
   }
-  if (!['RP_NEXUS_OPEN_WORKSPACE','RP_NEXUS_SCAN_OPEN_TABS','RP_NEXUS_TRACK_CURRENT_THREAD','RP_NEXUS_THREAD_OBSERVED','RP_NEXUS_VIDEO_ADD','RP_NEXUS_CASE_MUTATE','RP_NEXUS_FORUM_DATA','RP_NEXUS_VIDEO_CASES','MAJESTIC_SAVE_PUBLIC_PLAYER','MAJESTIC_TIMER','MT_BINDER_ACTION','MT_NAVIGATION_ACTION','MT_FORUM_READING','MT_PUNISHMENT_OVERLAY','MT_SECTION_MONITOR','MT_NATIVE_MODERATION'].includes(message.type)) return;
+  if (!['RP_NEXUS_OPEN_WORKSPACE','RP_NEXUS_SCAN_OPEN_TABS','RP_NEXUS_TRACK_CURRENT_THREAD','RP_NEXUS_THREAD_OBSERVED','RP_NEXUS_VIDEO_ADD','RP_NEXUS_CASE_MUTATE','RP_NEXUS_FORUM_DATA','RP_NEXUS_VIDEO_CASES','MAJESTIC_SAVE_PUBLIC_PLAYER','MAJESTIC_TIMER','MT_BINDER_ACTION','MT_NAVIGATION_ACTION','MT_FORUM_READING','MT_PUNISHMENT_OVERLAY','MT_SECTION_MONITOR','MT_NATIVE_MODERATION','MT_CLOUD_IDENTITY'].includes(message.type)) return;
   void task().then(value => sendResponse({ok:true,value})).catch(error => sendResponse({ok:false,error:error?.message || 'Ошибка'}));
   return true;
 });
