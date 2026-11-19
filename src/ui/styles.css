@@ -451,3 +451,12 @@ body[data-mode=sidebar] .ws-layout .side{height:auto;position:static;overflow:vi
 .tactical-territory-swatch{width:12px;height:28px;flex:none;border-radius:4px;border:1px solid #9ca3af}
 .tactical-territory-event{display:grid;gap:3px;padding:7px 0;border-bottom:1px solid var(--border,#465366)}
 .tactical-territory-event .button{justify-self:start}
+
+/* 2.2.6: tactical planning editor, on-map positions and ordered routes. */
+.tactical-plan-grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(290px,1fr);gap:14px;align-items:start}
+.tactical-plan-grid>.stack{min-width:0}
+.tactical-plan-workspace .economy-list{max-height:430px;overflow:auto}
+.tactical-plan-workspace .economy-hit{gap:8px}
+.tactical-plan-workspace form>.row>*{flex:1;min-width:0}
+#tactical-plan-canvas{display:block;width:100%;height:clamp(280px,42vw,570px);touch-action:manipulation;cursor:crosshair;border-radius:10px;border:1px solid var(--stroke);background:#152238}
+@media(max-width:930px){.tactical-plan-grid{grid-template-columns:1fr}}
