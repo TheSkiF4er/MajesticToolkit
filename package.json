@@ -1,7 +1,7 @@
 {
   "name": "majestictoolkit",
   "private": true,
-  "version": "2.2.0",
+  "version": "2.2.1",
   "type": "module",
   "description": "Автономное браузерное расширение: форум, жалобы, экономика, Law Codex и Government Tools и Document Studio Google Workspace и Productivity & UX",
   "scripts": {
@@ -30,7 +30,8 @@
     "test:browser:finance": "python3 tests/browser-finance-217.py",
     "test:browser:analytics": "python3 tests/browser-analytics-218.py",
     "test:browser:eco-integrations": "python3 tests/browser-economy-integrations-219.py",
-    "test:browser:economy-ga": "python3 tests/browser-economy-ga-220.py"
+    "test:browser:economy-ga": "python3 tests/browser-economy-ga-220.py",
+    "test:browser:tactical": "python3 tests/browser-tactical-221.py"
   },
   "engines": {
     "node": ">=22 <23"

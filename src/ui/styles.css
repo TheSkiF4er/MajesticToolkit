@@ -379,3 +379,20 @@ body[data-mode=sidebar] .ws-layout .side{height:auto;position:static;overflow:vi
 .inventory-actions .button{padding:5px 8px;font-size:12px;white-space:nowrap}
 #trading-dialog{max-width:min(620px,96vw);max-height:90vh;overflow:auto}
 #trading-search{max-width:100%}
+
+/* Tactical Workspace 2.2.1: adaptive cross-module operations dashboard. */
+.tactical-workspace{min-width:0}
+.tactical-workspace>.card{min-width:0}
+.tactical-stats{grid-template-columns:repeat(auto-fit,minmax(145px,1fr))}
+.tactical-stats>button{display:grid;gap:7px;min-width:0;padding:13px 12px;border-radius:11px;background:var(--sub);border:1px solid var(--stroke);text-align:start;color:inherit;cursor:pointer;font:inherit}
+.tactical-stats>button:hover,.tactical-stats>button:focus-visible{border-color:var(--accent);outline-offset:2px}
+.tactical-filters{display:grid;grid-template-columns:minmax(220px,1fr) minmax(165px,240px);align-items:end;gap:12px}
+.tactical-filters .field{min-width:0}
+.tactical-filters input,.tactical-filters select{width:100%;max-width:100%}
+.tactical-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.tactical-columns>.card{min-width:0}
+.tactical-record{min-width:0;overflow-wrap:anywhere}
+.tactical-record>div:first-child{display:grid;gap:2px}
+.tactical-record .row{flex-wrap:wrap;justify-content:flex-end}
+@media(max-width:950px){.tactical-columns{grid-template-columns:1fr}}
+@media(max-width:650px){.tactical-filters{grid-template-columns:1fr}.tactical-record{align-items:flex-start;flex-direction:column}.tactical-record .row{justify-content:flex-start}}
