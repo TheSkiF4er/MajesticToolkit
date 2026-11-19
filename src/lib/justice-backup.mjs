@@ -9,6 +9,7 @@ import {validateInventoryBatches} from './inventory-core.mjs';
 import {validateFamilies} from './family-core.mjs';
 import {validateOrganizations} from './organization-core.mjs';
 import {validateCrime} from './crime-core.mjs';
+import {validateFinanceBatches} from './finance-core.mjs';
 
 const MAX_BYTES=48*1024*1024;
 const safeJSON=text=>{if(typeof text!=='string'||new TextEncoder().encode(text).length>MAX_BYTES)throw Error('Резервная копия превышает 48 МиБ');try{return JSON.parse(text);}catch{throw Error('Некорректный JSON резервной копии');}};
@@ -17,7 +18,7 @@ const check=async backup=>{
  await verifyJusticeIntegrity(profiles,backup.government??[],backup.documents??[],backup.evidenceVault);
  return backup;
 };
-export async function makeBackupV19(args,punishments,sections,registry,operations,inventory,aiWorkspace=null,marketplace=[],tradingInventory=[],families=[],organizations=[],territories=[],crimeEvents=[]){
+export async function makeBackupV19(args,punishments,sections,registry,operations,inventory,aiWorkspace=null,marketplace=[],tradingInventory=[],families=[],organizations=[],territories=[],crimeEvents=[],financeLedger=[]){
  const safeInventory=validateVaultInventory(inventory,args[0].profiles);
  const backup=JSON.parse(makeBackupV18(args,punishments,sections,registry,operations,safeInventory,aiWorkspace));
  await verifyJusticeIntegrity(backup.payload.profiles,backup.government,backup.documents,safeInventory);
@@ -26,13 +27,14 @@ export async function makeBackupV19(args,punishments,sections,registry,operation
  const familyRows=validateFamilies(families,backup.payload.profiles.map(p=>p.id));
  const organizationRows=validateOrganizations(organizations,backup.payload.profiles.map(p=>p.id));
  const crime=validateCrime(territories,crimeEvents,backup.payload.profiles.map(p=>p.id),familyRows,organizationRows);
- const result=JSON.stringify({...backup,schemaVersion:19,marketplace:marketRows,tradingInventory:trading,families:familyRows,organizations:organizationRows,territories:crime.territories,crimeEvents:crime.operations},null,2);
+ const finance=validateFinanceBatches(financeLedger,backup.payload.profiles.map(p=>p.id),{families:familyRows,organizations:organizationRows});
+ const result=JSON.stringify({...backup,schemaVersion:19,marketplace:marketRows,tradingInventory:trading,families:familyRows,organizations:organizationRows,territories:crime.territories,crimeEvents:crime.operations,financeLedger:finance},null,2);
  if(new TextEncoder().encode(result).length>MAX_BYTES)throw Error('Резервная копия превышает 48 МиБ');
  return result;
 }
 export async function parseBackupV19(text,validateState,cleanTemplate){
  const raw=safeJSON(text);
- if(raw?.schemaVersion!==19)return {...await check(parseBackupV18(text,validateState,cleanTemplate)),marketplace:null,tradingInventory:null,families:null,organizations:null,territories:null,crimeEvents:null};
+ if(raw?.schemaVersion!==19)return {...await check(parseBackupV18(text,validateState,cleanTemplate)),marketplace:null,tradingInventory:null,families:null,organizations:null,territories:null,crimeEvents:null,financeLedger:null};
  if(raw.format!=='majestictoolkit-backup'||!Object.hasOwn(raw,'aiWorkspace')||!Array.isArray(raw.evidenceVault))throw Error('Некорректный Backup v19');
  const parsed=parseBackupV18(JSON.stringify({...raw,schemaVersion:18}),validateState,cleanTemplate);
  await check(parsed);
@@ -44,5 +46,6 @@ export async function parseBackupV19(text,validateState,cleanTemplate){
  if(Object.hasOwn(raw,'territories')!==Object.hasOwn(raw,'crimeEvents'))throw Error('Неполная резервная копия территорий');
  if(Object.hasOwn(raw,'territories')&&(raw.territories.length||raw.crimeEvents.length)&&(!families||!organizations))throw Error('Резервная копия территорий требует реестры семей и организаций');
  const crime=Object.hasOwn(raw,'territories')?validateCrime(raw.territories,raw.crimeEvents,parsed.state.profiles.map(p=>p.id),families,organizations):null;
- return {...parsed,schemaVersion:19,marketplace,tradingInventory,families,organizations,territories:crime?.territories??null,crimeEvents:crime?.operations??null};
+ const financeLedger=Object.hasOwn(raw,'financeLedger')?validateFinanceBatches(raw.financeLedger,parsed.state.profiles.map(p=>p.id),{families:families??[],organizations:organizations??[]}):null;
+ return {...parsed,schemaVersion:19,marketplace,tradingInventory,families,organizations,territories:crime?.territories??null,crimeEvents:crime?.operations??null,financeLedger};
 }
