@@ -58,7 +58,10 @@ import {handleFinanceAction,handleFinanceSubmit,refreshFinance,setFinanceQuery} 
 import {exportPunishmentData,replacePunishmentData,validatePunishmentBackup} from '../lib/punishment-backup.mjs';
 import {inventoryAllVault,makePortableBackup,parsePortableBackup} from '../lib/dossier-backup.mjs';
 import {exportAIWorkspaces,replaceAIWorkspaces,disableAIOnRestore} from '../lib/ai-backup.mjs';
-import {makeBackupV19,parseBackupV19} from '../lib/justice-backup.mjs';
+import {makeBackupV20,parseBackupV20} from '../lib/economy-backup-v20.mjs';
+import {listEconomyLinks,replaceEconomyLinks} from '../lib/economy-links-store.mjs';
+import {validateEconomyLinks} from '../lib/economy-links-core.mjs';
+import {handleEconomyIntegrationAction,handleEconomyIntegrationSubmit,handleEconomyIntegrationFile,refreshEconomyIntegrations} from './economy-integrations-page.mjs';
 import {verifyJusticeStorageRows} from '../lib/government-justice-ga.mjs';
 import {importVaultPackage,rollbackVaultPackage} from '../lib/evidence-vault.mjs';
 import {mountRulesExperience} from './rules-experience.mjs';
@@ -147,10 +150,10 @@ function sectionSettings() {
   return `<div class="stack"><section class="card stack"><div class="control"><div><h3>Тема интерфейса</h3><p class="subtle">Влияет на popup, боковую панель и рабочее пространство</p></div><select aria-label="Тема" data-setting="theme"><option value="system" ${p.theme === 'system' ? 'selected' : ''}>Системная</option><option value="light" ${p.theme === 'light' ? 'selected' : ''}>Светлая</option><option value="dark" ${p.theme === 'dark' ? 'selected' : ''}>Тёмная</option><option value="sepia" ${p.theme === 'sepia' ? 'selected' : ''}>Сепия</option><option value="contrast" ${p.theme === 'contrast' ? 'selected' : ''}>Высокая контрастность</option></select></div><div class="divider"></div><div class="control"><div><h3>Начальный раздел</h3><p class="subtle">Выбирается при новом открытии расширения</p></div><select aria-label="Стартовый экран" data-setting="startPage">${NAV.map(([id,label]) => `<option value="${id}" ${p.startPage === id ? 'selected' : ''}>${e(label)}</option>`).join('')}</select></div><div class="divider"></div><div class="control"><div><h3>Компактный интерфейс</h3><p class="subtle">Уменьшает отступы в карточках</p></div><label class="check"><input type="checkbox" data-setting="compact" ${p.compact ? 'checked' : ''}><span>Включить</span></label></div></section><section class="card stack"><h3>AI Technical Support</h3><p class="subtle">Проверьте разрешения, хранилища и локальный AI-шлюз. Диагностика работает без облачного AI; отправка в OpenAI только по отдельному согласию.</p><button class="button secondary" data-action="ai-support">Открыть диагностику и техподдержку</button></section><section class="card stack"><h3>Productivity 0.9.0</h3><div class="control"><div><strong>Цветовой акцент</strong><p class="subtle">Для всех окон расширения</p></div><select aria-label="Цветовой акцент" data-productivity-setting="accent">${[['blue','Синий'],['teal','Бирюзовый'],['violet','Фиолетовый'],['amber','Янтарный']].map(([id,label])=>`<option value="${id}" ${productivity.accent===id?'selected':''}>${label}</option>`).join('')}</select></div><div class="control"><div><strong>Горячие клавиши</strong><p class="subtle">Alt+1–8 в окнах MajesticToolkit. Ctrl/⌘+K — поиск.</p></div><label class="check"><input type="checkbox" data-productivity-setting="shortcutsEnabled" ${productivity.shortcutsEnabled?'checked':''}>Включить</label></div><div class="productivity-shortcuts">${productivity.shortcuts.map((target,index)=>`<label class="field">Alt+${index+1}<select data-productivity-shortcut="${index}">${NAV.map(([id,label])=>`<option value="${id}" ${target===id?'selected':''}>${e(label)}</option>`).join('')}</select></label>`).join('')}</div><div class="row"><button class="button secondary" data-productivity-action="reset-shortcuts">Сбросить сочетания</button></div></section></div>`;
 }
 function sectionBackup() {
-  return `<div class="stack"><section class="card stack"><h3>Скачать резервную копию · Backup v19</h3><p class="lead">JSON содержит профили, записи Toolkit, правила, жалобы и метаданные Evidence Vault; для переноса бинарных файлов используйте ZIP v19. История AI и черновики по умолчанию исключены. Секреты, токены и согласия никогда не экспортируются.</p>
+  return `<div class="stack"><section class="card stack"><h3>Скачать резервную копию · Backup v20</h3><p class="lead">JSON содержит профили, записи Toolkit, правила, жалобы и метаданные Evidence Vault; для переноса бинарных файлов используйте ZIP v20. История AI и черновики по умолчанию исключены. Секреты, токены и согласия никогда не экспортируются.</p>
 <label class="check"><input type="checkbox" id="backup-include-ai"><span>Я осознанно включаю сохранённые AI-диалоги, контекстные ссылки и черновики ВСЕХ профилей в экспорт (могут содержать личные данные)</span></label>
-<div class="row"><button class="button primary" data-action="export">Скачать JSON v19</button><button class="button secondary" data-action="backup-portable-export">Скачать переносимый ZIP v19 с файлами</button></div></section>
-<section class="card stack"><h3>Восстановить из файла</h3><p class="lead">Поддерживаются Backup v1–v19. Импорт проверяется до применения. Для v18–v19 история AI восстанавливается только если она включена в копию; иначе существующая история не заменяется. При восстановлении AI-ключи, токены и согласия не импортируются. Для бинарных файлов требуется переносимый ZIP.</p><label class="field">Файл JSON<input id="backup-file" type="file" accept=".json,application/json"></label><label class="field">Переносимый ZIP<input id="backup-package-file" type="file" accept=".zip,application/zip"></label></section>
+<div class="row"><button class="button primary" data-action="export">Скачать JSON v20</button><button class="button secondary" data-action="backup-portable-export">Скачать переносимый ZIP v20 с файлами</button></div></section>
+<section class="card stack"><h3>Восстановить из файла</h3><p class="lead">Поддерживаются Backup v1–v20. Импорт проверяется до применения. Для v18–v20 история AI восстанавливается только если она включена в копию; иначе существующая история не заменяется. При восстановлении AI-ключи, токены и согласия не импортируются. Для бинарных файлов требуется переносимый ZIP.</p><label class="field">Файл JSON<input id="backup-file" type="file" accept=".json,application/json"></label><label class="field">Переносимый ZIP<input id="backup-package-file" type="file" accept=".zip,application/zip"></label></section>
 <section class="card stack"><h3>Точка восстановления</h3><p class="lead">Перед импортом создаётся проверенный снимок локальных данных, включая сохранённую AI-историю, если она есть. Лимит 20 МиБ. Бинарные файлы IndexedDB не включаются.</p><div class="row"><button class="button secondary" data-action="restore-point">Восстановить предыдущие данные</button><button class="button danger" data-action="discard-point">Удалить точку</button></div></section></div>`;
 }
 
@@ -172,7 +175,7 @@ async function refreshAllModules() {
 }
 function renderPopup() {
   const p = getActiveProfile(state);
-  return `<div class="popup-shell stack ws-popup"><div class="brand"><span class="logo" aria-label="Логотип MajesticToolkit">MT</span><div><h1>MajesticToolkit</h1><p>Economy & Crime · 2.1.8</p></div></div><div class="card stack"><div class="row spread"><strong>Активный профиль</strong>${tag(projectLabel(p.project))}</div><select aria-label="Выбрать профиль" id="popup-profile">${state.profiles.map(x => `<option value="${e(x.id)}" ${x.id === state.activeProfileId ? 'selected' : ''}>${e(x.name)} · ${e(x.server)}</option>`).join('')}</select><p class="subtle">${e(p.server)}</p>${p.forumUrl ? `<button class="button secondary" data-url="${e(p.forumUrl)}">Открыть форум ↗</button>` : ''}</div><div class="row"><button class="button primary" data-action="panel">Боковая панель</button><button class="button secondary" data-action="workspace">Рабочее пространство ↗</button></div><div class="ws-popup-grid"><button class="button secondary" data-action="popup-search">Поиск</button><button class="button secondary" data-action="popup-forum">Биндер</button><button class="button secondary" data-action="popup-navigation">Навигация</button><button class="button secondary" data-action="popup-customization">Оформление</button><button class="button secondary" data-action="popup-monitor">Серверы и игроки</button><button class="button secondary" data-action="popup-moderation">Центр модерации</button><button class="button secondary" data-action="popup-complaints">Жалобы</button><button class="button secondary" data-action="popup-timers">Таймеры</button><button class="button secondary" data-action="popup-economy">Экономика</button><button class="button secondary" data-action="popup-rules">Правила проекта</button><button class="button secondary" data-action="popup-law">Законы</button><button class="button secondary" data-action="popup-government">Ведомства</button><button class="button secondary" data-action="popup-justice">Government & Justice</button><button class="button secondary" data-action="popup-documents">Документы</button><button class="button secondary" data-action="popup-integrations">Интеграции</button><button class="button secondary" data-action="popup-knowledge">Центр знаний</button><button class="button secondary" data-action="popup-settings">Настройки и профили</button><button class="button link" data-url="https://docossum.com/">Docossum ↗</button><button class="button link" data-url="https://fletcher-wiki.com/">Fletcher ↗</button></div><footer class="copyright">© <a href="https://github.com/TheSkiF4er" target="_blank" rel="noopener noreferrer">SkiF4er</a></footer></div>`;
+  return `<div class="popup-shell stack ws-popup"><div class="brand"><span class="logo" aria-label="Логотип MajesticToolkit">MT</span><div><h1>MajesticToolkit</h1><p>Economy & Crime · 2.1.9</p></div></div><div class="card stack"><div class="row spread"><strong>Активный профиль</strong>${tag(projectLabel(p.project))}</div><select aria-label="Выбрать профиль" id="popup-profile">${state.profiles.map(x => `<option value="${e(x.id)}" ${x.id === state.activeProfileId ? 'selected' : ''}>${e(x.name)} · ${e(x.server)}</option>`).join('')}</select><p class="subtle">${e(p.server)}</p>${p.forumUrl ? `<button class="button secondary" data-url="${e(p.forumUrl)}">Открыть форум ↗</button>` : ''}</div><div class="row"><button class="button primary" data-action="panel">Боковая панель</button><button class="button secondary" data-action="workspace">Рабочее пространство ↗</button></div><div class="ws-popup-grid"><button class="button secondary" data-action="popup-search">Поиск</button><button class="button secondary" data-action="popup-forum">Биндер</button><button class="button secondary" data-action="popup-navigation">Навигация</button><button class="button secondary" data-action="popup-customization">Оформление</button><button class="button secondary" data-action="popup-monitor">Серверы и игроки</button><button class="button secondary" data-action="popup-moderation">Центр модерации</button><button class="button secondary" data-action="popup-complaints">Жалобы</button><button class="button secondary" data-action="popup-timers">Таймеры</button><button class="button secondary" data-action="popup-economy">Экономика</button><button class="button secondary" data-action="popup-rules">Правила проекта</button><button class="button secondary" data-action="popup-law">Законы</button><button class="button secondary" data-action="popup-government">Ведомства</button><button class="button secondary" data-action="popup-justice">Government & Justice</button><button class="button secondary" data-action="popup-documents">Документы</button><button class="button secondary" data-action="popup-integrations">Интеграции</button><button class="button secondary" data-action="popup-knowledge">Центр знаний</button><button class="button secondary" data-action="popup-settings">Настройки и профили</button><button class="button link" data-url="https://docossum.com/">Docossum ↗</button><button class="button link" data-url="https://fletcher-wiki.com/">Fletcher ↗</button></div><footer class="copyright">© <a href="https://github.com/TheSkiF4er" target="_blank" rel="noopener noreferrer">SkiF4er</a></footer></div>`;
 }
 function render() {
   if (!state) return;
@@ -184,7 +187,7 @@ function render() {
   const title = titles[view];
   const contents = {ai:aiSection,evidence:()=>evidenceKnowledgeSection(state,complaintsSection(state),knowledgeSection(state)),moderation:()=>moderationCenterSection(state,complaintsSection(state)), rules: rulesSection, home: sectionHome, timers: timersSection, search: () => productivitySection(state), forum: () => forumSection(state), monitor: () => monitorSection(state), complaints: () => complaintsSection(state), economy: () => economySection(state), law: () => lawSection(state), justice: () => governmentJusticeSection(state), government: () => governmentSection(state), documents: () => documentSection(state), integrations: () => integrationsSection(state), knowledge:()=>knowledgeSection(state), profiles: sectionProfiles, sites: sectionSites, settings: sectionSettings, backup: sectionBackup };
   const wasOpen=document.querySelector('.ws-dashboard details')?.open; if(wasOpen!==undefined)dashboardConfigOpen=wasOpen;
-  replaceHtml(app, `<div class="layout ws-layout"><aside class="side"><div class="brand"><div class="logo" aria-label="Логотип MajesticToolkit">MT</div><div><h1>MajesticToolkit</h1><p>Economy & Crime · 2.1.8</p></div></div>${profileSelect()}<nav class="nav" aria-label="Разделы">${groupedNav()}</nav><div class="side-footer">Локальные данные · AI только по согласию<div class="copyright">© <a href="https://github.com/TheSkiF4er" target="_blank" rel="noopener noreferrer">SkiF4er</a></div></div></aside><main class="main" id="workspace-main"><header class="topline"><div><p class="eyebrow">MajesticToolkit / ${e(title[0])}</p><h2>${e(title[0])}</h2><p class="lead">${e(title[1])}</p></div><button class="button secondary ws-search" data-action="nav" data-view="search" aria-label="Единый поиск">⌕ Поиск <kbd>Ctrl K</kbd></button></header>${moduleWarning()}${view==='forum'?`<nav class="ws-forum-tabs" aria-label="Разделы форума">${FORUM_TABS.map(([id,label])=>`<button class="button ${forumPane===id?'primary':'secondary'}" data-action="forum-pane" data-pane="${id}" aria-pressed="${forumPane===id}">${label}</button>`).join('')}</nav>`:''}${contents[view]()}</main></div>`);
+  replaceHtml(app, `<div class="layout ws-layout"><aside class="side"><div class="brand"><div class="logo" aria-label="Логотип MajesticToolkit">MT</div><div><h1>MajesticToolkit</h1><p>Economy & Crime · 2.1.9</p></div></div>${profileSelect()}<nav class="nav" aria-label="Разделы">${groupedNav()}</nav><div class="side-footer">Локальные данные · AI только по согласию<div class="copyright">© <a href="https://github.com/TheSkiF4er" target="_blank" rel="noopener noreferrer">SkiF4er</a></div></div></aside><main class="main" id="workspace-main"><header class="topline"><div><p class="eyebrow">MajesticToolkit / ${e(title[0])}</p><h2>${e(title[0])}</h2><p class="lead">${e(title[1])}</p></div><button class="button secondary ws-search" data-action="nav" data-view="search" aria-label="Единый поиск">⌕ Поиск <kbd>Ctrl K</kbd></button></header>${moduleWarning()}${view==='forum'?`<nav class="ws-forum-tabs" aria-label="Разделы форума">${FORUM_TABS.map(([id,label])=>`<button class="button ${forumPane===id?'primary':'secondary'}" data-action="forum-pane" data-pane="${id}" aria-pressed="${forumPane===id}">${label}</button>`).join('')}</nav>`:''}${contents[view]()}</main></div>`);
   if(view==='ai')void mountAI(document.getElementById('ai-connection'),state,feedback).catch(error=>feedback(error.message,true));
   if(view==='complaints'){
     mountSectionMonitor(document.getElementById('section-monitor-root'),state,feedback);
@@ -239,7 +242,7 @@ async function exportBackup() {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
-  anchor.download = `majestictoolkit-backup-v2.1.8-${new Date().toISOString().slice(0,10)}.json`;
+  anchor.download = `majestictoolkit-backup-v2.1.9-${new Date().toISOString().slice(0,10)}.json`;
   document.body.appendChild(anchor); anchor.click(); anchor.remove();
   setTimeout(() => URL.revokeObjectURL(url), 30000);
   feedback(`Копия: ${templates.length} шаблонов, ${cases.length} жалоб, ${economy.length} операций/матчей, ${market.length} товаров/наблюдений/объявлений, ${trading.reduce((n,b)=>n+b.events.length,0)} складских операций, ${familyRows.length} семей, ${organizations.length} организаций, ${crime.territories.length} территорий и ${crime.operations.length} RP-событий, ${finance.reduce((n,b)=>n+b.events.length,0)} финансовых событий, ${laws.length} записей законодательства, ${government.length} ведомственных записей, ${documents.length} документов/шаблонов, ${externalLinks().length} внешних закладок`);
@@ -247,7 +250,7 @@ async function exportBackup() {
 async function createBackupText({includeAI=document.getElementById('backup-include-ai')?.checked===true}={}){
   verifyJusticeStorageRows(await api.storage.local.get(null));
   const {territories,operations}=await listCrime();
-  return makeBackupV19([validateState(state),await listTemplates(),await listCases(),await listEconomyRecords(),lawRecords(),governmentRecords(),documentRecords(),externalLinks(),productivity,await listXenForoLinks(),await loadMonitor(),await loadKnowledge(state.profiles.map(p=>p.id)),globalThis.RPNForumCore.cleanTemplate,await listSources(),await listRules()],await exportPunishmentData(state.profiles),await exportSectionData(state.profiles),await exportRegistryData(state.profiles),await exportModerationOps(state.profiles),await inventoryAllVault(state.profiles),includeAI?await exportAIWorkspaces(state.profiles):null,await listMarketplace(),await listInventory(),await listFamilies(),await listOrganizations(),territories,operations,await listFinance());
+  return makeBackupV20([validateState(state),await listTemplates(),await listCases(),await listEconomyRecords(),lawRecords(),governmentRecords(),documentRecords(),externalLinks(),productivity,await listXenForoLinks(),await loadMonitor(),await loadKnowledge(state.profiles.map(p=>p.id)),globalThis.RPNForumCore.cleanTemplate,await listSources(),await listRules()],await exportPunishmentData(state.profiles),await exportSectionData(state.profiles),await exportRegistryData(state.profiles),await exportModerationOps(state.profiles),await inventoryAllVault(state.profiles),includeAI?await exportAIWorkspaces(state.profiles):null,await listMarketplace(),await listInventory(),await listFamilies(),await listOrganizations(),territories,operations,await listFinance(),await listEconomyLinks());
 }
 async function requestCaseReplacement(cases) {
   const result=await api.runtime.sendMessage({type:'RP_NEXUS_CASE_MUTATE',action:'replace',cases});
@@ -283,7 +286,7 @@ async function executeAction(button) {
     const missing=[...referenced].filter(id=>!known.has(id));
     if(missing.length)throw Error(`Невозможно создать полную переносимую копию: ${missing.length} материалов отсутствуют в Evidence Vault. Восстановите или удалите несвязанные записи перед экспортом.`);
     const {blob,manifest}=await makePortableBackup(json,inventory);
-    const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`majestictoolkit-portable-backup-v2.1.8-${new Date().toISOString().slice(0,10)}.zip`;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);
+    const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`majestictoolkit-portable-backup-v2.1.9-${new Date().toISOString().slice(0,10)}.zip`;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);
     feedback(`Переносимая копия: ${manifest.files.length} файлов Evidence Vault, проверены SHA-256`);return;
   }
   if(action==='ai-support'){navigateTo('ai');render();document.getElementById('ai-support-root')?.scrollIntoView?.({block:'start'});return;}
@@ -342,6 +345,8 @@ async function executeAction(button) {
     const previousOrganizations = await listOrganizations();
     const previousCrime = await listCrime();
     const previousFinance = await listFinance();
+    const previousEconomyLinks=await listEconomyLinks();
+    const relatedEconomyLinks=previousEconomyLinks.filter(r=>r.profileId===id);
     const relatedFinance = previousFinance.filter(b=>b.profileId===id);
     const relatedCrime = [...previousCrime.territories,...previousCrime.operations].filter(r=>r.profileId===id);
     const relatedOrganizations = previousOrganizations.filter(r=>r.profileId===id);
@@ -352,8 +357,9 @@ async function executeAction(button) {
     const previousDocuments = documentRecords().slice();
     const relatedDocuments = previousDocuments.filter(r=>r.profileId===id);
     const relatedGovernment = previousGovernment.filter(r=>r.profileId===id);
-    if (!confirm(`Удалить профиль «${p.name}» и связанных с ним шаблонов: ${dependent.length}, жалоб: ${related.length}, записей экономики: ${relatedEconomy.length}, товаров и рыночных записей: ${relatedMarket.length}, складских журналов: ${relatedTrading.length}, семей: ${relatedFamilies.length}, организаций: ${relatedOrganizations.length}, территорий / RP-событий: ${relatedCrime.length}, финансовых журналов: ${relatedFinance.length}, записей законодательства: ${relatedLaws.length}, ведомственных записей: ${relatedGovernment.length}, документов: ${relatedDocuments.length}, правил: ${previousRules.filter(r=>r.profileId===id).length}, записей реестра: ${previousRegistry.records.filter(r=>r.profileId===id).length}? Это действие нельзя отменить без резервной копии.`)) return;
+    if (!confirm(`Удалить профиль «${p.name}» и связанных с ним шаблонов: ${dependent.length}, жалоб: ${related.length}, записей экономики: ${relatedEconomy.length}, товаров и рыночных записей: ${relatedMarket.length}, складских журналов: ${relatedTrading.length}, семей: ${relatedFamilies.length}, организаций: ${relatedOrganizations.length}, территорий / RP-событий: ${relatedCrime.length}, финансовых журналов: ${relatedFinance.length}, связей с документами/доказательствами: ${relatedEconomyLinks.length}, записей законодательства: ${relatedLaws.length}, ведомственных записей: ${relatedGovernment.length}, документов: ${relatedDocuments.length}, правил: ${previousRules.filter(r=>r.profileId===id).length}, записей реестра: ${previousRegistry.records.filter(r=>r.profileId===id).length}? Это действие нельзя отменить без резервной копии.`)) return;
     try {
+      if(relatedEconomyLinks.length)await replaceEconomyLinks(previousEconomyLinks.filter(r=>r.profileId!==id),state.profiles.filter(p=>p.id!==id).map(p=>p.id),{marketplace:previousMarket.filter(r=>r.profileId!==id),families:previousFamilies.filter(r=>r.profileId!==id),organizations:previousOrganizations.filter(r=>r.profileId!==id),territories:previousCrime.territories.filter(r=>r.profileId!==id),documents:previousDocuments.filter(r=>r.profileId!==id),evidenceVault:await inventoryAllVault(state.profiles.filter(p=>p.id!==id))});
       await replaceXenForoLinks(previousXfLinks.filter(x=>x.profileId!==id));
       if (dependent.length) await replaceTemplates(previousTemplates.filter(t => t.profileId !== id));
       if (related.length) await requestCaseReplacement(previousCases.filter(c => c.profileId !== id));
@@ -402,6 +408,7 @@ async function executeAction(button) {
       if (relatedLaws.length) await replaceLawRecords(previousLaws,state.profiles.map(p=>p.id));
       if (relatedGovernment.length) await replaceGovernment(previousGovernment,state.profiles.map(p=>p.id));
       if (relatedDocuments.length) await replaceDocumentRecords(previousDocuments,state.profiles.map(p=>p.id),previousGovernment);
+      if(relatedEconomyLinks.length)await replaceEconomyLinks(previousEconomyLinks,state.profiles.map(p=>p.id),{marketplace:previousMarket,families:previousFamilies,organizations:previousOrganizations,territories:previousCrime.territories,documents:previousDocuments,evidenceVault:await inventoryAllVault(state.profiles)});
       throw error;
     }
     await Promise.all([refreshForum(),refreshComplaints(),refreshEconomy(),refreshLaw(),refreshGovernment(),refreshDocuments()]); feedback('Профиль и связанные записи удалены'); render(); return;
@@ -498,7 +505,7 @@ async function handleJusticeAction(button){
   }
 }
 document.addEventListener('click', event => {
-  const button = event.target.closest('button[data-judgment-action],button[data-court-evidence-action],button[data-proceeding-action],button[data-court-case-action],button[data-court-action],button[data-agency-action],button[data-timer-action],button[data-productivity-action],button[data-action],button[data-url],button[data-forum-action],button[data-case-action],button[data-economy-action],button[data-market-action],button[data-trading-action],button[data-family-action],button[data-org-action],button[data-crime-action],button[data-finance-action],button[data-analytics-action],button[data-law-action],button[data-government-action],button[data-document-action],button[data-justice-action],button[data-integration-action],button[data-monitor-action],button[data-knowledge-action],button[data-source-action],button[data-library-action],button[data-graph-action]');
+  const button = event.target.closest('button[data-judgment-action],button[data-court-evidence-action],button[data-proceeding-action],button[data-court-case-action],button[data-court-action],button[data-agency-action],button[data-timer-action],button[data-productivity-action],button[data-action],button[data-url],button[data-forum-action],button[data-case-action],button[data-economy-action],button[data-econ-int-action],button[data-market-action],button[data-trading-action],button[data-family-action],button[data-org-action],button[data-crime-action],button[data-finance-action],button[data-analytics-action],button[data-law-action],button[data-government-action],button[data-document-action],button[data-justice-action],button[data-integration-action],button[data-monitor-action],button[data-knowledge-action],button[data-source-action],button[data-library-action],button[data-graph-action]');
   if (!button || button.disabled) return;
   if(button.dataset.judgmentAction){void handleJudgmentAction(button,state,refreshGovernment,render,feedback).catch(err=>feedback(err.message,true));return;}
   if(button.dataset.proceedingAction){void handleProceedingAction(button,state,governmentRecords()).catch(err=>feedback(err.message,true));return;}
@@ -509,6 +516,7 @@ document.addEventListener('click', event => {
   if(button.dataset.familyAction){void handleFamilyAction(button,state,render,feedback).catch(err=>feedback(err.message,true));return;}
   if(button.dataset.orgAction){void handleOrganizationAction(button,state,render,feedback).catch(err=>feedback(err.message,true));return;}
   if(button.dataset.crimeAction){void handleCrimeAction(button,state,render,feedback).catch(err=>feedback(err.message,true));return;}
+  if(button.dataset.econIntAction){void handleEconomyIntegrationAction(button,state,render,feedback).catch(err=>feedback(err.message,true));return;}
   if(button.dataset.financeAction){void handleFinanceAction(button,state,render,feedback).catch(err=>feedback(err.message,true));return;}
   if(button.dataset.timerAction){void handleTimerAction(button,render,feedback).catch(err=>feedback(err.message,true));return;}
   if(button.dataset.sourceAction){
@@ -574,8 +582,8 @@ document.addEventListener('input', event => {
 });
 async function restoreBackupText(text,portable=null){
 
-      const backup = await parseBackupV19(text, validateState, globalThis.RPNForumCore.cleanTemplate);
-      if(portable && (![17,18,19].includes(backup.schemaVersion)||JSON.stringify(backup.evidenceVault)!==JSON.stringify(portable.inventory)))throw Error('Данные ZIP не совпадают с Backup v17/v18/v19');
+      const backup = await parseBackupV20(text, validateState, globalThis.RPNForumCore.cleanTemplate);
+      if(portable && (![17,18,19,20].includes(backup.schemaVersion)||JSON.stringify(backup.evidenceVault)!==JSON.stringify(portable.inventory)))throw Error('Данные ZIP не совпадают с Backup v17–v20');
       const replacing = backup.schemaVersion >= 3 ? `, ${backup.cases.length} жалоб` : '';
       const economyCount = backup.schemaVersion >= 4 ? `, ${backup.economy.length} записей экономики` : '';
       const familyCount=backup.families===null?'':`, ${backup.families.length} семей`;
@@ -605,6 +613,7 @@ async function restoreBackupText(text,portable=null){
         const beforeOrganizations = await listOrganizations();
         const beforeCrime = await listCrime();
         const beforeFinance = await listFinance();
+        const beforeEconomyLinks = await listEconomyLinks();
         const beforeLaws = lawRecords().slice();
         const beforeGovernment = governmentRecords().slice();
         const beforeDocuments = documentRecords().slice();
@@ -647,8 +656,19 @@ async function restoreBackupText(text,portable=null){
           if (backup.sectionMonitor===null) validateSectionData(beforeSections,backup.state.profiles);
           if (backup.punishmentRegistry===null) validateRegistry(beforeRegistry,backup.state.profiles);
           if (backup.moderationOps===null) validateModerationOpsBackup(beforeModerationOps,backup.state.profiles);
+          // Old backups keep existing links, so validate against the resulting dataset
+          // before changing any store. New v20 replaces them after all referenced stores.
+          if(backup.economyLinks===null){
+            const futureVault=backup.evidenceVault??await inventoryAllVault(beforeState.profiles);
+            validateEconomyLinks(beforeEconomyLinks,backup.state.profiles.map(p=>p.id),{
+              marketplace:backup.marketplace??beforeMarket,families:backup.families??beforeFamilies,
+              organizations:backup.organizations??beforeOrganizations,territories:backup.territories??beforeCrime.territories,
+              documents:backup.schemaVersion>=7?backup.documents:beforeDocuments,evidenceVault:futureVault
+            });
+          }
           await createRestorePoint(api.storage.local);
           if(portable)newlyInstalledVault=await importVaultPackage(portable.inventory,portable.files);
+          if(backup.economyLinks!==null)await replaceEconomyLinks([],beforeState.profiles.map(p=>p.id),{marketplace:beforeMarket,families:beforeFamilies,organizations:beforeOrganizations,territories:beforeCrime.territories,documents:beforeDocuments,evidenceVault:await inventoryAllVault(beforeState.profiles)});
           if (backup.schemaVersion >= 2) await replaceTemplates(backup.templates);
           if (backup.schemaVersion >= 3) await requestCaseReplacement(backup.cases);
           if (backup.schemaVersion >= 4) await replaceEconomy(backup.economy);
@@ -677,6 +697,7 @@ async function restoreBackupText(text,portable=null){
           if (backup.punishmentRegistry!==null) await replaceRegistryData(backup.punishmentRegistry,backup.state.profiles);
           if (backup.moderationOps!==null) await replaceModerationOps(backup.moderationOps,backup.state.profiles);
           if(backup.aiWorkspace!==null)await replaceAIWorkspaces(backup.aiWorkspace,backup.state.profiles,api.storage.local);
+          if(backup.economyLinks!==null)await replaceEconomyLinks(backup.economyLinks,backup.state.profiles.map(p=>p.id),{marketplace:backup.marketplace,families:backup.families,organizations:backup.organizations,territories:backup.territories,documents:backup.documents,evidenceVault:backup.evidenceVault});
           await disableAIOnRestore(backup.state.profiles,api.storage.local);
           await completeRestorePoint(api.storage.local);
         } catch (error) {
@@ -710,6 +731,7 @@ async function restoreBackupText(text,portable=null){
           if (backup.moderationOps!==null) await replaceModerationOps(beforeModerationOps,beforeState.profiles);
           if(beforeAIWorkspaces!==null)await replaceAIWorkspaces(beforeAIWorkspaces,beforeState.profiles,api.storage.local);
           await api.storage.local.set({mtAiConnectionV191:beforeAISettings});
+          if(backup.economyLinks!==null)await replaceEconomyLinks(beforeEconomyLinks,beforeState.profiles.map(p=>p.id),{marketplace:beforeMarket,families:beforeFamilies,organizations:beforeOrganizations,territories:beforeCrime.territories,documents:beforeDocuments,evidenceVault:await inventoryAllVault(beforeState.profiles)});
           if(vaultRollbackError)throw new AggregateError([error,vaultRollbackError],'Восстановление прервано; откат файлов Evidence Vault также завершился ошибкой');
           throw error;
         }
@@ -755,6 +777,7 @@ document.addEventListener('change', event => {
   if (el.id === 'law-compare-edition') {setLawCompareEdition(el.value);render();return;}
   if (el.id === 'law-import-file' && el.files?.[0]) {void importLawFile(el.files[0],state,render,feedback).catch(error=>feedback(error.message,true));return;}
   if (el.id === 'complaint-filter') {setComplaintFilter(el.value);return;}
+  if(el.id==='econ-int-file'&&el.files?.[0]){void handleEconomyIntegrationFile(el.files[0],state,render,feedback).catch(err=>feedback(err.message,true)).finally(()=>{if(el.isConnected)el.value='';});return;}
   if(el.id==='market-archived'){setMarketplaceArchived(el.checked);render();return;}
   if(el.id==='economy-filter'){void setEconomyFilter(el.value,state).then(render).catch(err=>feedback(err.message,true));return;}
   if(el.dataset.widgetToggle){void updateWidgets(v=>changeWidget(v,el.dataset.widgetToggle,'toggle')).catch(err=>feedback(err.message,true));return;}
@@ -800,6 +823,7 @@ document.addEventListener('submit', event => {
   if (formId === 'agency-form') {event.preventDefault();void handleAgencySubmit(event,state,refreshGovernment,render,feedback).catch(err=>feedback(err.message,true));return;}
   if (formId === 'government-form') {event.preventDefault();void handleGovernmentSubmit(event,state,render,feedback,lawRecords()).catch(err=>feedback(err.message,true));return;}
   if (formId === 'law-form') {event.preventDefault();void handleLawSubmit(event,state,render,feedback).catch(err=>feedback(err.message,true));return;}
+  if(formId==='econ-int-link-form'){event.preventDefault();void handleEconomyIntegrationSubmit(event.target,state,render,feedback).catch(err=>feedback(err.message,true));return;}
   if(formId==='finance-form'){event.preventDefault();void handleFinanceSubmit(event.target,state,render,feedback).catch(err=>feedback(err.message,true));return;}
   if(formId==='crime-form'){event.preventDefault();void handleCrimeSubmit(event.target,state,render,feedback).catch(err=>feedback(err.message,true));return;}
   if(formId==='organization-form'){event.preventDefault();void handleOrganizationSubmit(event.target,state,render,feedback).catch(err=>feedback(err.message,true));return;}

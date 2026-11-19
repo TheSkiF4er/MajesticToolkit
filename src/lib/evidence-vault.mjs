@@ -90,7 +90,8 @@ export async function editVaultMetadata(id,profileId,{title,note}){
 export async function verifyVaultFile(id,profileId){const {meta,blob}=await getVaultRecord(id);if(meta.profileId!==profileId)throw Error('Материал другого профиля');if(meta.kind!=='file')throw Error('Материал не является файлом');if(!(blob instanceof Blob)||blob.size!==meta.size)throw Error('Файл отсутствует или повреждён');const buf=await blob.arrayBuffer();validateFileSignature(new Uint8Array(buf.slice(0,64)),meta.mime);if(await sha256(buf)!==meta.sha256)throw Error('SHA-256 не совпадает: файл повреждён');return {meta,blob};}
 export async function downloadVaultFile(id,profileId){const {meta,blob}=await verifyVaultFile(id,profileId);const url=URL.createObjectURL(blob);try{const a=document.createElement('a');a.href=url;a.download=meta.name;document.body.append(a);a.click();a.remove();}finally{setTimeout(()=>URL.revokeObjectURL(url),30000);}return meta;}
 export async function deleteVaultRecord(id,profileId){
- const record=await getVaultRecord(id);if(record.meta.profileId!==profileId)throw Error('Материал другого профиля');
+ const localStorage=globalThis.browser?.storage?.local??globalThis.chrome?.storage?.local;
+ if(localStorage&&Object.entries(await localStorage.get(null)).some(([k,v])=>k.startsWith('mtEconomyLinkV219:')&&v.sourceType==='evidence'&&v.sourceId===id&&v.profileId===profileId))throw Error('Доказательство связано с экономическим объектом. Сначала удалите связь.');const record=await getVaultRecord(id);if(record.meta.profileId!==profileId)throw Error('Материал другого профиля');
  const {listCases}=await import('./complaints-store.mjs');const cases=await listCases();
  if(cases.some(c=>c.evidence.some(e=>e.vaultId===id)))throw Error('Материал прикреплён к жалобе. Сначала удалите связь из дела.');
  const {exportRegistryData}=await import('./punishment-registry-store.mjs');const {loadState}=await import('./state.mjs');

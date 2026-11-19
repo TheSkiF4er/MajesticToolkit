@@ -601,7 +601,7 @@ async def experience_workspace(browser):
     assert not await page.locator('#backup-include-ai').is_checked()
     await page.locator('[data-action="export"]').click()
     await page.wait_for_function('window.__backups.length===1',timeout=8000)
-    assert await page.evaluate('window.__backups[0].schemaVersion===19&&window.__backups[0].aiWorkspace===null')
+    assert await page.evaluate('window.__backups[0].schemaVersion===20&&window.__backups[0].aiWorkspace===null')
     await page.locator('#backup-include-ai').check()
     await page.locator('[data-action="export"]').click()
     await page.wait_for_function('window.__backups.length===2',timeout=8000)
