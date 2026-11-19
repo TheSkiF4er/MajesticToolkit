@@ -1,6 +1,7 @@
 /** Binary image maps live in IndexedDB, independently of chrome.storage.local quotas. */
 import {api} from './browser.mjs';
 import {PLAN_PREFIX,cleanPlan} from './tactical-planning-core.mjs';
+import {SIMULATION_PREFIX,cleanTacticalSimulation} from './tactical-simulation-core.mjs';
 import {applyMapAnnotationAction} from './tactical-map-layers.mjs';
 import {cleanTerritoryLinks,changeTerritoryLinks} from './tactical-territory-core.mjs';
 import {listCrime} from './crime-store.mjs';
@@ -36,6 +37,12 @@ async function assertNoActivePlansOnMap(profileId){
   const plan=cleanPlan(raw);
   if(key!==PLAN_PREFIX+plan.id)throw Error('Повреждён ключ тактического плана');
   if(plan.profileId===profileId&&!plan.state.archived)throw Error('Карта используется действующим тактическим планом. Архивируйте планы перед заменой или удалением подложки');
+ }
+ for(const [key,raw] of Object.entries(all)){
+  if(!key.startsWith(SIMULATION_PREFIX))continue;
+  const simulation=cleanTacticalSimulation(raw);
+  if(key!==SIMULATION_PREFIX+simulation.id)throw Error('Повреждён ключ сохранённой симуляции');
+  if(simulation.profileId===profileId)throw Error('Карта используется сохранённой симуляцией. Удалите результаты симуляций перед заменой подложки');
  }
 }
 export async function saveTacticalMapImage(profileId,file){

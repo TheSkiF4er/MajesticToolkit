@@ -460,3 +460,12 @@ body[data-mode=sidebar] .ws-layout .side{height:auto;position:static;overflow:vi
 .tactical-plan-workspace form>.row>*{flex:1;min-width:0}
 #tactical-plan-canvas{display:block;width:100%;height:clamp(280px,42vw,570px);touch-action:manipulation;cursor:crosshair;border-radius:10px;border:1px solid var(--stroke);background:#152238}
 @media(max-width:930px){.tactical-plan-grid{grid-template-columns:1fr}}
+
+/* Tactical Simulation Engine 2.2.7 */
+.tactical-simulation-workspace #tactical-simulation-canvas-host{border:1px solid var(--stroke);border-radius:11px;overflow:hidden;background:#152238;min-height:330px}
+.tactical-simulation-workspace #tactical-sim-canvas{display:block;width:100%;height:330px}
+.tactical-simulation-workspace .table-wrap{max-width:100%;overflow:auto}
+.tactical-simulation-workspace table{width:100%;border-collapse:collapse;font-size:12px}
+.tactical-simulation-workspace td,.tactical-simulation-workspace th{padding:9px;border-bottom:1px solid var(--stroke);text-align:left}
+.tactical-simulation-workspace .row>.field{flex:1 1 120px;min-width:110px}
+.tactical-simulation-workspace .economy-hit strong{overflow-wrap:anywhere}
