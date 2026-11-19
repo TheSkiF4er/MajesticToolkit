@@ -1,3 +1,4 @@
+import {withTacticalWriteLock} from './tactical-lock.mjs';
 /** Durable source links for territorial records, airdrops, plans and simulations. */
 import {api} from './browser.mjs';
 import {TACTICAL_LINK_PREFIX,TACTICAL_LINK_LIMIT,cleanTacticalLink,newTacticalLink,validateTacticalLinks} from './tactical-links-core.mjs';
@@ -7,8 +8,7 @@ import {listTacticalPlans} from './tactical-planning-store.mjs';
 import {listTacticalSimulations} from './tactical-simulation-store.mjs';
 import {listDocumentRecords} from './document-store.mjs';
 import {listVault} from './evidence-vault.mjs';
-let serial=Promise.resolve();
-const lock=fn=>{const result=serial.then(()=>globalThis.navigator?.locks?.request?globalThis.navigator.locks.request('mt-tactical-links-v229',{mode:'exclusive'},fn):fn());serial=result.catch(()=>{});return result;};
+const lock=withTacticalWriteLock;
 export async function listTacticalLinks(profileId=null){const all=await api.storage.local.get(null),rows=[];for(const [key,raw] of Object.entries(all))if(key.startsWith(TACTICAL_LINK_PREFIX)){const row=cleanTacticalLink(raw);if(key!==TACTICAL_LINK_PREFIX+row.id)throw Error('Повреждён ключ тактической ссылки');rows.push(row);}if(rows.length>TACTICAL_LINK_LIMIT)throw Error('Превышен лимит ссылок');return rows.filter(x=>!profileId||x.profileId===profileId).sort((a,b)=>b.createdAt.localeCompare(a.createdAt));}
 export async function tacticalLinkReferences(profiles){const [crime,airdrops,plans,simulations,documents,inventory]=await Promise.all([listCrime(),listAirdrops(),listTacticalPlans(),listTacticalSimulations(),listDocumentRecords(),Promise.all(profiles.map(p=>listVault(p)))]);return {territories:crime.territories,airdropEvents:airdrops.events,plans,simulations,documents,evidenceVault:inventory.flat()};}
 export function addTacticalLink(profileId,fields,profiles){return lock(async()=>{const link=newTacticalLink(profileId,fields),rows=await listTacticalLinks(),refs=await tacticalLinkReferences(profiles);validateTacticalLinks([...rows,link],profiles,refs);await api.storage.local.set({[TACTICAL_LINK_PREFIX+link.id]:link});return link;});}

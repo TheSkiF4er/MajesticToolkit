@@ -78,7 +78,7 @@ async def economy_browser_smoke(browser):
     await board.locator('#plan-create-form [name="title"]').fill('План тестового капта')
     await board.locator('#plan-create-form [name="brief"]').fill('Точка сбора и движение группы')
     await board.locator('#plan-create-form button[type="submit"]').click()
-    await expect(board.locator('h3')).to_contain_text('Tactical Planning')
+    await expect(board.locator('h3').first).to_contain_text('Tactical Planning')
     await expect(board.locator('#plan-edit-form [name="title"]')).to_have_value('План тестового капта')
     squad=board.locator('#plan-squad-form')
     await squad.locator('[name="name"]').fill('Команда А')
@@ -158,7 +158,7 @@ async def economy_browser_smoke(browser):
     # Snapshot ownership prevents map deletion even after active plans are archived.
     protected=await page.evaluate("""async()=>{const plans=await import('mt:lib/tactical-planning-store.mjs');const maps=await import('mt:lib/tactical-map-store.mjs');
       for(const row of await plans.listTacticalPlans('profile_majest'))await plans.editTacticalPlan(row.id,'profile_majest','archive',{archived:true});
-      try{await maps.removeTacticalMap('profile_majest');return false;}catch(error){return error.message.includes('симуляцией');}}
+      try{await maps.removeTacticalMap('profile_majest');return false;}catch(error){return /симуляцией|тактическим планом/.test(error.message);}}
     """)
     assert protected, 'Saved simulations must prevent losing their background map'
     tamper=await page.evaluate("""async()=>{const s=await import('mt:lib/tactical-simulation-store.mjs');

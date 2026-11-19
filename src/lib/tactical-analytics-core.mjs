@@ -21,7 +21,7 @@ export function cleanReplayRange({from='',to='',category='all'}={}){
 }
 function rowsFromCrime(rows,profileId){
  return rows.filter(x=>x.profileId===profileId&&['completed','cancelled'].includes(x.status)).map(op=>({
-  id:`crime:${op.id}`,sourceId:op.id,at:op.date+'T12:00:00.000Z',date:op.date,
+  id:`crime:${op.id}`,sourceId:op.id,at:op.date+'T12:00:00.000Z',date:op.date,sourceOrder:op.createdAt,
   category:op.kind,kind:op.status==='cancelled'?'cancel':'result',
   title:op.title,status:op.status,territoryId:op.territoryId||'',winner:op.winner,
   attacker:jsonCopy(op.attacker),defender:jsonCopy(op.defender),
@@ -31,14 +31,15 @@ function rowsFromCrime(rows,profileId){
 function rowsFromAirdrops(points,rows,profileId){
  const byPoint=new Map(points.map(p=>[p.id,p]));const accepted=new Set(['start','claim','finish','cancel']);
  return rows.filter(x=>x.profileId===profileId).flatMap(op=>op.history.filter(x=>accepted.has(x.kind)).map(change=>({
-  id:`airdrop:${op.id}:${change.id}`,sourceId:op.id,at:change.at,date:day(change.at),category:'airdrop',kind:change.kind,
+  id:`airdrop:${op.id}:${change.id}`,sourceId:op.id,at:change.at,date:day(change.at),sourceOrder:change.at,category:'airdrop',kind:change.kind,
   title:op.title,status:change.kind,territoryId:'',winner:change.kind==='claim'?change.data.winner:'',
   attacker:null,defender:null,participants:[],pointId:op.pointId,
   reward:change.kind==='claim'?change.data.reward||'':'',
   point:(()=>{const p=byPoint.get(op.pointId);return p?{x:p.x,y:p.y,mapSha256:p.mapSha256,name:p.name}:null;})()
  })));
 }
-const order=(a,b)=>a.at.localeCompare(b.at)||a.id.localeCompare(b.id);
+// Crime captures on the same RP date must follow the authoritative registry order.
+const order=(a,b)=>a.at.localeCompare(b.at)||a.sourceOrder.localeCompare(b.sourceOrder)||a.id.localeCompare(b.id);
 const applyOwner=(owners,row)=>{if(row.category==='capture'&&row.kind==='result'&&row.winner==='attacker')owners[row.territoryId]=jsonCopy(row.attacker);};
 /** Build a verified time series with a complete pre-period ownership baseline. */
 export function buildTacticalAnalytics({territories=[],operations=[],airdropPoints=[],airdropEvents=[],families=[],organizations=[],simulations=[]},profileId,range={}){
@@ -47,7 +48,7 @@ export function buildTacticalAnalytics({territories=[],operations=[],airdropPoin
  const all=[...rowsFromCrime(crime.operations,profileId),...rowsFromAirdrops(air.points,air.events,profileId)].sort(order);
  const shown=all.filter(item=>(!filter.from||item.date>=filter.from)&&(!filter.to||item.date<=filter.to)&&(filter.category==='all'||item.category===filter.category));
  const baseline=initialOwners(crime.territories.filter(x=>x.profileId===profileId));
- const ownerEvents=all.filter(x=>x.category==='capture'&&x.kind==='result'&&x.winner==='attacker').map(x=>({at:x.at,territoryId:x.territoryId,attacker:x.attacker}));
+ const ownerEvents=all.filter(x=>x.category==='capture'&&x.kind==='result'&&x.winner==='attacker').map(x=>({id:x.id,at:x.at,sourceOrder:x.sourceOrder,territoryId:x.territoryId,attacker:x.attacker}));
  if(filter.from)for(const change of ownerEvents)if(change.at<filter.from+'T00:00:00.000Z')applyOwner(baseline,{...change,category:'capture',kind:'result',winner:'attacker'});
  if(shown.length>REPLAY_MAX_EVENTS)throw Error(`Слишком много событий (${shown.length}). Сузьте период: максимум ${REPLAY_MAX_EVENTS} для воспроизведения`);
  const groupNames=new Map([...families.filter(x=>x.profileId===profileId).map(x=>['family:'+x.id,x.name]),...organizations.filter(x=>x.profileId===profileId).map(x=>['organization:'+x.id,x.name])]);
@@ -92,8 +93,15 @@ export function buildTacticalAnalytics({territories=[],operations=[],airdropPoin
 /** index=-1 is the baseline, subsequent indices represent recorded event steps. */
 export function tacticalReplayFrame(report,index){
  if(!Number.isInteger(index)||index< -1||index>=report.events.length)throw Error('Шаг воспроизведения вне истории');
- const owners=jsonCopy(report.baselineOwners);const until=index<0?(report.range.from?report.range.from+'T00:00:00.000Z':''):report.events[index].at;
- if(until)for(const entry of report.ownerEvents)if(entry.at<=until&&(!report.range.from||entry.at>=report.range.from+'T00:00:00.000Z'))owners[entry.territoryId]=jsonCopy(entry.attacker);
+ const owners=jsonCopy(report.baselineOwners);
+ if(index>=0){
+  const current=report.events[index],from=report.range.from?report.range.from+'T00:00:00.000Z':'';
+  // Use the exact event order rather than <= timestamp: two captures on the
+  // same day must not both appear on the first capture's replay frame.
+  for(const entry of report.ownerEvents){
+   if((!from||entry.at>=from)&&order(entry,current)<=0)owners[entry.territoryId]=jsonCopy(entry.attacker);
+  }
+ }
  return {index,total:report.events.length,event:index<0?null:report.events[index],owners};
 }
 const csvCell=value=>{let x=String(value??'');if(/^[\s\x00-\x1f]*[=+@-]/.test(x))x="'"+x;return '"'+x.replaceAll('"','""')+'"';};

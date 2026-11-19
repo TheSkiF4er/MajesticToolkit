@@ -1,5 +1,7 @@
 /** Binary image maps live in IndexedDB, independently of chrome.storage.local quotas. */
 import {api} from './browser.mjs';
+import {withTacticalWriteLock} from './tactical-lock.mjs';
+import {assertTacticalMapIsReplaceable} from './tactical-map-dependencies.mjs';
 import {PLAN_PREFIX,cleanPlan} from './tactical-planning-core.mjs';
 import {SIMULATION_PREFIX,cleanTacticalSimulation} from './tactical-simulation-core.mjs';
 import {applyMapAnnotationAction} from './tactical-map-layers.mjs';
@@ -30,46 +32,54 @@ async function decodeImage(blob){
  if(typeof Image==='undefined'||typeof URL?.createObjectURL!=='function')throw Error('В браузере недоступно чтение размеров изображения');
  const url=URL.createObjectURL(blob);try{return await new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve({width:img.naturalWidth,height:img.naturalHeight});img.onerror=()=>reject(Error('Не удалось декодировать изображение'));img.src=url;});}finally{URL.revokeObjectURL(url);}
 }
-async function assertNoActivePlansOnMap(profileId){
- const all=await api.storage.local.get(null);
- for(const [key,raw] of Object.entries(all)){
-  if(!key.startsWith(PLAN_PREFIX))continue;
-  const plan=cleanPlan(raw);
-  if(key!==PLAN_PREFIX+plan.id)throw Error('Повреждён ключ тактического плана');
-  if(plan.profileId===profileId&&!plan.state.archived)throw Error('Карта используется действующим тактическим планом. Архивируйте планы перед заменой или удалением подложки');
- }
- for(const [key,raw] of Object.entries(all)){
-  if(!key.startsWith(SIMULATION_PREFIX))continue;
-  const simulation=cleanTacticalSimulation(raw);
-  if(key!==SIMULATION_PREFIX+simulation.id)throw Error('Повреждён ключ сохранённой симуляции');
-  if(simulation.profileId===profileId)throw Error('Карта используется сохранённой симуляцией. Удалите результаты симуляций перед заменой подложки');
- }
+async function assertNoMapDependents(profileId,incomingSha256=null){
+ assertTacticalMapIsReplaceable(await api.storage.local.get(null),profileId,incomingSha256);
 }
-export async function saveTacticalMapImage(profileId,file){
+/** Capture every existing image, including profiles no longer in the target backup.
+ * This is required for a lossless rollback when a restore changes the profile list.
+ */
+export async function snapshotAllTacticalMaps(){
+ const ids=await transact('readonly',(store,tx,done,fail)=>{
+  const req=store.getAllKeys();req.onsuccess=()=>done(req.result);req.onerror=()=>fail(req.error);
+ });
+ const maps=[],files=new Map();
+ for(const profileId of ids){
+  requireProfile(profileId);
+  const entry=await getTacticalMap(profileId);
+  if(!entry)throw Error('Карта исчезла во время резервного копирования');
+  maps.push(entry.meta);files.set(profileId,new Uint8Array(await entry.blob.arrayBuffer()));
+ }
+ return {maps,files};
+}
+export function saveTacticalMapImage(profileId,file){return withTacticalWriteLock(async()=>{
  requireProfile(profileId);
  if(!(file instanceof Blob)||file.size<32||file.size>MAP_LIMITS.bytes)throw Error('Размер карты должен быть от 32 байт до 25 МиБ');
  const mime=file.type;if(!['image/png','image/jpeg','image/webp'].includes(mime))throw Error('Загрузите PNG, JPEG или WebP');
  const bytes=await file.arrayBuffer();if(!imageSignature(new Uint8Array(bytes.slice(0,16)),mime))throw Error('Файл не соответствует формату изображения');
  const {width,height}=await decodeImage(file);
  if(width>MAP_LIMITS.dimension||height>MAP_LIMITS.dimension||width*height>MAP_LIMITS.pixels||width<1||height<1)throw Error('Изображение слишком большое: максимум 16384 px по стороне и 64 млн пикселей');
- await assertNoActivePlansOnMap(profileId);
- const meta=cleanMapMeta({profileId,name:(file.name||'world-map').slice(0,180),mime,size:file.size,width,height,sha256:await digest(bytes),updatedAt:new Date().toISOString(),view:cleanMapView(),anchors:[],annotationsRevision:0});
+ const existing=await getTacticalMap(profileId);
+ const sha256=await digest(bytes);
+ // Reuploading identical bytes must never erase annotations, calibration or links.
+ if(existing&&existing.meta.sha256===sha256&&existing.meta.mime===mime&&existing.meta.width===width&&existing.meta.height===height)return existing.meta;
+ await assertNoMapDependents(profileId,sha256);
+ const meta=cleanMapMeta({profileId,name:(file.name||'world-map').slice(0,180),mime,size:file.size,width,height,sha256,updatedAt:new Date().toISOString(),view:cleanMapView(),anchors:[],annotationsRevision:0});
  await transact('readwrite',(s)=>s.put({...meta,blob:new Blob([bytes],{type:mime})}));return meta;
-}
-export async function updateTacticalMap(profileId,{view,anchors}={}){
+});}
+export function updateTacticalMap(profileId,{view,anchors}={}){
  requireProfile(profileId);
- return transact('readwrite',(s,tx,done,fail)=>{const req=s.get(profileId);req.onsuccess=()=>{
+ return withTacticalWriteLock(()=>transact('readwrite',(s,tx,done,fail)=>{const req=s.get(profileId);req.onsuccess=()=>{
   if(!req.result){tx.abort();return;}
   try{const previous=cleanMapMeta(req.result),next={...previous,view:view===undefined?previous.view:cleanMapView(view),anchors:anchors===undefined?previous.anchors:cleanMapAnchors(anchors,previous.width,previous.height),updatedAt:new Date().toISOString()};
    if(anchors!==undefined&&next.anchors.every(Boolean)&&next.anchors.every(p=>p.worldX!==null&&p.worldY!==null))solveMapCalibration(next.anchors);
    s.put({...next,blob:req.result.blob});done(next);
   }catch(error){fail(error);}
- };});
+ };}));
 }
 /** A single read-modify-write transaction prevents competing map editor tabs losing updates. */
-export async function mutateTacticalMapAnnotations(profileId,action,payload,{expectedRevision,expectedSha256}={}){
+export function mutateTacticalMapAnnotations(profileId,action,payload,{expectedRevision,expectedSha256}={}){
  requireProfile(profileId);
- return transact('readwrite',(store,tx,done,fail)=>{
+ return withTacticalWriteLock(()=>transact('readwrite',(store,tx,done,fail)=>{
   const req=store.get(profileId);req.onsuccess=()=>{
    try{
     if(!req.result)throw Error('Сначала загрузите подложку карты');
@@ -81,13 +91,13 @@ export async function mutateTacticalMapAnnotations(profileId,action,payload,{exp
     store.put({...next,blob:req.result.blob});done(next);
    }catch(error){fail(error);}
   };
- });
+ }));
 }
-export async function removeTacticalMap(profileId){requireProfile(profileId);await assertNoActivePlansOnMap(profileId);return transact('readwrite',s=>s.delete(profileId));}
-export async function clearOrphanTacticalMaps(activeProfileIds){const ids=new Set(activeProfileIds);return transact('readwrite',s=>{const req=s.openCursor();req.onsuccess=()=>{const cursor=req.result;if(cursor){if(!ids.has(cursor.key))cursor.delete();cursor.continue();}};});}
+export function removeTacticalMap(profileId){return withTacticalWriteLock(async()=>{requireProfile(profileId);await assertNoMapDependents(profileId);return transact('readwrite',s=>s.delete(profileId));});}
+export function clearOrphanTacticalMaps(activeProfileIds){return withTacticalWriteLock(()=>{const ids=new Set(activeProfileIds);return transact('readwrite',s=>{const req=s.openCursor();req.onsuccess=()=>{const cursor=req.result;if(cursor){if(!ids.has(cursor.key))cursor.delete();cursor.continue();}};});});}
 
 /** Atomic map-binding edit with optimistic concurrency; the Crime registry remains the only source for ownership. */
-export async function mutateTacticalTerritoryLinks(profileId,action,payload,{expectedRevision,expectedSha256}={}){
+export function mutateTacticalTerritoryLinks(profileId,action,payload,{expectedRevision,expectedSha256}={}){return withTacticalWriteLock(async()=>{
  requireProfile(profileId);
  const {territories}=await listCrime();
  return transact('readwrite',(store,tx,done,fail)=>{
@@ -102,7 +112,7 @@ export async function mutateTacticalTerritoryLinks(profileId,action,payload,{exp
    }catch(error){fail(error);}
   };
  });
-}
+});}
 
 /** Atomically restore or replace all IndexedDB map records after verifying bytes and geometry. */
 export async function replaceTacticalMaps(maps,files){

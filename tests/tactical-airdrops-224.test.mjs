@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {newAirdropPoint,changeAirdropPoint,newAirdropEvent,changeAirdropEvent,cleanAirdropPoint,cleanAirdropEvent,validateAirdrops,airdropTimer,airdropCsv,airdropPackage,parseAirdropPackage,AIRDROP_POINT_PREFIX,AIRDROP_EVENT_PREFIX} from '../src/lib/tactical-airdrop-core.mjs';
 const profile='profile_airdrop_test',other='other_airdrop_profile',mapSha='f'.repeat(64),time='2026-11-19T12:00:00.000Z';
 const point={name:'Северный аэродром',description:'Зона RP',x:.34,y:.57,mapSha256:mapSha};
+// Store lifecycle tests use a map-independent point; native IndexedDB bindings are validated by the GA browser E2E.
+const unboundPoint={...point,mapSha256:''};
 const fields=(id)=>({title:'Тестовый аирдроп',pointId:id,scheduledAt:time,durationMinutes:30,notes:'Свидетель'});
 const mem=new Map(),clone=structuredClone;
 globalThis.browser={storage:{local:{async get(k){if(k===null)return Object.fromEntries([...mem].map(([key,value])=>[key,clone(value)]));return Object.fromEntries((Array.isArray(k)?k:[k]).filter(x=>mem.has(x)).map(x=>[x,clone(mem.get(x))]));},async set(rows){for(const [key,v] of Object.entries(rows))mem.set(key,clone(v));},async remove(keys){for(const key of Array.isArray(keys)?keys:[keys])mem.delete(key);}}}};
@@ -45,19 +47,19 @@ test('reference checks, profile boundaries and duplicate point names',()=>{
  assert.throws(()=>validateAirdrops([p],[event],[other]),/Чужой/);
 });
 test('store protects linked locations, rejects duplicate records and isolates profiles',async()=>{
- const p=await store.addAirdropPoint(profile,point),otherPoint=await store.addAirdropPoint(other,{...point,name:'Запад'});
+ const p=await store.addAirdropPoint(profile,unboundPoint),otherPoint=await store.addAirdropPoint(other,{...unboundPoint,name:'Запад'});
  const event=await store.addAirdropEvent(profile,fields(p.id));
  await assert.rejects(store.updateAirdropPoint(p.id,profile,'edit',{...point,x:.2}),/перемещать/);
  await assert.rejects(store.updateAirdropPoint(p.id,profile,'archive',{archived:true}),/незавершённые/);
  await assert.rejects(store.addAirdropEvent(other,fields(p.id)),/недоступна/);
- await assert.rejects(store.addAirdropPoint(profile,point),/название/);
+ await assert.rejects(store.addAirdropPoint(profile,unboundPoint),/название/);
  await store.updateAirdropEvent(event.id,profile,'cancel',{reason:'Перенос'});
  const archived=await store.updateAirdropPoint(p.id,profile,'archive',{archived:true});assert.equal(archived.archived,true);
  const a=await store.listAirdrops(profile),b=await store.listAirdrops(other);assert.equal(a.events.length,1);assert.equal(b.events.length,0);assert.equal(b.points[0].id,otherPoint.id);
 });
 test('JSON export/import safely replaces only one profile and keeps other profiles',async()=>{
- const p=await store.addAirdropPoint(profile,point),event=await store.addAirdropEvent(profile,fields(p.id));
- const foreign=await store.addAirdropPoint(other,{...point,name:'Other'});
+ const p=await store.addAirdropPoint(profile,unboundPoint),event=await store.addAirdropEvent(profile,fields(p.id));
+ const foreign=await store.addAirdropPoint(other,{...unboundPoint,name:'Other'});
  const pack=airdropPackage([p,foreign],[event],profile);
  assert.equal(parseAirdropPackage(pack,profile).points.length,1);
  assert.throws(()=>parseAirdropPackage(pack,other),/профилю/);
@@ -67,12 +69,12 @@ test('JSON export/import safely replaces only one profile and keeps other profil
  assert.match(airdropCsv(rows.points,rows.events,profile),/Тестовый аирдроп/);
 });
 test('tampered storage key and replay log fail closed',async()=>{
- const p=await store.addAirdropPoint(profile,point);mem.set(AIRDROP_POINT_PREFIX+'forged_key',p);
+ const p=await store.addAirdropPoint(profile,unboundPoint);mem.set(AIRDROP_POINT_PREFIX+'forged_key',p);
  await assert.rejects(store.listAirdrops(),/ключ/);mem.delete(AIRDROP_POINT_PREFIX+'forged_key');
  const event=await store.addAirdropEvent(profile,fields(p.id)),bad=clone(event);bad.history.push({...bad.history[0]});
  mem.set(AIRDROP_EVENT_PREFIX+event.id,bad);await assert.rejects(store.listAirdrops(),/порядок/);
 });
 test('remove expired profile records while preserving active profile',async()=>{
- await store.addAirdropPoint(profile,point);await store.addAirdropPoint(other,{...point,name:'Other'});
+ await store.addAirdropPoint(profile,unboundPoint);await store.addAirdropPoint(other,{...unboundPoint,name:'Other'});
  assert.equal(await store.clearOrphanAirdrops([profile]),1);assert.equal((await store.listAirdrops()).points.length,1);
 });

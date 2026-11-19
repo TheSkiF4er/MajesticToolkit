@@ -49,7 +49,7 @@ async def economy_browser_smoke(browser):
       const request=(fn,tx)=>{const r={onsuccess:null,onerror:null,result:undefined,error:null};tx.pending++;
        queueMicrotask(()=>{try{r.result=fn();r.onsuccess?.({target:r});}catch(e){r.error=e;r.onerror?.({target:r});tx.error=e;tx.onerror?.({target:tx});}finally{tx.pending--;tx.completeIfReady();}});return r;};
       const db={close(){},createObjectStore(){return {createIndex(){}};},transaction(name,mode){
-       const tx={pending:0,oncomplete:null,onabort:null,onerror:null,error:null,aborted:false,completeIfReady(){if(!this.pending&&!this.aborted)setTimeout(()=>{if(!this.pending&&!this.aborted)this.oncomplete?.();},0);},abort(){this.aborted=true;setTimeout(()=>this.onabort?.(),0);},objectStore(){return {get:key=>request(()=>structuredClone(records.get(key)),tx),put:value=>request(()=>{records.set(value.profileId,structuredClone(value));return value.profileId;},tx),delete:key=>request(()=>records.delete(key),tx),clear:()=>request(()=>records.clear(),tx),openCursor:()=>request(()=>null,tx),index:()=>({getAll:()=>request(()=>[],tx)})};}};return tx;}};
+       const tx={pending:0,oncomplete:null,onabort:null,onerror:null,error:null,aborted:false,completeIfReady(){if(!this.pending&&!this.aborted)setTimeout(()=>{if(!this.pending&&!this.aborted)this.oncomplete?.();},0);},abort(){this.aborted=true;setTimeout(()=>this.onabort?.(),0);},objectStore(){return {get:key=>request(()=>structuredClone(records.get(key)),tx),getAllKeys:()=>request(()=>[...records.keys()],tx),put:value=>request(()=>{records.set(value.profileId,structuredClone(value));return value.profileId;},tx),delete:key=>request(()=>records.delete(key),tx),clear:()=>request(()=>records.clear(),tx),openCursor:()=>request(()=>null,tx),index:()=>({getAll:()=>request(()=>[],tx)})};}};return tx;}};
       Object.defineProperty(window,'indexedDB',{configurable:true,value:{open(){const req={result:db,onsuccess:null,onupgradeneeded:null,onblocked:null,onerror:null};queueMicrotask(()=>{req.onupgradeneeded?.();req.onsuccess?.();});return req;}}});
     }""")
     await page.evaluate("import('mt:ui/main.mjs')")
@@ -114,7 +114,7 @@ async def economy_browser_smoke(browser):
     async with page.expect_download(timeout=30000) as task:
         await page.locator('[data-action="backup-portable-export"]').click()
     download=await task.value
-    assert 'v2.2.9' in download.suggested_filename
+    assert 'v2.3.0' in download.suggested_filename
     payload=(await download.path()).read_bytes()
     assert len(payload)>1000
     # Restore into a profile without tactical data; do not delete old UI state or old economic data.

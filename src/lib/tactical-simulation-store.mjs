@@ -1,10 +1,10 @@
+import {withTacticalWriteLock} from './tactical-lock.mjs';
 /** Durable, profile-isolated, immutable simulation results. No mutation of source plans or Crime records. */
 import {api} from './browser.mjs';
 import {SIMULATION_PREFIX,SIMULATION_LIMITS,cleanTacticalSimulation,createTacticalSimulation,compareTacticalSimulations,simulationExport} from './tactical-simulation-core.mjs';
 import {listTacticalPlans} from './tactical-planning-store.mjs';
 import {getTacticalMap} from './tactical-map-store.mjs';
-let queue=Promise.resolve();
-const lock=work=>{const run=queue.then(()=>globalThis.navigator?.locks?.request?globalThis.navigator.locks.request('mt-simulation-v227',{mode:'exclusive'},work):work());queue=run.catch(()=>{});return run;};
+const lock=withTacticalWriteLock;
 async function all(){const data=await api.storage.local.get(null),out=[];for(const [key,value] of Object.entries(data)){if(!key.startsWith(SIMULATION_PREFIX))continue;const run=cleanTacticalSimulation(value);if(key!==SIMULATION_PREFIX+run.id)throw Error('Повреждён ключ сохранённой симуляции');out.push(run);}return out.sort((a,b)=>b.createdAt.localeCompare(a.createdAt)||a.id.localeCompare(b.id));}
 export async function listTacticalSimulations(profileId){const rows=await all();return profileId?rows.filter(x=>x.profileId===profileId):rows;}
 export function addTacticalSimulation(profileId,{planId,title,settings}){return lock(async()=>{
