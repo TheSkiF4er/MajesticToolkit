@@ -48,6 +48,9 @@ import {listFamilies,replaceFamilies} from '../lib/family-store.mjs';
 import {handleFamilyAction,handleFamilySubmit,refreshFamilies,setFamilyQuery} from './family-page.mjs';
 import {listOrganizations,replaceOrganizations} from '../lib/organization-store.mjs';
 import {handleOrganizationAction,handleOrganizationSubmit,refreshOrganizations,setOrganizationQuery} from './organization-page.mjs';
+import {listCrime,replaceCrime} from '../lib/crime-store.mjs';
+import {validateCrime} from '../lib/crime-core.mjs';
+import {handleCrimeAction,handleCrimeSubmit,refreshCrime,setCrimeQuery} from './crime-page.mjs';
 import {exportPunishmentData,replacePunishmentData,validatePunishmentBackup} from '../lib/punishment-backup.mjs';
 import {inventoryAllVault,makePortableBackup,parsePortableBackup} from '../lib/dossier-backup.mjs';
 import {exportAIWorkspaces,replaceAIWorkspaces,disableAIOnRestore} from '../lib/ai-backup.mjs';
@@ -222,6 +225,7 @@ async function exportBackup() {
   const trading = await listInventory();
   const familyRows = await listFamilies();
   const organizations = await listOrganizations();
+  const crime = await listCrime();
   const laws = lawRecords();
   const government = governmentRecords();
   const documents = documentRecords();
@@ -230,14 +234,15 @@ async function exportBackup() {
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement('a');
   anchor.href = url;
-  anchor.download = `majestictoolkit-backup-v2.1.5-${new Date().toISOString().slice(0,10)}.json`;
+  anchor.download = `majestictoolkit-backup-v2.1.6-${new Date().toISOString().slice(0,10)}.json`;
   document.body.appendChild(anchor); anchor.click(); anchor.remove();
   setTimeout(() => URL.revokeObjectURL(url), 30000);
-  feedback(`Копия: ${templates.length} шаблонов, ${cases.length} жалоб, ${economy.length} операций/матчей, ${market.length} товаров/наблюдений/объявлений, ${trading.reduce((n,b)=>n+b.events.length,0)} складских операций, ${familyRows.length} семей, ${organizations.length} организаций, ${laws.length} записей законодательства, ${government.length} ведомственных записей, ${documents.length} документов/шаблонов, ${externalLinks().length} внешних закладок`);
+  feedback(`Копия: ${templates.length} шаблонов, ${cases.length} жалоб, ${economy.length} операций/матчей, ${market.length} товаров/наблюдений/объявлений, ${trading.reduce((n,b)=>n+b.events.length,0)} складских операций, ${familyRows.length} семей, ${organizations.length} организаций, ${crime.territories.length} территорий и ${crime.operations.length} RP-событий, ${laws.length} записей законодательства, ${government.length} ведомственных записей, ${documents.length} документов/шаблонов, ${externalLinks().length} внешних закладок`);
 }
 async function createBackupText({includeAI=document.getElementById('backup-include-ai')?.checked===true}={}){
   verifyJusticeStorageRows(await api.storage.local.get(null));
-  return makeBackupV19([validateState(state),await listTemplates(),await listCases(),await listEconomyRecords(),lawRecords(),governmentRecords(),documentRecords(),externalLinks(),productivity,await listXenForoLinks(),await loadMonitor(),await loadKnowledge(state.profiles.map(p=>p.id)),globalThis.RPNForumCore.cleanTemplate,await listSources(),await listRules()],await exportPunishmentData(state.profiles),await exportSectionData(state.profiles),await exportRegistryData(state.profiles),await exportModerationOps(state.profiles),await inventoryAllVault(state.profiles),includeAI?await exportAIWorkspaces(state.profiles):null,await listMarketplace(),await listInventory(),await listFamilies(),await listOrganizations());
+  const {territories,operations}=await listCrime();
+  return makeBackupV19([validateState(state),await listTemplates(),await listCases(),await listEconomyRecords(),lawRecords(),governmentRecords(),documentRecords(),externalLinks(),productivity,await listXenForoLinks(),await loadMonitor(),await loadKnowledge(state.profiles.map(p=>p.id)),globalThis.RPNForumCore.cleanTemplate,await listSources(),await listRules()],await exportPunishmentData(state.profiles),await exportSectionData(state.profiles),await exportRegistryData(state.profiles),await exportModerationOps(state.profiles),await inventoryAllVault(state.profiles),includeAI?await exportAIWorkspaces(state.profiles):null,await listMarketplace(),await listInventory(),await listFamilies(),await listOrganizations(),territories,operations);
 }
 async function requestCaseReplacement(cases) {
   const result=await api.runtime.sendMessage({type:'RP_NEXUS_CASE_MUTATE',action:'replace',cases});
@@ -273,7 +278,7 @@ async function executeAction(button) {
     const missing=[...referenced].filter(id=>!known.has(id));
     if(missing.length)throw Error(`Невозможно создать полную переносимую копию: ${missing.length} материалов отсутствуют в Evidence Vault. Восстановите или удалите несвязанные записи перед экспортом.`);
     const {blob,manifest}=await makePortableBackup(json,inventory);
-    const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`majestictoolkit-portable-backup-v2.1.5-${new Date().toISOString().slice(0,10)}.zip`;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);
+    const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`majestictoolkit-portable-backup-v2.1.6-${new Date().toISOString().slice(0,10)}.zip`;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),30000);
     feedback(`Переносимая копия: ${manifest.files.length} файлов Evidence Vault, проверены SHA-256`);return;
   }
   if(action==='ai-support'){navigateTo('ai');render();document.getElementById('ai-support-root')?.scrollIntoView?.({block:'start'});return;}
@@ -330,6 +335,8 @@ async function executeAction(button) {
     const relatedMarket = previousMarket.filter(r=>r.profileId===id);
     const previousFamilies = await listFamilies();
     const previousOrganizations = await listOrganizations();
+    const previousCrime = await listCrime();
+    const relatedCrime = [...previousCrime.territories,...previousCrime.operations].filter(r=>r.profileId===id);
     const relatedOrganizations = previousOrganizations.filter(r=>r.profileId===id);
     const relatedFamilies = previousFamilies.filter(r=>r.profileId===id);
     const previousLaws = lawRecords().slice();
@@ -338,12 +345,13 @@ async function executeAction(button) {
     const previousDocuments = documentRecords().slice();
     const relatedDocuments = previousDocuments.filter(r=>r.profileId===id);
     const relatedGovernment = previousGovernment.filter(r=>r.profileId===id);
-    if (!confirm(`Удалить профиль «${p.name}» и связанных с ним шаблонов: ${dependent.length}, жалоб: ${related.length}, записей экономики: ${relatedEconomy.length}, товаров и рыночных записей: ${relatedMarket.length}, складских журналов: ${relatedTrading.length}, семей: ${relatedFamilies.length}, организаций: ${relatedOrganizations.length}, записей законодательства: ${relatedLaws.length}, ведомственных записей: ${relatedGovernment.length}, документов: ${relatedDocuments.length}, правил: ${previousRules.filter(r=>r.profileId===id).length}, записей реестра: ${previousRegistry.records.filter(r=>r.profileId===id).length}? Это действие нельзя отменить без резервной копии.`)) return;
+    if (!confirm(`Удалить профиль «${p.name}» и связанных с ним шаблонов: ${dependent.length}, жалоб: ${related.length}, записей экономики: ${relatedEconomy.length}, товаров и рыночных записей: ${relatedMarket.length}, складских журналов: ${relatedTrading.length}, семей: ${relatedFamilies.length}, организаций: ${relatedOrganizations.length}, территорий / RP-событий: ${relatedCrime.length}, записей законодательства: ${relatedLaws.length}, ведомственных записей: ${relatedGovernment.length}, документов: ${relatedDocuments.length}, правил: ${previousRules.filter(r=>r.profileId===id).length}, записей реестра: ${previousRegistry.records.filter(r=>r.profileId===id).length}? Это действие нельзя отменить без резервной копии.`)) return;
     try {
       await replaceXenForoLinks(previousXfLinks.filter(x=>x.profileId!==id));
       if (dependent.length) await replaceTemplates(previousTemplates.filter(t => t.profileId !== id));
       if (related.length) await requestCaseReplacement(previousCases.filter(c => c.profileId !== id));
       if (relatedEconomy.length) await replaceEconomy(previousEconomy.filter(r => r.profileId !== id));
+      if (relatedCrime.length) await replaceCrime(previousCrime.territories.filter(r=>r.profileId!==id),previousCrime.operations.filter(r=>r.profileId!==id),state.profiles.filter(p=>p.id!==id).map(p=>p.id));
       if (relatedFamilies.length) await replaceFamilies(previousFamilies.filter(r=>r.profileId!==id),state.profiles.filter(p=>p.id!==id).map(p=>p.id));
       if (relatedOrganizations.length) await replaceOrganizations(previousOrganizations.filter(r=>r.profileId!==id),state.profiles.filter(p=>p.id!==id).map(p=>p.id));
       if (relatedTrading.length) await replaceInventory(previousTrading.filter(b=>b.profileId!==id),state.profiles.filter(p=>p.id!==id).map(p=>p.id),previousMarket.filter(r=>r.profileId!==id));
@@ -377,6 +385,7 @@ async function executeAction(button) {
       if (dependent.length) await replaceTemplates(previousTemplates);
       if (related.length) await requestCaseReplacement(previousCases);
       if (relatedEconomy.length) await replaceEconomy(previousEconomy);
+      if (relatedCrime.length) await replaceCrime(previousCrime.territories,previousCrime.operations,state.profiles.map(p=>p.id));
       if (relatedFamilies.length) await replaceFamilies(previousFamilies,state.profiles.map(p=>p.id));
       if (relatedOrganizations.length) await replaceOrganizations(previousOrganizations,state.profiles.map(p=>p.id));
       if (relatedMarket.length) await replaceMarketplace(previousMarket);
@@ -480,7 +489,7 @@ async function handleJusticeAction(button){
   }
 }
 document.addEventListener('click', event => {
-  const button = event.target.closest('button[data-judgment-action],button[data-court-evidence-action],button[data-proceeding-action],button[data-court-case-action],button[data-court-action],button[data-agency-action],button[data-timer-action],button[data-productivity-action],button[data-action],button[data-url],button[data-forum-action],button[data-case-action],button[data-economy-action],button[data-market-action],button[data-trading-action],button[data-family-action],button[data-org-action],button[data-law-action],button[data-government-action],button[data-document-action],button[data-justice-action],button[data-integration-action],button[data-monitor-action],button[data-knowledge-action],button[data-source-action],button[data-library-action],button[data-graph-action]');
+  const button = event.target.closest('button[data-judgment-action],button[data-court-evidence-action],button[data-proceeding-action],button[data-court-case-action],button[data-court-action],button[data-agency-action],button[data-timer-action],button[data-productivity-action],button[data-action],button[data-url],button[data-forum-action],button[data-case-action],button[data-economy-action],button[data-market-action],button[data-trading-action],button[data-family-action],button[data-org-action],button[data-crime-action],button[data-law-action],button[data-government-action],button[data-document-action],button[data-justice-action],button[data-integration-action],button[data-monitor-action],button[data-knowledge-action],button[data-source-action],button[data-library-action],button[data-graph-action]');
   if (!button || button.disabled) return;
   if(button.dataset.judgmentAction){void handleJudgmentAction(button,state,refreshGovernment,render,feedback).catch(err=>feedback(err.message,true));return;}
   if(button.dataset.proceedingAction){void handleProceedingAction(button,state,governmentRecords()).catch(err=>feedback(err.message,true));return;}
@@ -490,6 +499,7 @@ document.addEventListener('click', event => {
   if(button.dataset.agencyAction){void handleAgencyAction(button,state,governmentRecords(),refreshGovernment,render,feedback).catch(err=>feedback(err.message,true));return;}
   if(button.dataset.familyAction){void handleFamilyAction(button,state,render,feedback).catch(err=>feedback(err.message,true));return;}
   if(button.dataset.orgAction){void handleOrganizationAction(button,state,render,feedback).catch(err=>feedback(err.message,true));return;}
+  if(button.dataset.crimeAction){void handleCrimeAction(button,state,render,feedback).catch(err=>feedback(err.message,true));return;}
   if(button.dataset.timerAction){void handleTimerAction(button,render,feedback).catch(err=>feedback(err.message,true));return;}
   if(button.dataset.sourceAction){
     const action=button.dataset.sourceAction;
@@ -544,6 +554,7 @@ document.addEventListener('input', event => {
   if(event.target.id==='trading-search'){setTradingSearch(event.target.value);const pos=event.target.selectionStart;render();const el=document.getElementById('trading-search');el?.focus();el?.setSelectionRange(Math.min(pos,el.value.length),Math.min(pos,el.value.length));return;}
   if(event.target.id==='market-search'){setMarketplaceQuery(event.target.value);const pos=event.target.selectionStart;render();const el=document.getElementById('market-search');el?.focus();el?.setSelectionRange(Math.min(pos,el.value.length),Math.min(pos,el.value.length));return;}
   if(event.target.id==='economy-global-search'){setEconomyLookup(event.target.value,state);const el=document.getElementById('economy-global-results');if(el)replaceHtml(el,economyLookupHTML(state));return;}
+  if(event.target.id==='crime-search'){const value=event.target.value,caret=event.target.selectionStart,profileId=state.activeProfileId;setCrimeQuery(profileId,value);clearTimeout(economySearchTimer);economySearchTimer=setTimeout(()=>{if(view!=='economy'||state.activeProfileId!==profileId)return;const before=document.getElementById('crime-search');if(!before||before.value!==value)return;render();const after=document.getElementById('crime-search');after?.focus();after?.setSelectionRange(Math.min(caret,after.value.length),Math.min(caret,after.value.length));},160);return;}
   if(event.target.id==='organization-search'){const value=event.target.value,caret=event.target.selectionStart,profileId=state.activeProfileId;setOrganizationQuery(profileId,value);clearTimeout(economySearchTimer);economySearchTimer=setTimeout(()=>{if(view!=='economy'||state.activeProfileId!==profileId)return;const before=document.getElementById('organization-search');if(!before||before.value!==value)return;render();const after=document.getElementById('organization-search');after?.focus();after?.setSelectionRange(Math.min(caret,after.value.length),Math.min(caret,after.value.length));},160);return;}
   if(event.target.id==='families-search'){const value=event.target.value,caret=event.target.selectionStart,profileId=state.activeProfileId;setFamilyQuery(profileId,value);clearTimeout(economySearchTimer);economySearchTimer=setTimeout(()=>{if(view!=='economy'||state.activeProfileId!==profileId)return;const before=document.getElementById('families-search');if(!before||before.value!==value)return;render();const after=document.getElementById('families-search');after?.focus();after?.setSelectionRange(Math.min(caret,after.value.length),Math.min(caret,after.value.length));},160);return;}
   if(event.target.id==='economy-search'){const value=event.target.value,caret=event.target.selectionStart,profileId=state.activeProfileId;clearTimeout(economySearchTimer);economySearchTimer=setTimeout(()=>{if(view!=='economy'||state.activeProfileId!==profileId)return;void setEconomySearch(value,state).then(()=>{if(view!=='economy'||state.activeProfileId!==profileId)return;const current=document.getElementById('economy-search');if(!current||current.value!==value)return;render();const input=document.getElementById('economy-search');input?.focus();input?.setSelectionRange(Math.min(caret,input.value.length),Math.min(caret,input.value.length));}).catch(err=>feedback(err.message,true));},150);return;}
@@ -557,6 +568,7 @@ async function restoreBackupText(text,portable=null){
       const economyCount = backup.schemaVersion >= 4 ? `, ${backup.economy.length} записей экономики` : '';
       const familyCount=backup.families===null?'':`, ${backup.families.length} семей`;
       const orgCount=backup.organizations===null?'':`, ${backup.organizations.length} организаций`;
+      const crimeCount=backup.territories===null?'':`, ${backup.territories.length} территорий и ${backup.crimeEvents.length} RP-событий`;
       const lawCount = backup.schemaVersion >= 5 ? `, ${backup.lawRecords.length} записей Law Codex` : '';
       const govCount = backup.schemaVersion >= 6 ? `, ${backup.government.length} ведомственных записей` : '';
       const documentsCount = backup.schemaVersion >= 7 ? `, ${backup.documents.length} документов/шаблонов` : '';
@@ -569,7 +581,7 @@ async function restoreBackupText(text,portable=null){
       const attachmentCount=backup.evidenceVault?.filter(x=>x.kind==='file').length??0;
       const aiNotice=backup.aiWorkspace!==null?` Будут восстановлены сохранённые диалоги и черновики ${backup.aiWorkspace.length} профилей.`:' История AI останется без изменений.';
       const filesNotice=portable?` ZIP включает ${portable.files.size} бинарных файлов.`:attachmentCount?` ВНИМАНИЕ: JSON не содержит ${attachmentCount} бинарных вложений; они могут отсутствовать на этом устройстве. Для полного восстановления используйте ZIP.`:'';
-      if (!confirm(`Восстановить ${backup.state.profiles.length} профилей, ${backup.templates.length} шаблонов${replacing}${economyCount}${familyCount}${orgCount}${lawCount}${govCount}${documentsCount}${linksCount}${xfCount}${monitorCount}${knowledgeCount}${sourcesCount}${rulesCount}? Данные, отсутствующие в старом формате копии, сохранятся.${filesNotice}${aiNotice}`)) return;
+      if (!confirm(`Восстановить ${backup.state.profiles.length} профилей, ${backup.templates.length} шаблонов${replacing}${economyCount}${familyCount}${orgCount}${crimeCount}${lawCount}${govCount}${documentsCount}${linksCount}${xfCount}${monitorCount}${knowledgeCount}${sourcesCount}${rulesCount}? Данные, отсутствующие в старом формате копии, сохранятся.${filesNotice}${aiNotice}`)) return;
       return (async () => {
         const beforeState = state;
         const beforeTemplates = await listTemplates();
@@ -579,6 +591,7 @@ async function restoreBackupText(text,portable=null){
         const beforeTrading = await listInventory();
         const beforeFamilies = await listFamilies();
         const beforeOrganizations = await listOrganizations();
+        const beforeCrime = await listCrime();
         const beforeLaws = lawRecords().slice();
         const beforeGovernment = governmentRecords().slice();
         const beforeDocuments = documentRecords().slice();
@@ -601,6 +614,8 @@ async function restoreBackupText(text,portable=null){
             throw Error('Старая копия содержит другой набор профилей. Сначала экспортируйте данные 0.3.0, чтобы не потерять доступ к существующим жалобам.');
           }
           if (backup.schemaVersion < 4 && beforeEconomy.some(r => !backup.state.profiles.some(p => p.id === r.profileId))) throw Error('Старая копия содержит другой набор профилей. Экспортируйте копию 0.5.0 перед импортом.');
+          if (backup.territories===null && [...beforeCrime.territories,...beforeCrime.operations].some(r=>!backup.state.profiles.some(p=>p.id===r.profileId)))throw Error('Старая копия не содержит территории для отсутствующего профиля. Сначала экспортируйте Backup 2.1.6.');
+          if (backup.territories===null)validateCrime(beforeCrime.territories,beforeCrime.operations,backup.state.profiles.map(p=>p.id),backup.families??beforeFamilies,backup.organizations??beforeOrganizations);
           if (backup.organizations===null && beforeOrganizations.some(o=>!backup.state.profiles.some(p=>p.id===o.profileId)))throw Error('Старая копия не содержит реестр организаций отсутствующего профиля. Экспортируйте Backup 2.1.5.');
           if (backup.families===null && beforeFamilies.some(f=>!backup.state.profiles.some(p=>p.id===f.profileId)))throw Error('Старая копия не содержит реестр семей для отсутствующего профиля. Сначала экспортируйте Backup 2.1.4.');
           if (backup.tradingInventory===null && beforeTrading.some(b=>!backup.state.profiles.some(p=>p.id===b.profileId)))throw Error('Старая копия не содержит складской журнал для отсутствующего профиля. Сначала экспортируйте копию 2.1.3.');
@@ -624,6 +639,7 @@ async function restoreBackupText(text,portable=null){
           if (backup.schemaVersion >= 4) await replaceEconomy(backup.economy);
           if (backup.families !== null) await replaceFamilies(backup.families,backup.state.profiles.map(p=>p.id));
           if (backup.organizations !== null) await replaceOrganizations(backup.organizations,backup.state.profiles.map(p=>p.id));
+          if (backup.territories !== null) await replaceCrime(backup.territories,backup.crimeEvents,backup.state.profiles.map(p=>p.id));
           if (backup.marketplace !== null){
             if (backup.tradingInventory !== null) await replaceInventory([],beforeState.profiles.map(p=>p.id),beforeMarket);
             await replaceMarketplace(backup.marketplace,backup.state.profiles.map(p=>p.id));
@@ -654,6 +670,7 @@ async function restoreBackupText(text,portable=null){
           if (backup.schemaVersion >= 4) await replaceEconomy(beforeEconomy);
           if (backup.families !== null) await replaceFamilies(beforeFamilies,beforeState.profiles.map(p=>p.id));
           if (backup.organizations !== null) await replaceOrganizations(beforeOrganizations,beforeState.profiles.map(p=>p.id));
+          if (backup.territories !== null) await replaceCrime(beforeCrime.territories,beforeCrime.operations,beforeState.profiles.map(p=>p.id));
           if (backup.marketplace !== null){
             if (backup.tradingInventory !== null) await replaceInventory([],beforeState.profiles.map(p=>p.id),await listMarketplace());
             await replaceMarketplace(beforeMarket,beforeState.profiles.map(p=>p.id));
@@ -765,6 +782,7 @@ document.addEventListener('submit', event => {
   if (formId === 'agency-form') {event.preventDefault();void handleAgencySubmit(event,state,refreshGovernment,render,feedback).catch(err=>feedback(err.message,true));return;}
   if (formId === 'government-form') {event.preventDefault();void handleGovernmentSubmit(event,state,render,feedback,lawRecords()).catch(err=>feedback(err.message,true));return;}
   if (formId === 'law-form') {event.preventDefault();void handleLawSubmit(event,state,render,feedback).catch(err=>feedback(err.message,true));return;}
+  if(formId==='crime-form'){event.preventDefault();void handleCrimeSubmit(event.target,state,render,feedback).catch(err=>feedback(err.message,true));return;}
   if(formId==='organization-form'){event.preventDefault();void handleOrganizationSubmit(event.target,state,render,feedback).catch(err=>feedback(err.message,true));return;}
   if(formId==='family-form'){event.preventDefault();void handleFamilySubmit(event.target,state,render,feedback).catch(err=>feedback(err.message,true));return;}
   if(formId==='trading-form'){event.preventDefault();void handleTradingSubmit(event.target,state,render,feedback).catch(err=>feedback(err.message,true));return;}

@@ -20,7 +20,7 @@ test('tab selection and filter reject unknown states, retain other profiles',()=
  const ids=[a,b];let prefs=cleanEconomyUI(null,ids);prefs=selectEconomyTab(prefs,a,'market',ids);prefs=selectEconomyTab(prefs,b,'groups',ids);prefs=setEconomyPref(prefs,a,'filters','cash',ids);
  assert.equal(prefs.tabs[a],'market');assert.equal(prefs.tabs[b],'groups');assert.equal(prefs.filters[a],'cash');
  assert.throws(()=>selectEconomyTab(prefs,a,'debug',ids));assert.throws(()=>setEconomyPref(prefs,a,'filters','all;DROP',ids));assert.throws(()=>selectEconomyTab(prefs,'another','market',ids));
- assert.equal(ECONOMY_TABS.length,8);assert.ok(ECONOMY_TABS.includes("inventory"));
+ assert.equal(ECONOMY_TABS.length,9);assert.ok(ECONOMY_TABS.includes("inventory"));
 });
 test('recent is deduplicated, limited, follows profile and drops removed profile',()=>{
  const ids=[a,b];let prefs=cleanEconomyUI(null,ids);
