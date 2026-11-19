@@ -11,7 +11,7 @@ const event=newCrimeEvent(p,{title:'Harbor cap',eventKind:'capture',territoryId:
 const finished=changeCrimeEvent(event,'finish',{winner:'attacker'});
 const all={territories:[territory],operations:[event],families:[family],organizations:[group]};
 test('preferences validate tabs, filters and profile scope without changing source data',()=>{
- assert.equal(TACTICAL_UI_KEY,'mtTacticalWorkspaceV221');assert.equal(TACTICAL_TABS.length,6);
+ assert.equal(TACTICAL_UI_KEY,'mtTacticalWorkspaceV221');assert.equal(TACTICAL_TABS.length,7);
  assert.deepEqual(cleanTacticalUI(null,[p]),{tabs:{},queries:{},filters:{},recent:[],favorites:[]});
  let prefs=changeTacticalPreference(null,p,'tab','events',[p,other]);prefs=changeTacticalPreference(prefs,p,'filter','planned',[p,other]);prefs=changeTacticalPreference(prefs,p,'query','a'.repeat(240),[p,other]);
  assert.equal(prefs.queries[p].length,140);assert.equal(prefs.tabs[p],'events');assert.equal(prefs.filters[p],'planned');

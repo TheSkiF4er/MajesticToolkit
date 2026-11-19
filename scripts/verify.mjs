@@ -1,6 +1,12 @@
 import {access,readFile,readdir} from 'node:fs/promises';
 import {resolve,relative} from 'node:path';
-import {execFileSync} from 'node:child_process';
+import {execFile} from 'node:child_process';
+import {promisify} from 'node:util';
+const asyncExecFile=promisify(execFile);
+async function checkSyntax(files){
+ // Bounded parallelism makes full 4-browser checks practical in CI without skipping a file.
+ for(let i=0;i<files.length;i+=10)await Promise.all(files.slice(i,i+10).map(file=>asyncExecFile(process.execPath,['--check',file],{maxBuffer:1024*1024})));
+}
 const root=resolve(import.meta.dirname,'..');
 const version=JSON.parse(await readFile(resolve(root,'package.json'),'utf8')).version;
 const permissions=new Set(['storage','activeTab','scripting','sidePanel','alarms','notifications','unlimitedStorage','identity']);
@@ -36,9 +42,8 @@ for(const browser of targets){
  if(browser==='firefox-android'&&m.sidebar_action)throw Error('Firefox Android must not have desktop sidebar');
  if(browser==='safari'&&m.side_panel)throw Error('Safari should use workspace fallback');
  for(const path of [m.action.default_popup,'ui/workspace.html','ui/sidebar.html','ui/main.mjs','lib/recovery.mjs','lib/state.mjs','content/forum.js','content/evidence.js','ui/monitor-page.mjs','lib/monitor-core.mjs','lib/monitor-store.mjs','lib/monitor-backup.mjs','ui/knowledge-page.mjs','lib/knowledge-core.mjs','lib/knowledge-store.mjs','lib/knowledge-backup.mjs','ui/knowledge-page.mjs','lib/knowledge-core.mjs','lib/knowledge-store.mjs','lib/knowledge-backup.mjs',...Object.values(m.icons)])await access(resolve(output,path));
- for(const f of await walk(output))if(/\.(m?js)$/.test(f))execFileSync(process.execPath,['--check',f],{stdio:'pipe'});
+ await checkSyntax((await walk(output)).filter(f=>/\.(m?js)$/.test(f)));
  console.log(`${browser}: manifest, static scripts, syntax and permissions validated`);
 }
-execFileSync(process.execPath,['--check',resolve(root,'ai-gateway/server.mjs')],{stdio:'pipe'});
-const src=await walk(resolve(root,'src'));for(const f of src)if(/\.(m?js)$/.test(f))execFileSync(process.execPath,['--check',f],{stdio:'pipe'});
+const src=await walk(resolve(root,'src'));await checkSyntax([resolve(root,'ai-gateway/server.mjs'),...src.filter(f=>/\.(m?js)$/.test(f))]);
 console.log(`Checked ${src.filter(f=>/\.(m?js)$/.test(f)).length} source modules`);

@@ -434,3 +434,10 @@ body[data-mode=sidebar] .ws-layout .side{height:auto;position:static;overflow:vi
 #map-feature-editor[hidden]{display:none}
 @media(max-width:950px){.tactical-map-editor-layout{grid-template-columns:minmax(0,1fr)}.tactical-map-sidebar{max-height:none}.tactical-map-viewport{height:clamp(320px,52vh,600px)}}
 @media(max-width:480px){.tactical-layer-row{grid-template-columns:20px 20px minmax(60px,1fr) repeat(4,26px)}.tactical-map-sidebar{padding:8px}}
+/* Tactical 2.2.4: responsive location and event editor with interactive image click targets. */
+.tactical-airdrop-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start}
+.tactical-airdrops #airdrop-map-canvas{display:block;width:100%;height:clamp(220px,34vw,420px);border:1px solid var(--line,#35475b);background:#172537;cursor:crosshair;touch-action:manipulation;border-radius:8px}
+.tactical-airdrops .economy-list{max-height:450px;overflow:auto}
+.tactical-airdrops .economy-stats{margin:0 0 8px}
+.tactical-airdrops input[type="datetime-local"]{min-width:160px}
+@media(max-width:900px){.tactical-airdrop-grid{grid-template-columns:1fr}.tactical-airdrops #airdrop-map-canvas{height:320px}}
