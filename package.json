@@ -1,7 +1,7 @@
 {
   "name": "majestictoolkit",
   "private": true,
-  "version": "2.2.7",
+  "version": "2.2.8",
   "type": "module",
   "description": "Автономное браузерное расширение: форум, жалобы, экономика, Law Codex и Government Tools и Document Studio Google Workspace и Productivity & UX",
   "scripts": {
@@ -37,7 +37,8 @@
     "test:browser:airdrops": "python3 tests/browser-tactical-airdrops-224.py",
     "test:browser:territory-map": "python3 tests/browser-tactical-territories-225.py",
     "test:browser:planning": "python3 tests/browser-tactical-planning-226.py",
-    "test:browser:simulation": "python3 tests/browser-tactical-simulation-227.py"
+    "test:browser:simulation": "python3 tests/browser-tactical-simulation-227.py",
+    "test:browser:tactical-analytics": "python3 tests/browser-tactical-analytics-228.py"
   },
   "engines": {
     "node": ">=22 <23"

@@ -1,8 +1,8 @@
 /** Tactical 2.2.1: profile-scoped workspace preferences and real Crime & Territory read models. */
 import {crimeSummary} from './crime-core.mjs';
 export const TACTICAL_UI_KEY='mtTacticalWorkspaceV221';
-export const TACTICAL_TABS=Object.freeze(['overview','map','airdrops','planning','simulations','territories','events','groups','recent']);
-export const TACTICAL_TAB_LABELS=Object.freeze({overview:'Обзор',map:'Карта',airdrops:'Аирдропы',planning:'Планирование',simulations:'Симуляции',territories:'Территории',events:'Капты и события',groups:'Семьи и организации',recent:'Недавние'});
+export const TACTICAL_TABS=Object.freeze(['overview','map','airdrops','planning','simulations','analytics','territories','events','groups','recent']);
+export const TACTICAL_TAB_LABELS=Object.freeze({overview:'Обзор',map:'Карта',airdrops:'Аирдропы',planning:'Планирование',simulations:'Симуляции',analytics:'Аналитика и replay',territories:'Территории',events:'Капты и события',groups:'Семьи и организации',recent:'Недавние'});
 export const TACTICAL_FILTERS=Object.freeze(['all','planned','overdue','completed','cancelled']);
 const validId=x=>typeof x==='string'&&/^[\w-]{8,120}$/.test(x);
 const validKind=x=>['territory','event','family','organization'].includes(x);
