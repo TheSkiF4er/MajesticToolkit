@@ -1,5 +1,7 @@
 /** Binary image maps live in IndexedDB, independently of chrome.storage.local quotas. */
 import {applyMapAnnotationAction} from './tactical-map-layers.mjs';
+import {cleanTerritoryLinks,changeTerritoryLinks} from './tactical-territory-core.mjs';
+import {listCrime} from './crime-store.mjs';
 import {MAP_DB,MAP_LIMITS,validMapProfile,cleanMapMeta,cleanMapView,cleanMapAnchors,imageSignature,solveMapCalibration} from './tactical-map-core.mjs';
 const requireProfile=id=>{if(!validMapProfile(id))throw Error('Недопустимый профиль карты');return id;};
 const digest=async bytes=>{if(!globalThis.crypto?.subtle)throw Error('SHA-256 недоступен');return [...new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))].map(x=>x.toString(16).padStart(2,'0')).join('');};
@@ -55,6 +57,7 @@ export async function mutateTacticalMapAnnotations(profileId,action,payload,{exp
     const previous=cleanMapMeta(req.result);
     if((expectedRevision!==undefined&&previous.annotationsRevision!==expectedRevision)||(expectedSha256!==undefined&&previous.sha256!==expectedSha256))throw Error('Разметка или подложка изменена в другой вкладке. Перезагрузите карту перед редактированием');
     const nextData=applyMapAnnotationAction(previous,action,payload,previous.width,previous.height);
+    cleanTerritoryLinks(previous.territoryLinks,nextData.features); // Do not remove a bound polygon with an overlay import/edit.
     const next={...previous,...nextData,annotationsRevision:previous.annotationsRevision+1,updatedAt:new Date().toISOString()};
     store.put({...next,blob:req.result.blob});done(next);
    }catch(error){fail(error);}
@@ -63,3 +66,21 @@ export async function mutateTacticalMapAnnotations(profileId,action,payload,{exp
 }
 export async function removeTacticalMap(profileId){requireProfile(profileId);return transact('readwrite',s=>s.delete(profileId));}
 export async function clearOrphanTacticalMaps(activeProfileIds){const ids=new Set(activeProfileIds);return transact('readwrite',s=>{const req=s.openCursor();req.onsuccess=()=>{const cursor=req.result;if(cursor){if(!ids.has(cursor.key))cursor.delete();cursor.continue();}};});}
+
+/** Atomic map-binding edit with optimistic concurrency; the Crime registry remains the only source for ownership. */
+export async function mutateTacticalTerritoryLinks(profileId,action,payload,{expectedRevision,expectedSha256}={}){
+ requireProfile(profileId);
+ const {territories}=await listCrime();
+ return transact('readwrite',(store,tx,done,fail)=>{
+  const req=store.get(profileId);req.onsuccess=()=>{
+   try{
+    if(!req.result)throw Error('Сначала загрузите карту');
+    const previous=cleanMapMeta(req.result);
+    if((expectedRevision!==undefined&&previous.annotationsRevision!==expectedRevision)||(expectedSha256!==undefined&&previous.sha256!==expectedSha256))throw Error('Привязки карты изменены в другой вкладке. Обновите карту');
+    const links=changeTerritoryLinks(previous,action,payload,territories);
+    const next={...previous,territoryLinks:links,annotationsRevision:previous.annotationsRevision+1,updatedAt:new Date().toISOString()};
+    store.put({...next,blob:req.result.blob});done(next);
+   }catch(error){fail(error);}
+  };
+ });
+}

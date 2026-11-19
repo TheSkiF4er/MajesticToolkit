@@ -441,3 +441,13 @@ body[data-mode=sidebar] .ws-layout .side{height:auto;position:static;overflow:vi
 .tactical-airdrops .economy-stats{margin:0 0 8px}
 .tactical-airdrops input[type="datetime-local"]{min-width:160px}
 @media(max-width:900px){.tactical-airdrop-grid{grid-template-columns:1fr}.tactical-airdrops #airdrop-map-canvas{height:320px}}
+
+/* 2.2.5 — ownership polygons and territory/capture history in Tactical Map. */
+.tactical-territory-panel{border-top:1px solid var(--border,#465366);padding-top:12px;min-width:0}
+.tactical-territory-list{max-height:280px;overflow:auto}
+.tactical-territory-row{display:flex;align-items:center;gap:9px;padding:7px 0;border-bottom:1px solid var(--border,#465366)}
+.tactical-territory-row>div{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px;overflow-wrap:anywhere}
+.tactical-territory-row .button{flex-shrink:0}
+.tactical-territory-swatch{width:12px;height:28px;flex:none;border-radius:4px;border:1px solid #9ca3af}
+.tactical-territory-event{display:grid;gap:3px;padding:7px 0;border-bottom:1px solid var(--border,#465366)}
+.tactical-territory-event .button{justify-self:start}

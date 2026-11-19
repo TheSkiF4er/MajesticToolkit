@@ -1,4 +1,5 @@
 import {cleanMapAnnotations} from './tactical-map-layers.mjs';
+import {cleanTerritoryLinks} from './tactical-territory-core.mjs';
 /** Tactical World Map 2.2.3: validated image coordinates, viewport math and three-point affine calibration. */
 export const MAP_DB='majestictoolkit-tactical-map-v222';
 export const MAP_LIMITS=Object.freeze({bytes:25*1024*1024,dimension:16384,pixels:64*1024*1024,zoomMin:.5,zoomMax:16});
@@ -30,7 +31,7 @@ export function cleanMapMeta(raw){
  if(typeof raw.updatedAt!=='string'||!Number.isFinite(Date.parse(raw.updatedAt)))throw Error('Неверная дата изменения карты');
  const annotations=cleanMapAnnotations(raw,raw.width,raw.height);
  if(raw.annotationsRevision!==undefined&&(!Number.isSafeInteger(raw.annotationsRevision)||raw.annotationsRevision<0))throw Error('Некорректная версия разметки карты');
- return {...annotations,annotationsRevision:raw.annotationsRevision??0,profileId:raw.profileId,name:raw.name.trim(),mime:raw.mime,size:raw.size,width:raw.width,height:raw.height,sha256:raw.sha256,updatedAt:raw.updatedAt,view:cleanMapView(raw.view),anchors:cleanMapAnchors(raw.anchors||[],raw.width,raw.height)};
+ return {...annotations,territoryLinks:cleanTerritoryLinks(raw.territoryLinks,annotations.features),annotationsRevision:raw.annotationsRevision??0,profileId:raw.profileId,name:raw.name.trim(),mime:raw.mime,size:raw.size,width:raw.width,height:raw.height,sha256:raw.sha256,updatedAt:raw.updatedAt,view:cleanMapView(raw.view),anchors:cleanMapAnchors(raw.anchors||[],raw.width,raw.height)};
 }
 export function imageSignature(bytes,mime){
  if(!(bytes instanceof Uint8Array)||bytes.length<12)throw Error('Повреждённое изображение');
