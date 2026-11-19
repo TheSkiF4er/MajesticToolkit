@@ -2,8 +2,8 @@
 // These preferences never replace or re-serialize financial ledger records.
 import {cleanRecord,summarizeEconomy,summarizeMatches} from './economy-core.mjs';
 export const ECONOMY_UI_KEY='mtEconomyWorkspaceV211';
-export const ECONOMY_TABS=Object.freeze(['overview','market','inventory','finance','groups','calculators','journal']);
-export const ECONOMY_TAB_LABELS=Object.freeze({overview:'Обзор',market:'Рынок и сделки',inventory:'Склад и имущество',finance:'Финансы',groups:'Семьи и игроки',calculators:'Калькуляторы',journal:'Журнал'});
+export const ECONOMY_TABS=Object.freeze(['overview','market','inventory','finance','groups','organizations','calculators','journal']);
+export const ECONOMY_TAB_LABELS=Object.freeze({overview:'Обзор',market:'Рынок и сделки',inventory:'Склад и имущество',finance:'Финансы',groups:'Семьи и игроки',organizations:'Организации',calculators:'Калькуляторы',journal:'Журнал'});
 const idOK=value=>typeof value==='string'&&/^[\w-]{8,120}$/.test(value);
 const str=(value,max)=>typeof value==='string'?value.slice(0,max):'';
 const allowedTypes=new Set(['all','deal','cash','match']);

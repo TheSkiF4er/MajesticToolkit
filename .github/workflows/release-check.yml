@@ -54,3 +54,4 @@ jobs:
           python tests/browser-marketplace-212.py
           python tests/browser-inventory-213.py
           python tests/browser-families-214.py
+          python tests/browser-organizations-215.py
