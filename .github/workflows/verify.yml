@@ -59,3 +59,5 @@ jobs:
           python tests/browser-judicial-decisions-209.py
           python tests/browser-economy-workspace-211.py
           python tests/browser-marketplace-212.py
+          python tests/browser-inventory-213.py
+          python tests/browser-families-214.py
