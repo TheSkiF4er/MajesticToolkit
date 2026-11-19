@@ -45,5 +45,5 @@ for(const browser of targets){
  await checkSyntax((await walk(output)).filter(f=>/\.(m?js)$/.test(f)));
  console.log(`${browser}: manifest, static scripts, syntax and permissions validated`);
 }
-const src=await walk(resolve(root,'src'));await checkSyntax([resolve(root,'ai-gateway/server.mjs'),resolve(root,'cloud-identity/server.mjs'),resolve(root,'cloud-identity/teams.mjs'),...src.filter(f=>/\.(m?js)$/.test(f))]);
+const src=await walk(resolve(root,'src'));await checkSyntax([resolve(root,'ai-gateway/server.mjs'),resolve(root,'cloud-identity/server.mjs'),resolve(root,'cloud-identity/teams.mjs'),resolve(root,'cloud-identity/storage.mjs'),...src.filter(f=>/\.(m?js)$/.test(f))]);
 console.log(`Checked ${src.filter(f=>/\.(m?js)$/.test(f)).length} source modules`);

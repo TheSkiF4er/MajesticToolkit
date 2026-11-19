@@ -191,7 +191,7 @@ api.runtime.onMessage.addListener((message,sender,sendResponse) => {
   const isForum=contentSender(sender,api.runtime.id,'forum');
   const isVideo=contentSender(sender,api.runtime.id,'video');
   async function task() {
-    validatePayloadSize(message,isTrustedExtension&&message.type==='RP_NEXUS_CASE_MUTATE'&&message.action==='moderation'?350000:65536);
+    validatePayloadSize(message,isTrustedExtension&&message.type==='RP_NEXUS_CASE_MUTATE'&&message.action==='moderation'?350000:message.type==='MT_CLOUD_IDENTITY'&&message.action==='cloudImport'&&isTrustedExtension?600000:65536);
     if(isForum && message.type!=='RP_NEXUS_FORUM_DATA' && !await api.permissions.contains({origins:[`https://${new URL(sender.url).hostname}/*`]}))throw Error('Доступ к форуму отозван');
     if(message.type==='MT_CLOUD_IDENTITY'){if(!isTrustedExtension)throw Error('Недоверенный источник Cloud Identity');return cloudIdentity.handle(message.action,message.input);}
     if(message.type==='MT_SECTION_MONITOR'){if(!isTrustedExtension)throw Error('Недоверенный источник');if(message.action==='list')return sectionView(message.profileId);if(message.action==='scan')return scanSections(message.profileId,message.input?.id??null);return sectionAction(message.profileId,message.action,message.input);}

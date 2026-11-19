@@ -1,6 +1,7 @@
-/** Cloud Identity 2.3.2: privileged background-only credential store + authenticated requests. */
+/** Cloud Identity 2.3.3: privileged background-only credential store + authenticated requests. */
 export const CLOUD_CONFIG_KEY='mtCloudIdentityConfigV231';
 export const CLOUD_SESSION_KEY='mtCloudIdentitySessionV231';
+export const CLOUD_BINDINGS_KEY='mtCloudProfileBindingsV233';
 export function cloudEndpoint(raw){
   if(typeof raw!=='string'||raw.length>300)throw Error('Укажите адрес Cloud Identity Server');
   let url;try{url=new URL(raw.trim());}catch{throw Error('Некорректный адрес Cloud Identity Server');}
@@ -94,6 +95,48 @@ export function createCloudIdentityService({storage,permissions,fetchImpl=fetch,
       if(typeof input.accountId!=='string'||!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(input.accountId))throw Error('Некорректный участник');
       return teamPath()+'/members/'+input.accountId;
     };
+    // Local profile bindings are scoped to origin, authenticated account, team and local RP profile.
+    // These mappings never expose refresh or access tokens to extension pages.
+    const uuid=value=>typeof value==='string'&&/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(value);
+    const cloudPath=()=>teamPath()+'/cloud/profiles';
+    const cloudProfilePath=()=>{
+      if(!uuid(input.cloudProfileId))throw Error('Некорректный облачный RP-профиль');
+      return cloudPath()+'/'+input.cloudProfileId;
+    };
+    if(['cloudBindings','cloudBind','cloudUnbind'].includes(action)){
+      // Always authenticate even for local metadata so that a revoked session cannot
+      // continue operating with a stale team association.
+      const session=await refreshActive();if(!session)throw Error('Сначала войдите в облачный аккаунт');
+      const live=await authed(cloudPath());
+      const scope=[session.origin,session.record.account.id,teamId].join('|');
+      const all=(await read(CLOUD_BINDINGS_KEY))||{};
+      const bindings=all[scope]&&typeof all[scope]==='object'?all[scope]:{};
+      if(action==='cloudBindings')return {bindings:Object.fromEntries(Object.entries(bindings).filter(([,id])=>live.profiles.some(p=>p.id===id))),profiles:live.profiles};
+      const localId=input.localProfileId;
+      if(typeof localId!=='string'||!/^[\w-]{8,128}$/.test(localId))throw Error('Некорректный локальный RP-профиль');
+      const localState=(await read('rpNexusStateV1'));
+      const local=localState?.profiles?.find(p=>p.id===localId);
+      if(!local)throw Error('Локальный RP-профиль отсутствует');
+      if(action==='cloudBind'){
+        const remote=live.profiles.find(p=>p.id===input.cloudProfileId);
+        if(!remote)throw Error('Облачный RP-профиль не найден');
+        if(local.project!==remote.project||local.server!==remote.server)throw Error('RP-проект и сервер локального и облачного профиля должны совпадать');
+        bindings[localId]=remote.id;
+      }else delete bindings[localId];
+      all[scope]=bindings;await write(CLOUD_BINDINGS_KEY,all);return {bindings};
+    }
+    if(action==='cloudProfiles')return authed(cloudPath());
+    if(action==='cloudProfileCreate')return authed(cloudPath(),{method:'POST',body:{name:input.name,project:input.project,server:input.server}});
+    if(action==='cloudRecords'){
+      const kind=input.kind?('?kind='+encodeURIComponent(input.kind)+(input.after?'&after='+encodeURIComponent(input.after):'')):(input.after?'?after='+encodeURIComponent(input.after):'');
+      return authed(cloudProfilePath()+'/records'+kind);
+    }
+    if(action==='cloudImport'){
+      if(!Array.isArray(input.records)||input.records.length<1||input.records.length>20)throw Error('Выберите до 20 записей за запрос');
+      const live=await execute('cloudBindings',{teamId});
+      if(!input.records.every(item=>item&&['family','organization'].includes(item.kind)&&item.record&&live.bindings[item.record.profileId]===input.cloudProfileId))throw Error('Записи не принадлежат привязанному локальному RP-профилю');
+      return authed(cloudProfilePath()+'/records',{method:'POST',body:{records:input.records}});
+    }
     if(action==='teams')return authed('/v1/teams');
     if(action==='teamCreate')return authed('/v1/teams',{method:'POST',body:{name:input.name}});
     if(action==='teamDetail')return authed(teamPath());

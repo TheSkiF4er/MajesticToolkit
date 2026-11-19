@@ -10,6 +10,7 @@ import {randomBytes, randomUUID, createHash, scrypt as scryptCallback, timingSaf
 import {promisify} from 'node:util';
 import {DatabaseSync} from 'node:sqlite';
 import {installTeams,handleTeams} from './teams.mjs';
+import {installCloudStorage,handleCloudStorage} from './storage.mjs';
 const scrypt=promisify(scryptCallback);
 const TOKEN_BYTES=32, ACCESS_MS=15*60_000, REFRESH_MS=30*24*60*60_000;
 const encoder = value => createHash('sha256').update(value).digest();
@@ -48,6 +49,7 @@ function database(dbPath){
   db.prepare('DELETE FROM auth_attempts WHERE window_at<? AND blocked_until<?').run(cutoff,Date.now());
   db.prepare('DELETE FROM sessions WHERE expires_at<?').run(cutoff);
   installTeams(db);
+  installCloudStorage(db);
   return db;
 }
 async function credentialHash(password,salt){return Buffer.from(await scrypt(password,salt,64,{N:32768,r:8,p:1,maxmem:64*1024*1024}));}
@@ -67,9 +69,9 @@ function getAuthorized(db,header,now){
 }
 const JSON_HEADERS={'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'};
 function returnJson(res,status,payload,extra={}){res.writeHead(status,{...JSON_HEADERS,...extra});res.end(JSON.stringify(payload));}
-function readJson(req){return new Promise((resolve,reject)=>{
+function readJson(req,maxBytes=8192){return new Promise((resolve,reject)=>{
   if(!/^application\/json(?:\s*;|$)/i.test(req.headers['content-type']||'')){reject(new HttpError(415,'Требуется application/json'));return;}
-  let total=0,parts=[];req.on('data',chunk=>{total+=chunk.length;if(total>8192){reject(new HttpError(413,'Слишком большой запрос'));req.destroy();return;}parts.push(chunk);});
+  let total=0,parts=[];req.on('data',chunk=>{total+=chunk.length;if(total>maxBytes){reject(new HttpError(413,'Слишком большой запрос'));parts=[];return;}parts.push(chunk);});
   req.on('end',()=>{try{const obj=JSON.parse(Buffer.concat(parts).toString('utf8'));if(!obj||typeof obj!=='object'||Array.isArray(obj))throw Error();resolve(obj);}catch{reject(new HttpError(400,'Некорректный JSON'));}});
   req.on('error',reject);
 });}
@@ -144,8 +146,11 @@ export function createIdentityServer({dbPath=resolve('cloud-identity/data/identi
       }
       if(!path.startsWith('/v1/auth/')&&!path.startsWith('/v1/teams'))bad(404,'Не найдено');
       const identity=getAuthorized(db,req.headers.authorization,now);
+      if(/^\/v1\/teams\/[0-9a-f-]{36}\/cloud\//.test(path)){
+        await handleCloudStorage({db,req,res,path,identity,now,cors,readJson,returnJson,bad,clock});return;
+      }
       if(path.startsWith('/v1/teams')){
-        await handleTeams({db,req,res,path,identity,now,cors,readJson,returnJson,bad});return;
+        await handleTeams({db,req,res,path,identity,now,cors,readJson,returnJson,bad,clock});return;
       }
       if(path==='/v1/auth/me'&&req.method==='GET'){
         db.prepare('UPDATE sessions SET last_seen_at=? WHERE id=?').run(now,identity.id);
