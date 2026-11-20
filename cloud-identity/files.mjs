@@ -131,7 +131,7 @@ export async function handleCloudFiles({db,req,res,path,identity,cors,readJson,r
   if(segment==='versions'){
    if(!/^\d+$/.test(segmentId)||Number(segmentId)>1000)bad(400,'Некорректная версия');
    item=one(db,'SELECT * FROM cloud_file_versions WHERE file_id=? AND version=?',id,Number(segmentId));
-   if(!item)bad(404,'Версия не найдена');
+   if(!item||item.visibility==='private'&&row.author_id!==actor)bad(404,'Версия не найдена');
   }
   const blob=one(db,'SELECT bytes,size,mime FROM cloud_file_blobs WHERE cloud_profile_id=? AND sha256=?',profileId,item.sha256);
   if(!blob||blob.size!==item.size||sha(blob.bytes)!==item.sha256)bad(500,'Нарушена целостность хранилища');
@@ -141,7 +141,7 @@ export async function handleCloudFiles({db,req,res,path,identity,cors,readJson,r
    'X-MT-Mime':item.mime,'X-MT-Sha256':item.sha256,'Access-Control-Expose-Headers':'X-MT-Mime,X-MT-Sha256,Content-Disposition','Content-Length':blob.size,
    'Content-Security-Policy':'sandbox','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'});res.end(blob.bytes);return;
  }
- if(segment==='versions'&&req.method==='GET'&&!segmentId){get();const versions=db.prepare('SELECT version,sha256,mime,size,name,title,note,visibility,actor_id,created_at FROM cloud_file_versions WHERE file_id=? ORDER BY version DESC LIMIT 100').all(id);
+ if(segment==='versions'&&req.method==='GET'&&!segmentId){const row=get();const versions=db.prepare("SELECT version,sha256,mime,size,name,title,note,visibility,actor_id,created_at FROM cloud_file_versions WHERE file_id=? AND (?=? OR visibility='team') ORDER BY version DESC LIMIT 100").all(id,actor,row.author_id);
   return send(200,{versions:versions.map(({actor_id,created_at,...r})=>({...r,actorId:actor_id,createdAt:iso(created_at)}))});}
  if(segment==='links'){
   if(req.method==='GET'&&!segmentId){get();return send(200,{links:db.prepare('SELECT id,target_type AS targetType,target_kind AS targetKind,target_id AS targetId,created_by AS createdBy,created_at AS createdAt FROM cloud_file_links WHERE file_id=? ORDER BY created_at,id LIMIT 100').all(id)});}

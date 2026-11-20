@@ -17,7 +17,35 @@ async function integrity(path){
   if(result.length!==1||result[0].integrity_check!=='ok')throw Error('SQLite integrity_check failed');
   if(db.prepare('PRAGMA foreign_key_check').all().length)throw Error('SQLite foreign_key_check failed');
   const tables=new Set(db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(r=>r.name));
-  if(CORE.some(x=>!tables.has(x)))throw Error('Backup lacks 2.3.9 schema');
+  if(CORE.some(x=>!tables.has(x)))throw Error('Backup lacks Team & Cloud schema');
+  // SQLite integrity_check validates pages, not content-addressed application
+  // invariants. Audit every binary payload before accepting a recovery image.
+  // iterate() avoids allocating the whole evidence vault in memory.
+  for(const blob of db.prepare('SELECT sha256,size,bytes FROM cloud_file_blobs').iterate()){
+   if(!(blob.bytes instanceof Uint8Array)||blob.bytes.length!==blob.size||createHash('sha256').update(blob.bytes).digest('hex')!==blob.sha256)
+    throw Error('Cloud Files content-addressed blob integrity failed');
+  }
+  if(db.prepare(`SELECT 1 FROM cloud_file_versions v JOIN cloud_files f ON f.id=v.file_id
+   LEFT JOIN cloud_file_blobs b ON b.cloud_profile_id=f.cloud_profile_id AND b.sha256=v.sha256
+   WHERE b.sha256 IS NULL OR b.size<>v.size OR b.mime<>v.mime LIMIT 1`).get())
+    throw Error('Cloud Files revision refers to a missing or inconsistent blob');
+  if(db.prepare(`SELECT 1 FROM cloud_files f LEFT JOIN cloud_file_blobs b
+    ON b.cloud_profile_id=f.cloud_profile_id AND b.sha256=f.sha256
+    WHERE b.sha256 IS NULL OR b.size<>f.size OR b.mime<>f.mime LIMIT 1`).get())
+    throw Error('Cloud Files current revision has no valid blob');
+  if(db.prepare(`SELECT 1 FROM cloud_files f LEFT JOIN cloud_file_versions v
+    ON v.file_id=f.id AND v.version=f.version
+    WHERE v.version IS NULL OR f.sha256<>v.sha256 OR f.mime<>v.mime
+      OR f.size<>v.size OR f.visibility<>v.visibility LIMIT 1`).get())
+    throw Error('Cloud Files current file metadata differs from its immutable revision');
+  if(tables.has('cloud_tactical_images')){
+   for(const image of db.prepare('SELECT sha256,size,data FROM cloud_tactical_images').iterate()){
+    if(!(image.data instanceof Uint8Array)||image.data.length!==image.size||createHash('sha256').update(image.data).digest('hex')!==image.sha256)
+     throw Error('Tactical map image integrity failed');
+   }
+  }
+  // Retain the v1 manifest checks object for backward compatibility with
+  // verified 2.3.9 backups. The stronger validation runs on old snapshots too.
   return {tables:tables.size,accounts:db.prepare('SELECT count(*) AS n FROM accounts').get().n,teams:db.prepare('SELECT count(*) AS n FROM teams').get().n,files:db.prepare('SELECT count(*) AS n FROM cloud_files').get().n};
  }finally{db.close();}
 }

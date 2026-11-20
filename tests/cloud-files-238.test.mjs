@@ -55,9 +55,11 @@ test('2.3.8 real binary upload and download: private visibility, explicit team s
  assert.equal((await f.json(root+'/'+id,o)).status,200);
  assert.equal((await f.json(root+'/'+id,v,'PATCH',{...meta('private'),baseVersion:2})).status,403);
  assert.equal((await f.json(root+'/'+id,o,'PATCH',{...meta('private'),baseVersion:1})).status,409);
- const r=await f.raw(root+'/'+id+'/versions/1',v);assert.equal(r.status,200);assert.equal(sha(Buffer.from(await r.arrayBuffer())),sha(content));
+ const r=await f.raw(root+'/'+id+'/versions/1',v);assert.equal(r.status,404,'sharing current revision must not reveal an earlier private revision');
+ assert.equal((await f.raw(root+'/'+id+'/versions/1',ed)).status,200,'owner retains private history');
  await f.restart();assert.equal((await f.json(root+'/'+id,v)).data.file.version,2);
- assert.equal((await f.json(root+'/'+id+'/versions',v)).data.versions.length,2);
+ assert.deepEqual((await f.json(root+'/'+id+'/versions',v)).data.versions.map(x=>x.version),[2]);
+ assert.deepEqual((await f.json(root+'/'+id+'/versions',ed)).data.versions.map(x=>x.version),[2,1]);
  assert.equal((await f.raw(root+'/'+id+'/content',v)).status,200);
  assert.equal((await f.json('/v1/auth/logout',ed,'POST',{})).status,200);
  assert.equal((await f.raw(root+'/'+id+'/content',ed)).status,401);

@@ -1,7 +1,7 @@
 {
   "name": "majestictoolkit",
   "private": true,
-  "version": "2.3.9",
+  "version": "2.4.0",
   "type": "module",
   "description": "Автономное браузерное расширение: форум, жалобы, экономика, Law Codex и Government Tools и Document Studio Google Workspace и Productivity & UX",
   "scripts": {
@@ -51,7 +51,8 @@
     "cloud:backup": "node cloud-identity/ops-cli.mjs backup",
     "cloud:verify-backup": "node cloud-identity/ops-cli.mjs verify",
     "cloud:restore": "node cloud-identity/ops-cli.mjs restore",
-    "cloud:load": "node scripts/cloud-load-239.mjs"
+    "cloud:load": "node scripts/cloud-load-239.mjs",
+    "test:cloud:ga": "node --test tests/cloud-ga-240.test.mjs"
   },
   "engines": {
     "node": ">=22 <23"

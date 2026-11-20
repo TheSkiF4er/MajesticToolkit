@@ -1,3 +1,11 @@
+# 2.4.0 — Team & Cloud GA (2026-11-20)
+
+- End-to-end production HTTP/SQLite acceptance: identity, team permissions, sync, Knowledge approval/publication, Cloud Files, audit, notification, revoked membership and session, verified restore.
+- Fixed historical private Cloud Files revisions becoming readable after a file is shared with the team. Author-only private revision metadata and bytes now remain private, even for team admins and owner.
+- Backups and restores validate evidence blob hashes/sizes, referenced immutable revisions, and tactical map images, in addition to whole-file SHA-256 and SQLite integrity/foreign keys.
+- Updated all extension manifests, browser packages, automated workflows and GA release runbook to 2.4.0.
+- Production qualification still requires external HTTPS deployment, independent security assessment and real-browser platform acceptance; see release notes.
+
 # 2.3.9 — Cloud Operations & Reliability (2026-11-20)
 
 - Durable team audit and recipient-scoped notification inbox backed by SQLite triggers; server-side permission checks and pagination.
