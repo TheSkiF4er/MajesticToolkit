@@ -1,3 +1,11 @@
+# 2.3.8 — Cloud Files & Evidence (2026-11-20)
+
+- Added SQLite-backed team file storage with SHA-256-verified binary upload/download, content-addressed blobs and bounded quota.
+- Added private-by-default evidence sharing, server-enforced account/team/profile RBAC and explicit local Evidence Vault transfer.
+- Added immutable content and metadata versions, CAS conflicts, history retrieval and transactional deletion with blob garbage collection.
+- Added validated attachments to published Knowledge Center entries and shared Tactical Workspace records.
+- Added Team & Cloud file UI, Chromium DOM coverage, HTTP/SQLite regression tests, and release notes.
+
 # 2.3.7 — Collaborative Tactical Workspace (2026-11-20)
 
 - Added a production SQLite-backed shared tactical workspace for map metadata and image bytes, plans, airdrop points/events, territories and territorial events.

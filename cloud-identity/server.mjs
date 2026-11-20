@@ -1,4 +1,4 @@
-/** MajesticToolkit 2.3.7: stateful cloud identity, teams, storage and shared knowledge.
+/** MajesticToolkit 2.3.8: stateful cloud identity, teams, shared knowledge and cloud files.
  * Production: direct TLS (CLOUD_TLS_CERT_FILE/CLOUD_TLS_KEY_FILE); no reverse-proxy trust.
  */
 import {createServer as createHttpServer} from 'node:http';
@@ -16,6 +16,7 @@ import {installCloudDirectories,handleCloudDirectories} from './directories.mjs'
 import {installSharedKnowledge,handleSharedKnowledge} from './knowledge.mjs';
 import {installKnowledgeCollections,handleKnowledgeCollections} from './knowledge-collections.mjs';
 import {installTactical,handleTactical} from './tactical.mjs';
+import {installCloudFiles,handleCloudFiles} from './files.mjs';
 const scrypt=promisify(scryptCallback);
 const TOKEN_BYTES=32, ACCESS_MS=15*60_000, REFRESH_MS=30*24*60*60_000;
 const encoder = value => createHash('sha256').update(value).digest();
@@ -60,6 +61,7 @@ function database(dbPath){
   installSharedKnowledge(db);
   installKnowledgeCollections(db);
   installTactical(db);
+  installCloudFiles(db);
   return db;
 }
 async function credentialHash(password,salt){return Buffer.from(await scrypt(password,salt,64,{N:32768,r:8,p:1,maxmem:64*1024*1024}));}
@@ -109,7 +111,7 @@ export function createIdentityServer({dbPath=resolve('cloud-identity/data/identi
       if(origin&&!Object.keys(cors).length)bad(403,'Источник запроса не разрешён');
       if(req.method==='OPTIONS'){
         if(!origin)bad(400,'Отсутствует Origin');
-        res.writeHead(204,{...cors,'Access-Control-Allow-Methods':'GET,POST,PATCH,DELETE,OPTIONS','Access-Control-Allow-Headers':'Authorization,Content-Type','Access-Control-Max-Age':'600','Cache-Control':'no-store'});res.end();return;
+        res.writeHead(204,{...cors,'Access-Control-Allow-Methods':'GET,POST,PATCH,DELETE,OPTIONS','Access-Control-Allow-Headers':'Authorization,Content-Type,X-MT-File-Meta,X-MT-Sha256,X-MT-Base-Version','Access-Control-Max-Age':'600','Cache-Control':'no-store'});res.end();return;
       }
       const path=new URL(req.url,'https://identity.internal').pathname;
       if(path==='/v1/health'&&req.method==='GET'){returnJson(res,200,{ok:true,service:'MajesticToolkit Cloud Identity'},cors);return;}
@@ -156,6 +158,9 @@ export function createIdentityServer({dbPath=resolve('cloud-identity/data/identi
       }
       if(!path.startsWith('/v1/auth/')&&!path.startsWith('/v1/teams'))bad(404,'Не найдено');
       const identity=getAuthorized(db,req.headers.authorization,now);
+      if(/^\/v1\/teams\/[0-9a-f-]{36}\/cloud\/profiles\/[0-9a-f-]{36}\/files(?:\/|$)/.test(path)){
+        await handleCloudFiles({db,req,res,path,identity,now,cors,readJson,returnJson,bad,clock});return;
+      }
       if(/^\/v1\/teams\/[0-9a-f-]{36}\/cloud\/profiles\/[0-9a-f-]{36}\/tactical(?:\/|$)/.test(path)){
         await handleTactical({db,req,res,path,identity,now,cors,readJson,returnJson,bad,clock});return;
       }

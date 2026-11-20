@@ -61,6 +61,38 @@ export function createCloudIdentityService({storage,permissions,fetchImpl=fetch,
       access=null;session=await refreshActive();return perform(session.token);
     }
   }
+  /** Stream binary evidence through the privileged background only; never expose bearer
+   * credentials to extension pages. We also verify downloaded SHA-256 before local import. */
+  async function fileBinary(path,{method='GET',blob=null,meta=null,baseVersion=null,sha256=null}={}){
+    let session=await refreshActive();if(!session)throw Error('Войдите в облачный аккаунт');
+    const transfer=async token=>{
+      await checked(session.origin);
+      const headers={Authorization:'Bearer '+token};
+      if(blob){
+        headers['Content-Type']=blob.type;
+        headers['X-MT-Sha256']=sha256;
+        headers['X-MT-File-Meta']=btoa(String.fromCharCode(...new TextEncoder().encode(JSON.stringify(meta)))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+        if(baseVersion!==null)headers['X-MT-Base-Version']=String(baseVersion);
+      }
+      let response;
+      try{response=await fetchImpl(session.origin+path,{method,headers,body:blob||undefined,cache:'no-store',credentials:'omit',redirect:'error',signal:AbortSignal.timeout(120000)});}
+      catch{throw Error('Не удалось передать файл: сервер недоступен');}
+      if(!response.ok){let err;try{err=(await response.json()).error;}catch{}const error=new Error(err||'Ошибка файлового хранилища: '+response.status);error.status=response.status;throw error;}
+      if(method!=='GET')return response.json();
+      const limit=32*1024*1024;
+      if(Number(response.headers.get('content-length'))>limit)throw Error('Файл превышает лимит 32 МиБ');
+      if(!response.body?.getReader)throw Error('Сервер не вернул поток файла');
+      const parts=[];let size=0;const reader=response.body.getReader();
+      try{for(;;){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>limit){await reader.cancel();throw Error('Файл превышает лимит 32 МиБ');}parts.push(value);}}finally{reader.releaseLock();}
+      const bytes=new Uint8Array(size);let offset=0;for(const part of parts){bytes.set(part,offset);offset+=part.length;}
+      const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),x=>x.toString(16).padStart(2,'0')).join('');
+      const expected=response.headers.get('x-mt-sha256');
+      if(expected!==hash)throw Error('SHA-256 скачанного файла не совпадает');
+      const mime=response.headers.get('x-mt-mime');
+      return {bytes,mime,sha256:hash};
+    };
+    try{return await transfer(session.token);}catch(error){if(error.status!==401)throw error;access=null;session=await refreshActive();return transfer(session.token);}
+  }
   async function accept(origin,credentials){
     if(!credentials?.account?.id||!credentials?.account?.username||!credentials?.sessionId||!credentials?.accessToken||!credentials?.refreshToken||!Number.isFinite(Date.parse(credentials.accessExpiresAt)))throw Error('Сервер вернул неполную сессию');
     const record={origin,account:credentials.account,sessionId:credentials.sessionId,refreshToken:credentials.refreshToken};
@@ -187,6 +219,63 @@ export function createCloudIdentityService({storage,permissions,fetchImpl=fetch,
     }
     if(action==='cloudProfiles')return authed(cloudPath());
     if(action==='cloudProfileCreate')return authed(cloudPath(),{method:'POST',body:{name:input.name,project:input.project,server:input.server}});
+    if(action.startsWith('file')){
+      const root=cloudProfilePath()+'/files';
+      const fileId=input.fileId;
+      const filePath=()=>{if(!uuid(fileId))throw Error('Некорректный идентификатор файла');return root+'/'+fileId;};
+      const bound=async()=>{
+        const live=await execute('cloudBindings',{teamId});
+        const local=(await read('rpNexusStateV1'))?.profiles?.find(p=>p.id===input.localProfileId);
+        const remote=live.profiles.find(p=>p.id===input.cloudProfileId);
+        if(!local||!remote||live.bindings[local.id]!==remote.id||local.project!==remote.project||local.server!==remote.server)throw Error('Требуется привязанный локальный RP-профиль');
+      };
+      if(action==='fileList'){
+        if(input.after&&!uuid(input.after))throw Error('Неверный курсор');
+        return authed(root+'?'+new URLSearchParams({after:input.after||''}));
+      }
+      if(action==='fileGet')return authed(filePath());
+      if(action==='fileVersions')return authed(filePath()+'/versions');
+      if(action==='fileLinks')return authed(filePath()+'/links');
+      if(action==='fileLocalChoices'){
+        await bound();const {listVault}=await import('./evidence-vault.mjs');
+        return {choices:(await listVault(input.localProfileId)).filter(x=>x.kind==='file')};
+      }
+      if(action==='fileUpload'||action==='fileUpdateContent'){
+        await bound();const {verifyVaultFile}=await import('./evidence-vault.mjs');
+        const {meta,blob}=await verifyVaultFile(input.vaultId,input.localProfileId);
+        const visibility=input.visibility==='team'?'team':'private';
+        const fileMeta={name:meta.name,title:input.title??meta.title,note:input.note??meta.note,visibility};
+        if(action==='fileUpdateContent'){
+          if(!Number.isSafeInteger(input.baseVersion)||input.baseVersion<1)throw Error('Неверная версия файла');
+          return fileBinary(filePath()+'/versions',{method:'PUT',blob,meta:fileMeta,baseVersion:input.baseVersion,sha256:meta.sha256});
+        }
+        return fileBinary(root,{method:'POST',blob,meta:fileMeta,sha256:meta.sha256});
+      }
+      if(action==='fileImportLocal'){
+        await bound();
+        const row=(await authed(filePath())).file;
+        const ver=input.version;
+        if(ver!==undefined&&(!Number.isSafeInteger(ver)||ver<1||ver>100))throw Error('Неверная версия файла');
+        const versions=ver?(await authed(filePath()+'/versions')).versions:null;
+        const selected=ver?versions?.find(v=>v.version===ver):row;
+        if(!selected)throw Error('Версия не найдена');
+        const bin=await fileBinary(filePath()+(ver?'/versions/'+ver:'/content'));
+        if(bin.sha256!==selected.sha256||bin.mime!==selected.mime||bin.bytes.byteLength!==selected.size)throw Error('Метаданные облачного файла не совпадают с содержимым');
+        const {addVaultFile,validateFileSignature}=await import('./evidence-vault.mjs');
+        validateFileSignature(bin.bytes.slice(0,64),bin.mime);
+        const file=new Blob([bin.bytes],{type:bin.mime});file.name=selected.name;
+        const added=await addVaultFile(input.localProfileId,file,{title:selected.title,note:selected.note});
+        return {imported:true,record:added};
+      }
+      if(action==='fileMeta')return authed(filePath(),{method:'PATCH',body:{baseVersion:input.baseVersion,name:input.name,title:input.title,note:input.note,visibility:input.visibility}});
+      if(action==='fileDelete')return authed(filePath(),{method:'DELETE',body:{baseVersion:input.baseVersion}});
+      if(action==='fileLinkCreate')return authed(filePath()+'/links',{method:'POST',body:{targetType:input.targetType,targetKind:input.targetKind,targetId:input.targetId}});
+      if(action==='fileLinkDelete'){
+        if(!uuid(input.linkId))throw Error('Некорректная ссылка вложения');
+        return authed(filePath()+'/links/'+input.linkId,{method:'DELETE',body:{}});
+      }
+      throw Error('Неизвестная файловая операция');
+    }
     if(action.startsWith('knowledge')){
       const root=cloudProfilePath()+'/knowledge';
       const itemId=input.itemId;
