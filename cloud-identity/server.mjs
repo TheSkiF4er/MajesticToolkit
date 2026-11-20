@@ -1,4 +1,4 @@
-/** MajesticToolkit 2.3.2: standalone, stateful cloud identity service.
+/** MajesticToolkit 2.3.6: stateful cloud identity, teams, storage and shared knowledge.
  * Production: direct TLS (CLOUD_TLS_CERT_FILE/CLOUD_TLS_KEY_FILE); no reverse-proxy trust.
  */
 import {createServer as createHttpServer} from 'node:http';
@@ -13,6 +13,8 @@ import {installTeams,handleTeams} from './teams.mjs';
 import {installCloudStorage,handleCloudStorage} from './storage.mjs';
 import {installCloudSync,handleCloudSync} from './sync.mjs';
 import {installCloudDirectories,handleCloudDirectories} from './directories.mjs';
+import {installSharedKnowledge,handleSharedKnowledge} from './knowledge.mjs';
+import {installKnowledgeCollections,handleKnowledgeCollections} from './knowledge-collections.mjs';
 const scrypt=promisify(scryptCallback);
 const TOKEN_BYTES=32, ACCESS_MS=15*60_000, REFRESH_MS=30*24*60*60_000;
 const encoder = value => createHash('sha256').update(value).digest();
@@ -54,6 +56,8 @@ function database(dbPath){
   installCloudStorage(db);
   installCloudSync(db);
   installCloudDirectories(db);
+  installSharedKnowledge(db);
+  installKnowledgeCollections(db);
   return db;
 }
 async function credentialHash(password,salt){return Buffer.from(await scrypt(password,salt,64,{N:32768,r:8,p:1,maxmem:64*1024*1024}));}
@@ -150,6 +154,12 @@ export function createIdentityServer({dbPath=resolve('cloud-identity/data/identi
       }
       if(!path.startsWith('/v1/auth/')&&!path.startsWith('/v1/teams'))bad(404,'Не найдено');
       const identity=getAuthorized(db,req.headers.authorization,now);
+      if(/^\/v1\/teams\/[0-9a-f-]{36}\/cloud\/profiles\/[0-9a-f-]{36}\/knowledge\/collections(?:\/|$)/.test(path)){
+        await handleKnowledgeCollections({db,req,res,path,identity,now,cors,readJson,returnJson,bad,clock});return;
+      }
+      if(/^\/v1\/teams\/[0-9a-f-]{36}\/cloud\/profiles\/[0-9a-f-]{36}\/knowledge(?:\/|$)/.test(path)){
+        await handleSharedKnowledge({db,req,res,path,identity,now,cors,readJson,returnJson,bad,clock});return;
+      }
       if(/^\/v1\/teams\/[0-9a-f-]{36}\/cloud\/profiles\/[0-9a-f-]{36}\/directory$/.test(path)){
         await handleCloudDirectories({db,req,res,path,identity,now,cors,returnJson,bad,clock});return;
       }

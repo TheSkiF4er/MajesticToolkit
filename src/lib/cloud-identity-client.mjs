@@ -1,5 +1,6 @@
 /** Cloud Identity 2.3.3: privileged background-only credential store + authenticated requests. */
 import {createCloudSyncController} from './cloud-sync-client.mjs';
+import {sharedSourceSnapshot,sharedSourceStorageKey} from './shared-knowledge-source.mjs';
 export const CLOUD_CONFIG_KEY='mtCloudIdentityConfigV231';
 export const CLOUD_SESSION_KEY='mtCloudIdentitySessionV231';
 export const CLOUD_BINDINGS_KEY='mtCloudProfileBindingsV233';
@@ -163,6 +164,50 @@ export function createCloudIdentityService({storage,permissions,fetchImpl=fetch,
     }
     if(action==='cloudProfiles')return authed(cloudPath());
     if(action==='cloudProfileCreate')return authed(cloudPath(),{method:'POST',body:{name:input.name,project:input.project,server:input.server}});
+    if(action.startsWith('knowledge')){
+      const root=cloudProfilePath()+'/knowledge';
+      const itemId=input.itemId;
+      const itemPath=()=>{if(!uuid(itemId))throw Error('Некорректный идентификатор материала');return root+'/'+itemId;};
+      if(action.startsWith('knowledgeCollection')){
+        const collectionRoot=root+'/collections';
+        const collectionPath=()=>{if(!uuid(input.collectionId))throw Error('Некорректная коллекция');return collectionRoot+'/'+input.collectionId;};
+        if(action==='knowledgeCollections')return authed(collectionRoot);
+        if(action==='knowledgeCollectionCreate')return authed(collectionRoot,{method:'POST',body:{title:input.title,notes:input.notes}});
+        if(action==='knowledgeCollectionGet')return authed(collectionPath());
+        if(action==='knowledgeCollectionUpdate')return authed(collectionPath(),{method:'PATCH',body:{title:input.title,notes:input.notes,baseVersion:input.baseVersion}});
+        if(action==='knowledgeCollectionDelete')return authed(collectionPath(),{method:'DELETE',body:{baseVersion:input.baseVersion}});
+        if(action==='knowledgeCollectionAdd')return authed(collectionPath()+'/items',{method:'POST',body:{itemId:input.itemId,baseVersion:input.baseVersion}});
+        if(action==='knowledgeCollectionRemove'){
+          if(!uuid(input.itemId))throw Error('Некорректный материал');
+          return authed(collectionPath()+'/items/'+input.itemId,{method:'DELETE',body:{baseVersion:input.baseVersion}});
+        }
+        throw Error('Неизвестная операция коллекции');
+      }
+      if(action==='knowledgeList'){
+        if(input.kind&&!['note','law','forum-template','government-template','document-template'].includes(input.kind)||typeof (input.q??'')!=='string'||(input.q??'').length>80||typeof (input.after??'')!=='string'||(input.after??'').length>40||!['all','published','review'].includes(input.scope||'all'))throw Error('Некорректный фильтр материалов');
+        return authed(root+'?'+new URLSearchParams({kind:input.kind??'',q:input.q??'',after:input.after??'',scope:input.scope??'all'}));
+      }
+      if(action==='knowledgeGet')return authed(itemPath());
+      if(action==='knowledgeHistory')return authed(itemPath()+'/revisions');
+      if(action==='knowledgeEvents')return authed(itemPath()+'/events');
+      if(action==='knowledgeImport'){
+        const localId=input.localProfileId;
+        const live=await execute('cloudBindings',{teamId});
+        if(typeof localId!=='string'||live.bindings[localId]!==input.cloudProfileId)throw Error('Локальный RP-профиль не привязан к выбранному облачному');
+        const key=sharedSourceStorageKey(input.sourceKind,input.sourceId);
+        const raw=await read(key);
+        if(!raw)throw Error('Локальная запись не найдена');
+        const snapshot=sharedSourceSnapshot(input.sourceKind,raw,localId);
+        return authed(root,{method:'POST',body:snapshot});
+      }
+      if(action==='knowledgeCreate')return authed(root,{method:'POST',body:{kind:input.kind,title:input.title,category:input.category,body:input.body}});
+      if(action==='knowledgeEdit')return authed(itemPath(),{method:'PATCH',body:{baseRevision:input.baseRevision,title:input.title,category:input.category,body:input.body}});
+      if(['knowledgeSubmit','knowledgeReview','knowledgePublish','knowledgeRestore','knowledgeArchive'].includes(action)){
+        const operation={knowledgeSubmit:'submit',knowledgeReview:'review',knowledgePublish:'publish',knowledgeRestore:'restore',knowledgeArchive:'archive'}[action];
+        return authed(itemPath()+'/'+operation,{method:'POST',body:{baseRevision:input.baseRevision,decision:input.decision,note:input.note,targetRevision:input.targetRevision}});
+      }
+      throw Error('Неизвестная операция с общим материалом');
+    }
     if(action==='cloudDirectory'){
       const allowed=['family','organization','participant','asset','product'];
       if(!allowed.includes(input.kind)||typeof (input.q??'')!=='string'||(input.q??'').length>80||typeof (input.after??'')!=='string'||(input.after??'').length>128)throw Error('Некорректные параметры общего справочника');
