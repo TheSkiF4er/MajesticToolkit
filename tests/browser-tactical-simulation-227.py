@@ -122,8 +122,9 @@ async def economy_browser_smoke(browser):
     assert len(exported['state']['squads'][0]['participants'])==2
     page.once('dialog',lambda dialog: asyncio.create_task(dialog.accept()))
     await board.locator('[data-plan-action="fork"]').click()
-    await expect(board).to_contain_text('вариант')
-    assert await board.locator('[data-plan-action="select"]').count()==2
+    # Forking persists asynchronously; wait for the second rendered plan, not
+    # just for the static 'Создать вариант' button already present on the page.
+    await expect(board.locator('[data-plan-action="select"]')).to_have_count(2, timeout=10000)
     # Tactical Simulation 2.2.7 — real user flow on saved alternative plans.
     await page.locator('#tactical-workspace [data-tactical-action="tab"][data-tab="simulations"]').click()
     sim=page.locator('#tactical-simulation-root')
