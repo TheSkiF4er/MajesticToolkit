@@ -1,6 +1,9 @@
 name: Publish MajesticToolkit v2.4.0
 
 on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/publish-release-2.4.0.yml']
   workflow_run:
     workflows: ["Verify MajesticToolkit"]
     types: [completed]
@@ -17,17 +20,19 @@ concurrency:
 jobs:
   publish:
     if: >-
-      github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'push' &&
-      github.event.workflow_run.head_branch == 'main' &&
-      github.event.workflow_run.head_repository.full_name == github.repository
+      github.event_name == 'push' ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - name: Checkout exactly the verified commit
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.event_name == 'push' && 'e7ad133e7dfd017c9931ecf00435f9719b8cf513' || github.event.workflow_run.head_sha }}
           persist-credentials: false
 
       - name: Check release version and notes
@@ -38,8 +43,8 @@ jobs:
       - name: Download artifacts from the successful CI run
         uses: actions/download-artifact@v4
         with:
-          name: MajesticToolkit-2.4.0-verified-${{ github.event.workflow_run.id }}
-          run-id: ${{ github.event.workflow_run.id }}
+          name: MajesticToolkit-2.4.0-verified-${{ github.event_name == 'push' && 44719663682 || github.event.workflow_run.id }}
+          run-id: ${{ github.event_name == 'push' && 44719663682 || github.event.workflow_run.id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path: release
 
@@ -78,7 +83,7 @@ jobs:
       - name: Publish GitHub Release v2.4.0
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERIFIED_SHA: ${{ github.event.workflow_run.head_sha }}
+          VERIFIED_SHA: ${{ github.event_name == 'push' && 'e7ad133e7dfd017c9931ecf00435f9719b8cf513' || github.event.workflow_run.head_sha }}
         run: |
           if gh release view v2.4.0 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "::notice::v2.4.0 is already published; refusing to replace release assets"
