@@ -38,6 +38,9 @@ export const rollbackVaultPackage=async()=>{};
     html=(ROOT/'src/ui/workspace.html').read_text().replace('<link rel="stylesheet" href="styles.css">','').replace('<script type="module" src="main.mjs"></script>','')
     html=html.replace('</head>','<script type="importmap">'+json.dumps({'imports':modules})+'</script></head>')
     await page.set_content(html)
+    # about:blank has no native IndexedDB; use only a platform adapter here.
+    # Native IndexedDB is covered by browser-tactical-ga-230.py.
+    await page.evaluate((ROOT/'tests/browser-idb-fixture.js').read_text())
     await page.add_style_tag(content=(ROOT/'src/ui/styles.css').read_text())
     await page.expose_function('__sha256',lambda data:list(hashlib.sha256(bytes(data)).digest()))
     await page.evaluate('''() => {
@@ -99,9 +102,9 @@ export const rollbackVaultPackage=async()=>{};
     async with page.expect_download(timeout=20000) as dl:
         await page.locator('[data-action="export"]').click()
     filename=(await dl.value).suggested_filename
-    assert '2.2.0' in filename,filename
+    assert '2.4.0' in filename,filename
     data=json.loads(Path(await (await dl.value).path()).read_text(encoding='utf8'))
-    assert data['schemaVersion']==20 and len(data['marketplace'])==2
+    assert data['schemaVersion']==21 and len(data['marketplace'])==2
     assert not errors,errors
     await context.close()
     return 1

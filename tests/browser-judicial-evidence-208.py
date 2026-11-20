@@ -148,14 +148,14 @@ async def judicial_browser_smoke(browser):
     await page.locator('.justice-workspace [data-justice-action=open][data-kind=case]').first.click()
     await page.locator('.court-case-detail').wait_for()
     assert await page.locator('.court-case-detail').get_by_text('QA-208',exact=False).count()>0
-    # Export goes through the full v19 serializer, validates court links and returns actual JSON.
+    # Export uses the current v21 serializer and preserves historical judicial links and files.
     await page.locator('.nav [data-view=backup]').click()
     import json
     async with page.expect_download(timeout=20000) as exported:
         await page.locator('[data-action=export]').click()
     artifact=await exported.value
     backup=json.loads(Path(await artifact.path()).read_text())
-    assert backup['schemaVersion']==19 and any(x.get('number')=='QA-208' for x in backup['government'])
+    assert backup['schemaVersion']==21 and any(x.get('number')=='QA-208' for x in backup['government'])
     assert len(backup['evidenceVault'])>=2
     # The portable backup contains real Vault bytes and verifies them on roundtrip.
     async with page.expect_download(timeout=20000) as portable:

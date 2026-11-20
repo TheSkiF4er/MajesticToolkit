@@ -38,6 +38,9 @@ export const rollbackVaultPackage=async()=>{};
     html=(ROOT/'src/ui/workspace.html').read_text().replace('<link rel="stylesheet" href="styles.css">','').replace('<script type="module" src="main.mjs"></script>','')
     html=html.replace('</head>','<script type="importmap">'+json.dumps({'imports':modules})+'</script></head>')
     await page.set_content(html)
+    # about:blank has no native IndexedDB; use only a platform adapter here.
+    # Native IndexedDB is covered by browser-tactical-ga-230.py.
+    await page.evaluate((ROOT/'tests/browser-idb-fixture.js').read_text())
     await page.add_style_tag(content=(ROOT/'src/ui/styles.css').read_text())
     await page.expose_function('__sha256',lambda data:list(hashlib.sha256(bytes(data)).digest()))
     await page.evaluate('''() => {
@@ -104,13 +107,13 @@ export const rollbackVaultPackage=async()=>{};
         await page.locator('[data-action=export]').click()
     backup_text=Path(await (await download.value).path()).read_text(encoding='utf8')
     restored=json.loads(backup_text)
-    assert restored['schemaVersion']==20 and len(restored['economyLinks'])==1
+    assert restored['schemaVersion']==21 and len(restored['economyLinks'])==1
     assert len(restored['marketplace'])==3 and len(restored['evidenceVault'])==1
     await page.evaluate('''async(text)=>{
-      const {parseBackupV20}=await import('mt:lib/economy-backup-v20.mjs');
+      const {parseBackupV21}=await import('mt:lib/tactical-backup-v21.mjs');
       const {validateState}=await import('mt:lib/model.mjs');
-      const back=await parseBackupV20(text,validateState,globalThis.RPNForumCore.cleanTemplate);
-      if(back.economyLinks.length!==1||back.schemaVersion!==20)throw Error('Backup v20 failed round trip');
+      const back=await parseBackupV21(text,validateState,globalThis.RPNForumCore.cleanTemplate);
+      if(back.economyLinks.length!==1||back.schemaVersion!==21)throw Error('Backup v21 failed round trip');
     }''',backup_text)
     await page.locator('[data-view=economy]').first.click()
     await page.locator('[data-economy-action=tab][data-tab=exchange]').click()

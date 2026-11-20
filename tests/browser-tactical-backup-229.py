@@ -114,7 +114,7 @@ async def economy_browser_smoke(browser):
     async with page.expect_download(timeout=30000) as task:
         await page.locator('[data-action="backup-portable-export"]').click()
     download=await task.value
-    assert 'v2.3.0' in download.suggested_filename
+    assert 'v2.4.0' in download.suggested_filename
     payload=(await download.path()).read_bytes()
     assert len(payload)>1000
     # Restore into a profile without tactical data; do not delete old UI state or old economic data.
