@@ -559,14 +559,17 @@ async def experience_workspace(browser):
       if(!crypto.randomUUID)crypto.randomUUID=()=>Array.from(crypto.getRandomValues(new Uint8Array(16)),x=>x.toString(16).padStart(2,'0')).join('');
       if(!crypto.subtle)Object.defineProperty(crypto,'subtle',{value:{async digest(algorithm,bytes){if(algorithm!=='SHA-256')throw Error('Unexpected algorithm');return Uint8Array.from(await window.__fixtureSha256(Array.from(new Uint8Array(bytes)))).buffer;}}});
     }'''
-    async def boot(page,seed=None,route='about:blank'):
-        # about:blank is not a secure extension origin; use actual SHA-256 through the test host.
+    async def boot(page,seed=None,route=None):
+        # Use an intercepted localhost document rather than an opaque about:blank origin.
+        # Firefox forbids history.replaceState on about:blank, and the real workspace
+        # uses history/hash routing. Localhost is a secure context in both browsers.
+        fixture_url='http://localhost:8765/__mt_workspace_fixture__'
         import hashlib
         await page.expose_function('__fixtureSha256',lambda data:list(hashlib.sha256(bytes(data)).digest()))
-        await page.set_content(html)
+        await page.route(fixture_url+'*',lambda request:request.fulfill(status=200,content_type='text/html',body=html))
+        await page.goto(route or fixture_url,wait_until='domcontentloaded')
         await page.add_style_tag(content=(ROOT/'src/ui/styles.css').read_text())
         await page.evaluate(mock,seed)
-        await page.evaluate('route=>history.replaceState(null,"",route)',route)
         await page.evaluate("import('mt:ui/main.mjs')")
     await boot(page)
     # Isolated real-browser AI workflow is exercised in ai_browser_191.py.
