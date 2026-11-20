@@ -3,6 +3,8 @@
  */
 import {randomUUID,createHash} from 'node:crypto';
 import {logCloudImport} from './sync.mjs';
+import {projectCloudRecord} from './directories.mjs';
+import {cleanMarketRecord,validateMarketplace} from '../src/lib/marketplace-core.mjs';
 import {cleanFamily,validateFamilies} from '../src/lib/family-core.mjs';
 import {cleanOrganization,validateOrganizations} from '../src/lib/organization-core.mjs';
 
@@ -10,7 +12,7 @@ const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const ENTRY_ID=/^[\w-]{8,120}$/;
 const PROJECTS=new Set(['majestic','russia-online','other']);
 const ROLE_ORDER=['viewer','editor','admin','owner'];
-const KINDS={family:{clean:cleanFamily,validate:validateFamilies},organization:{clean:cleanOrganization,validate:validateOrganizations}};
+const KINDS={family:{clean:cleanFamily,validate:validateFamilies},organization:{clean:cleanOrganization,validate:validateOrganizations},product:{clean:cleanMarketRecord,validate:validateMarketplace}};
 const iso=n=>new Date(n).toISOString();
 const stmt=(db,sql,...args)=>db.prepare(sql).get(...args);
 function atomic(db,fn){db.exec('BEGIN IMMEDIATE');try{const result=fn();db.exec('COMMIT');return result;}catch(e){if(db.isTransaction)db.exec('ROLLBACK');throw e;}}
@@ -20,7 +22,30 @@ function validateProfile(body,bad){
   if(typeof name!=='string'||name.trim().length<2||name.trim().length>64||/[\x00-\x1f\x7f<>]/.test(name)||!PROJECTS.has(project)||typeof server!=='string'||server.trim().length<1||server.trim().length>70||/[\x00-\x1f\x7f<>]/.test(server))bad(400,'Некорректные название, проект или сервер RP-профиля');
   return {name:name.trim(),project,server:server.trim()};
 }
-export function installCloudStorage(db){db.exec(`
+export function installCloudStorage(db){
+ // SQLite cannot widen CHECK constraints in-place. Rebuild the table while
+ // preserving tombstones, versions and all 2.3.3/2.3.4 records.
+ const schema=db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='cloud_records'").get()?.sql||'';
+ if(schema&&!schema.includes("'product'")){
+   db.exec('BEGIN IMMEDIATE');
+   try{
+     db.exec(`CREATE TABLE cloud_records_v235(
+       cloud_profile_id TEXT NOT NULL REFERENCES cloud_profiles(id) ON DELETE CASCADE,
+       kind TEXT NOT NULL CHECK(kind IN ('family','organization','product')),
+       record_id TEXT NOT NULL,payload TEXT NOT NULL,checksum TEXT NOT NULL,
+       version INTEGER NOT NULL DEFAULT 1,created_at INTEGER NOT NULL,
+       imported_by TEXT NOT NULL REFERENCES accounts(id),deleted_at INTEGER,
+       PRIMARY KEY(cloud_profile_id,kind,record_id)
+     );`);
+     const deleted=db.prepare('PRAGMA table_info(cloud_records)').all().some(col=>col.name==='deleted_at');
+     db.exec(`INSERT INTO cloud_records_v235(cloud_profile_id,kind,record_id,payload,checksum,version,created_at,imported_by,deleted_at)
+       SELECT cloud_profile_id,kind,record_id,payload,checksum,version,created_at,imported_by,${deleted?'deleted_at':'NULL'} FROM cloud_records;
+       DROP TABLE cloud_records;
+       ALTER TABLE cloud_records_v235 RENAME TO cloud_records;`);
+     db.exec('COMMIT');
+   }catch(error){if(db.isTransaction)db.exec('ROLLBACK');throw error;}
+ }
+ db.exec(`
  CREATE TABLE IF NOT EXISTS cloud_profiles(
   id TEXT PRIMARY KEY,team_id TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
   name TEXT NOT NULL COLLATE NOCASE,project TEXT NOT NULL,server TEXT NOT NULL,
@@ -30,7 +55,7 @@ export function installCloudStorage(db){db.exec(`
  CREATE INDEX IF NOT EXISTS cloud_profiles_team ON cloud_profiles(team_id);
  CREATE TABLE IF NOT EXISTS cloud_records(
   cloud_profile_id TEXT NOT NULL REFERENCES cloud_profiles(id) ON DELETE CASCADE,
-  kind TEXT NOT NULL CHECK(kind IN ('family','organization')),
+  kind TEXT NOT NULL CHECK(kind IN ('family','organization','product')),
   record_id TEXT NOT NULL,payload TEXT NOT NULL,checksum TEXT NOT NULL,
   version INTEGER NOT NULL DEFAULT 1,created_at INTEGER NOT NULL,
   imported_by TEXT NOT NULL REFERENCES accounts(id),
@@ -85,7 +110,7 @@ export async function handleCloudStorage({db,req,res,path,identity,now,cors,read
   if(req.method==='GET'){
     const url=new URL(req.url,'https://identity.internal');
     const kind=url.searchParams.get('kind');if(kind!==null&&!Object.hasOwn(KINDS,kind))bad(400,'Неизвестный тип данных');
-    const after=url.searchParams.get('after')||'';if(after&&!(kind?ENTRY_ID.test(after):/^(?:family|organization):[\w-]{8,120}$/.test(after)))bad(400,'Некорректный курсор');
+    const after=url.searchParams.get('after')||'';if(after&&!(kind?ENTRY_ID.test(after):/^(?:family|organization|product):[\w-]{8,120}$/.test(after)))bad(400,'Некорректный курсор');
     if([...url.searchParams.keys()].some(x=>!['kind','after'].includes(x)))bad(400,'Неизвестный параметр');
     const rows=kind?db.prepare('SELECT kind,record_id,payload,checksum,version,created_at FROM cloud_records WHERE cloud_profile_id=? AND deleted_at IS NULL AND kind=? AND record_id>? ORDER BY record_id LIMIT 21').all(profileId,kind,after):db.prepare(`SELECT kind,record_id,payload,checksum,version,created_at FROM cloud_records WHERE cloud_profile_id=? AND deleted_at IS NULL AND (kind||':'||record_id)>? ORDER BY kind,record_id LIMIT 21`).all(profileId,after);
     const result=rows.slice(0,20);
@@ -107,6 +132,7 @@ export async function handleCloudStorage({db,req,res,path,identity,now,cors,read
     catch{bad(400,'Некорректная запись '+item.kind+' / '+String(item.record.id).slice(0,60));}
     const payload=JSON.stringify(normalized);
     if(Buffer.byteLength(payload,'utf8')>160*1024)bad(413,'Запись превышает 160 КБ');
+    if(item.kind==='product'&&normalized.type!=='product')bad(400,'Импортируются только товары каталога');
     parsed.push({kind:item.kind,id:normalized.id,payload,checksum:createHash('sha256').update(payload).digest('hex')});
   }
   const result=atomic(db,()=>{
@@ -116,9 +142,17 @@ export async function handleCloudStorage({db,req,res,path,identity,now,cors,read
     for(const item of parsed){
       const old=stmt(db,'SELECT checksum,deleted_at FROM cloud_records WHERE cloud_profile_id=? AND kind=? AND record_id=?',profileId,item.kind,item.id);
       if(old){if(old.deleted_at!==null||old.checksum!==item.checksum)bad(409,`Конфликт существующей облачной записи: ${item.kind} / ${item.id}`);unchanged++;continue;}
+      if(item.kind==='product'){
+        const current=JSON.parse(item.payload);
+        const others=db.prepare(`SELECT payload FROM cloud_records WHERE cloud_profile_id=? AND kind='product' AND deleted_at IS NULL`).all(profileId);
+        const newProducts=parsed.filter(r=>r.kind==='product'&&r.id!==item.id).map(r=>JSON.parse(r.payload));
+        const collides=p=>p.id!==current.id&&p.category===current.category&&p.name.toLocaleLowerCase('ru-RU')===current.name.toLocaleLowerCase('ru-RU')&&p.variant.toLocaleLowerCase('ru-RU')===current.variant.toLocaleLowerCase('ru-RU');
+        if([...others.map(r=>JSON.parse(r.payload)),...newProducts].some(collides))bad(409,'Товар с таким названием, категорией и вариантом уже существует');
+      }
       if(size+imported>=10_000)bad(409,'Достигнут лимит облачного RP-профиля');
       db.prepare('INSERT INTO cloud_records(cloud_profile_id,kind,record_id,payload,checksum,created_at,imported_by) VALUES(?,?,?,?,?,?,?)').run(profileId,item.kind,item.id,item.payload,item.checksum,now,accountId);
-      logCloudImport(db,{profileId,kind:item.kind,id:item.id,payload:item.payload,checksum:item.checksum,accountId,now});imported++;
+      logCloudImport(db,{profileId,kind:item.kind,id:item.id,payload:item.payload,checksum:item.checksum,accountId,now});
+      projectCloudRecord(db,{profileId,kind:item.kind,id:item.id,payload:item.payload});imported++;
     }
     if(imported)db.prepare('INSERT INTO team_activity(id,team_id,actor_id,action,subject_id,occurred_at) VALUES(?,?,?,?,?,?)').run(randomUUID(),teamId,accountId,'cloud.records_imported',profileId,now);
     return {imported,unchanged,total:parsed.length};

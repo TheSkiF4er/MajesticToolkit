@@ -2,8 +2,10 @@
 import {randomUUID,createHash} from 'node:crypto';
 import {cleanFamily,validateFamilies} from '../src/lib/family-core.mjs';
 import {cleanOrganization,validateOrganizations} from '../src/lib/organization-core.mjs';
+import {cleanMarketRecord,validateMarketplace} from '../src/lib/marketplace-core.mjs';
+import {projectCloudRecord} from './directories.mjs';
 const UUID=/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
-const KINDS={family:{clean:cleanFamily,validate:validateFamilies},organization:{clean:cleanOrganization,validate:validateOrganizations}};
+const KINDS={family:{clean:cleanFamily,validate:validateFamilies},organization:{clean:cleanOrganization,validate:validateOrganizations},product:{clean:cleanMarketRecord,validate:validateMarketplace}};
 const ROLES=['viewer','editor','admin','owner'];
 const sql=(db,q,...params)=>db.prepare(q).get(...params);
 const digest=value=>createHash('sha256').update(value).digest('hex');
@@ -37,7 +39,7 @@ export function logCloudImport(db,{profileId,kind,id,payload,checksum,accountId,
      VALUES(?,?,?,?,?,?,?,?,?)`).run(profileId,kind,id,1,payload,checksum,0,accountId,now);
 }
 export async function handleCloudSync({db,req,res,path,identity,now,cors,readJson,returnJson,bad,clock=Date.now}){
-  const match=/^\/v1\/teams\/([0-9a-f-]{36})\/cloud\/profiles\/([0-9a-f-]{36})\/sync(?:\/(snapshot|record)(?:\/(family|organization)\/([\w-]{8,120}))?)?$/.exec(path);
+  const match=/^\/v1\/teams\/([0-9a-f-]{36})\/cloud\/profiles\/([0-9a-f-]{36})\/sync(?:\/(snapshot|record)(?:\/(family|organization|product)\/([\w-]{8,120}))?)?$/.exec(path);
   if(!match||!UUID.test(match[1])||!UUID.test(match[2]))bad(404,'Ресурс синхронизации не найден');
   const [,teamId,profileId,resource,recordKind,recordId]=match,accountId=identity.account_id;
   const authorize=min=>{
@@ -59,7 +61,7 @@ export async function handleCloudSync({db,req,res,path,identity,now,cors,readJso
     const params=new URL(req.url,'https://identity.internal').searchParams;
     if([...params.keys()].some(k=>!['after','watermark','limit'].includes(k)))bad(400,'Неизвестный параметр');
     const after=params.get('after')??'',mark=params.get('watermark'),limit=params.get('limit')??'50';
-    if(after&&!/^(?:family|organization):[\w-]{8,120}$/.test(after)||mark!==null&&!/^(0|[1-9][0-9]{0,15})$/.test(mark)||!Number.isSafeInteger(Number(mark??0))||!/^([1-9]|[1-9][0-9]|100)$/.test(limit))bad(400,'Некорректные параметры снимка');
+    if(after&&!/^(?:family|organization|product):[\w-]{8,120}$/.test(after)||mark!==null&&!/^(0|[1-9][0-9]{0,15})$/.test(mark)||!Number.isSafeInteger(Number(mark??0))||!/^([1-9]|[1-9][0-9]|100)$/.test(limit))bad(400,'Некорректные параметры снимка');
     const watermark=mark===null?sql(db,'SELECT coalesce(max(seq),0) AS n FROM cloud_changes WHERE cloud_profile_id=?',profileId).n:Number(mark);
     const rows=db.prepare(`SELECT c.seq,c.kind,c.record_id,c.version,c.payload,c.checksum,c.deleted,c.occurred_at FROM cloud_changes c
       WHERE c.cloud_profile_id=? AND c.seq<=? AND (c.kind||':'||c.record_id)>? AND c.seq=(SELECT max(c2.seq) FROM cloud_changes c2 WHERE c2.cloud_profile_id=c.cloud_profile_id AND c2.kind=c.kind AND c2.record_id=c.record_id AND c2.seq<=?)
@@ -86,7 +88,7 @@ export async function handleCloudSync({db,req,res,path,identity,now,cors,readJso
   let payload=null,checksum=null;
   if(!deleted){
     if(!body.record||typeof body.record!=='object'||Array.isArray(body.record)||body.record.id!==id)bad(400,'Некорректная запись');
-    try{const normalized=KINDS[kind].clean({...body.record,profileId});KINDS[kind].validate([normalized],[profileId]);payload=JSON.stringify(normalized);}
+    try{const normalized=KINDS[kind].clean({...body.record,profileId});KINDS[kind].validate([normalized],[profileId]);if(kind==='product'&&normalized.type!=='product')bad(400,'Только товары каталога могут синхронизироваться');payload=JSON.stringify(normalized);}
     catch{bad(400,'Запись не прошла проверку');}
     if(Buffer.byteLength(payload)>160*1024)bad(413,'Запись превышает 160 КБ');
     checksum=digest(payload);
@@ -99,9 +101,10 @@ export async function handleCloudSync({db,req,res,path,identity,now,cors,readJso
     if(!deleted){
       // Domain stores disallow duplicate names within an RP profile. Enforce that
       // centrally as well so a remote update cannot corrupt another device.
-      const normalizedName=JSON.parse(payload).name.toLocaleLowerCase('ru-RU');
+      const next=JSON.parse(payload);
+      const normalizedName=next.name.toLocaleLowerCase('ru-RU');
       const existing=db.prepare('SELECT record_id,payload FROM cloud_records WHERE cloud_profile_id=? AND kind=? AND record_id<>? AND deleted_at IS NULL').all(profileId,kind,id);
-      if(existing.some(row=>JSON.parse(row.payload).name.toLocaleLowerCase('ru-RU')===normalizedName))bad(409,'Другая запись этого RP-профиля уже использует такое название');
+      if(existing.some(row=>{const old=JSON.parse(row.payload);return old.name.toLocaleLowerCase('ru-RU')===normalizedName && (kind!=='product'||old.category===next.category&&old.variant.toLocaleLowerCase('ru-RU')===next.variant.toLocaleLowerCase('ru-RU'));}))bad(409,'Другая запись этого RP-профиля уже использует такое название');
     }
     const old=sql(db,'SELECT version,checksum,deleted_at FROM cloud_records WHERE cloud_profile_id=? AND kind=? AND record_id=?',profileId,kind,id);
     const actual=old?.version??0;
@@ -121,6 +124,7 @@ export async function handleCloudSync({db,req,res,path,identity,now,cors,readJso
       }
     }
     const version=actual+(unchanged?0:1);
+    if(!unchanged)projectCloudRecord(db,{profileId,kind,id,payload:deleted?null:payload});
     const log=db.prepare(`INSERT INTO cloud_changes(cloud_profile_id,kind,record_id,version,payload,checksum,deleted,operation_id,request_hash,actor_id,occurred_at)
       VALUES(?,?,?,?,?,?,?,?,?,?,?)`).run(profileId,kind,id,version,deleted?null:payload,deleted?null:checksum,deleted?1:0,operationId,requestHash,accountId,now);
     return {version,cursor:Number(log.lastInsertRowid),unchanged,replayed:false};

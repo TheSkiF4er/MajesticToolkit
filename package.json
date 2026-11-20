@@ -1,7 +1,7 @@
 {
   "name": "majestictoolkit",
   "private": true,
-  "version": "2.3.4",
+  "version": "2.3.5",
   "type": "module",
   "description": "Автономное браузерное расширение: форум, жалобы, экономика, Law Codex и Government Tools и Document Studio Google Workspace и Productivity & UX",
   "scripts": {
@@ -43,7 +43,8 @@
     "test:browser:tactical-ga": "python3 tests/browser-tactical-ga-230.py",
     "cloud:identity": "node cloud-identity/server.mjs",
     "test:browser:cloud": "python3 tests/browser-cloud-identity-231.py",
-    "test:browser:cloud-storage": "python3 tests/browser-cloud-storage-233.py"
+    "test:browser:cloud-storage": "python3 tests/browser-cloud-storage-233.py",
+    "test:browser:cloud-directories": "python3 tests/browser-cloud-directories-235.py"
   },
   "engines": {
     "node": ">=22 <23"

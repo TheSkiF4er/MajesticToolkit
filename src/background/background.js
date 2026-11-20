@@ -1,3 +1,4 @@
+import {MARKET_PREFIX} from '../lib/marketplace-core.mjs';
 import {createCloudIdentityService} from '../lib/cloud-identity-client.mjs';
 import {FAMILY_PREFIX} from '../lib/family-core.mjs';
 import {ORGANIZATION_PREFIX} from '../lib/organization-core.mjs';
@@ -172,7 +173,7 @@ function start() {
 api.runtime.onInstalled.addListener(start);
 api.runtime.onStartup?.addListener(start);
 api.storage.onChanged.addListener((changes,area) => {
-  if(area==='local'&&Object.keys(changes).some(k=>k.startsWith(FAMILY_PREFIX)||k.startsWith(ORGANIZATION_PREFIX))){
+  if(area==='local'&&Object.keys(changes).some(k=>k.startsWith(FAMILY_PREFIX)||k.startsWith(ORGANIZATION_PREFIX)||k.startsWith(MARKET_PREFIX))){
     void cloudIdentity.handle('syncTick',{}).catch(error=>console.warn('MajesticToolkit: cloud sync changes',error));
   }
   if(area==='local'){

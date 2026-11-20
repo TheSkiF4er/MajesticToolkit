@@ -163,6 +163,12 @@ export function createCloudIdentityService({storage,permissions,fetchImpl=fetch,
     }
     if(action==='cloudProfiles')return authed(cloudPath());
     if(action==='cloudProfileCreate')return authed(cloudPath(),{method:'POST',body:{name:input.name,project:input.project,server:input.server}});
+    if(action==='cloudDirectory'){
+      const allowed=['family','organization','participant','asset','product'];
+      if(!allowed.includes(input.kind)||typeof (input.q??'')!=='string'||(input.q??'').length>80||typeof (input.after??'')!=='string'||(input.after??'').length>128)throw Error('Некорректные параметры общего справочника');
+      const query=new URLSearchParams({kind:input.kind,q:input.q??'',after:input.after??'',limit:'30'});
+      return authed(cloudProfilePath()+'/directory?'+query);
+    }
     if(action==='cloudRecords'){
       const kind=input.kind?('?kind='+encodeURIComponent(input.kind)+(input.after?'&after='+encodeURIComponent(input.after):'')):(input.after?'?after='+encodeURIComponent(input.after):'');
       return authed(cloudProfilePath()+'/records'+kind);
@@ -170,7 +176,7 @@ export function createCloudIdentityService({storage,permissions,fetchImpl=fetch,
     if(action==='cloudImport'){
       if(!Array.isArray(input.records)||input.records.length<1||input.records.length>20)throw Error('Выберите до 20 записей за запрос');
       const live=await execute('cloudBindings',{teamId});
-      if(!input.records.every(item=>item&&['family','organization'].includes(item.kind)&&item.record&&live.bindings[item.record.profileId]===input.cloudProfileId))throw Error('Записи не принадлежат привязанному локальному RP-профилю');
+      if(!input.records.every(item=>item&&['family','organization','product'].includes(item.kind)&&item.record&&live.bindings[item.record.profileId]===input.cloudProfileId))throw Error('Записи не принадлежат привязанному локальному RP-профилю');
       return authed(cloudProfilePath()+'/records',{method:'POST',body:{records:input.records}});
     }
     if(action==='teams')return authed('/v1/teams');

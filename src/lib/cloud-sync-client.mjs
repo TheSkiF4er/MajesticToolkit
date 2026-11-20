@@ -1,12 +1,13 @@
-/** 2.3.4: durable local-first two-way replication of family/organization records.
+/** 2.3.5: local-first replication of families, organizations and product catalog.
  * Disabled by default: enabling a binding explicitly publishes that local profile.
  * All state/outbox/conflicts live in trusted extension storage, never content scripts.
  */
 import {FAMILY_PREFIX,cleanFamily,validateFamilies} from './family-core.mjs';
 import {ORGANIZATION_PREFIX,cleanOrganization,validateOrganizations} from './organization-core.mjs';
+import {MARKET_PREFIX,cleanMarketRecord,validateMarketplace} from './marketplace-core.mjs';
 export const CLOUD_SYNC_KEY='mtCloudSyncV234';
 const UUID=/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
-const KINDS={family:{prefix:FAMILY_PREFIX,clean:cleanFamily,validate:validateFamilies},organization:{prefix:ORGANIZATION_PREFIX,clean:cleanOrganization,validate:validateOrganizations}};
+const KINDS={family:{prefix:FAMILY_PREFIX,clean:cleanFamily,validate:validateFamilies},organization:{prefix:ORGANIZATION_PREFIX,clean:cleanOrganization,validate:validateOrganizations},product:{prefix:MARKET_PREFIX,clean:cleanMarketRecord,validate:validateMarketplace}};
 const opKey=(kind,id)=>`${kind}:${id}`;
 const localKey=(kind,id)=>KINDS[kind].prefix+id;
 const hash=async(value)=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value))),v=>v.toString(16).padStart(2,'0')).join('');
@@ -27,6 +28,8 @@ export function createCloudSyncController({storage,authed,now=Date.now}){
   async function localRecords(localId){
     const raw=await storage.get(null),result=new Map();
     for(const [kind,config] of Object.entries(KINDS))for(const [key,value] of Object.entries(raw))if(key.startsWith(config.prefix)){
+      // Marketplace price observations and listings are private, never replicated.
+      if(kind==='product'&&value?.type!=='product')continue;
       const record=config.clean(value);
       if(record.id!==key.slice(config.prefix.length))throw Error('Повреждённый локальный ключ: '+key);
       if(record.profileId===localId)result.set(opKey(kind,record.id),{kind,id:record.id,record});
@@ -37,6 +40,7 @@ export function createCloudSyncController({storage,authed,now=Date.now}){
     const value=(await storage.get(localKey(kind,id)))[localKey(kind,id)];
     if(!value)return {record:null,checksum:null};
     const record=normalize(kind,value,localId);
+    if(kind==='product'&&record.type!=='product')throw Error('Это не товар каталога');
     if(record.id!==id||record.profileId!==localId)throw Error('Несовпадение локального профиля');
     return {record,checksum:await checksum(kind,record,entry.cloudProfileId)};
   }
@@ -59,7 +63,7 @@ export function createCloudSyncController({storage,authed,now=Date.now}){
   async function applyRemote(entry,localId,event,force=false){
     const kind=event.kind,id=event.id,key=opKey(kind,id),model=KINDS[kind];
     if(!model||!/^[\w-]{8,120}$/.test(id))throw Error('Недопустимая удалённая запись');
-    const name=kind==='family'?'mt-families-v214':'mt-organizations-v215';
+    const name=kind==='family'?'mt-families-v214':kind==='organization'?'mt-organizations-v215':'mt-trading-inventory-v213';
     return lock(name,async()=>{
       const raw=await storage.get(null),existing=raw[localKey(kind,id)];
       if(existing&&existing.profileId!==localId)throw Error('ID уже принадлежит другому локальному RP-профилю');
@@ -69,9 +73,10 @@ export function createCloudSyncController({storage,authed,now=Date.now}){
       if(event.deleted){
         if(!existing)return;
         // Never bypass domain constraints on local destructive operations.
-        const protectedHistory=kind==='family'?(existing.members?.length||existing.events?.length>3):(existing.members?.length||existing.assets?.length||existing.events?.length>3);
+        const protectedHistory=kind==='product'?false:kind==='family'?(existing.members?.length||existing.events?.length>3):(existing.members?.length||existing.assets?.length||existing.events?.length>3);
         if(protectedHistory)throw Error('Удаление блокировано: у локальной записи есть история или связи');
         const refs=Object.entries(raw).some(([k,v])=>{
+          if(kind==='product')return k.startsWith(MARKET_PREFIX)&&v?.productId===id||k.startsWith('mtInventory')&&JSON.stringify(v).includes(`\"${id}\"`)||k.startsWith('mtEconomyLinkV219:')&&v?.entityType==='product'&&v?.entityId===id&&v?.profileId===localId;
           if(k===localKey(kind,id))return false;
           if(/^(mtEconomyLinkV219:|mtTacticalPlanV226:|mtTerritory|mtCrime|mtFinance)/.test(k))return JSON.stringify(v).includes(`"${id}"`);
           if(kind==='organization'&&k.startsWith('mtInventory'))return JSON.stringify(v).toLocaleLowerCase('ru-RU').includes(existing.name.toLocaleLowerCase('ru-RU'));
@@ -80,10 +85,14 @@ export function createCloudSyncController({storage,authed,now=Date.now}){
         if(refs)throw Error('Удаление блокировано: локальная запись используется другим разделом');
         await storage.remove(localKey(kind,id));return;
       }
-      if(!event.record||event.record.id!==id||event.record.profileId!==entry.cloudProfileId)throw Error('Нарушена принадлежность облачной записи');
+      if(!event.record||event.record.id!==id||event.record.profileId!==entry.cloudProfileId||(kind==='product'&&event.record.type!=='product'))throw Error('Нарушена принадлежность облачной записи');
       const localRecord=normalize(kind,event.record,localId);
       const valid=Object.entries(raw).filter(([k])=>k.startsWith(model.prefix)&&k!==localKey(kind,id)).map(([,v])=>v);
-      model.validate([...valid,localRecord]);
+      if(kind==='product') {
+        const allMarket=Object.entries(raw).filter(([k])=>k.startsWith(MARKET_PREFIX)&&k!==localKey(kind,id)).map(([,v])=>v);
+        model.validate([...allMarket,localRecord]);
+        if(localRecord.archived&&allMarket.some(r=>r.productId===id&&r.type==='listing'&&r.status==='active'))throw Error('Сначала закройте локальные активные объявления по товару');
+      } else model.validate([...valid,localRecord]);
       await storage.set({[localKey(kind,id)]:localRecord});
     });
   }

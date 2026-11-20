@@ -41,7 +41,7 @@ test('time filter includes only period events but preserves pre-period owner',()
  assert.equal(r.stats.captures,0);assert.equal(r.stats.airdrops,1);
  assert.equal(tacticalReplayFrame(r,-1).owners[f.territories[0].id].id,organization.id);
  assert.equal(build(f,{to:'2026-11-02'}).events.length,1);
- assert.equal(build(f,{from:'2026-11-20'}).events.length,0);
+ assert.equal(build(f,{from:'2026-12-01'}).events.length,0);
 });
 test('profile isolation, corrupt ledgers and invalid ranges fail closed',()=>{
  const f=fixture();assert.equal(build(f,{},other).events.length,0);

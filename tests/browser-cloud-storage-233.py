@@ -35,6 +35,7 @@ async def main():
                 if(action==='cloudProfileCreate'){const p={id:'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',name:input.name,project:input.project,server:input.server};__remote.push(p);return {profile:p};}
                 if(action==='cloudBind'){__bindings[input.localProfileId]=input.cloudProfileId;return {bindings:__bindings};}
                 if(action==='cloudUnbind'){delete __bindings[input.localProfileId];return {bindings:__bindings};}
+                if(action==='cloudDirectory')return {kind:input.kind,entries:[],nextCursor:null};
                 if(action==='cloudRecords')return {records:[]};
                 if(action==='cloudImport'){__migrated.push(...input.records);return {imported:input.records.length,unchanged:0};}
                 throw Error('Unexpected '+action);
