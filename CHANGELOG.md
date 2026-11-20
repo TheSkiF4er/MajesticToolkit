@@ -1,3 +1,10 @@
+# 2.3.7 — Collaborative Tactical Workspace (2026-11-20)
+
+- Added a production SQLite-backed shared tactical workspace for map metadata and image bytes, plans, airdrop points/events, territories and territorial events.
+- Added server-side transactionally enforced Team RBAC, CAS versions, immutable change activity, idempotent operation IDs, replay-journal validation and cross-entity integrity checks.
+- Added explicit import/publish to/from linked local RP profiles, validated map binary transport in the background, remote edit/archives, conflict-safe import and per-actor change history.
+- Cloud tactical sharing remains opt-in; existing local Tactical Toolkit and Backup v21 remain independent. See `docs/RELEASE_NOTES_2.3.7.md`.
+
 # 2.3.6 — Shared Knowledge & Templates
 
 - Добавлены защищённые командные заметки, законы и шаблоны; неизменяемые редакции, SHA-256, двухстороннее согласование и публикация с контролем версий.

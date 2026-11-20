@@ -1,6 +1,7 @@
 /** Cloud Identity 2.3.3: privileged background-only credential store + authenticated requests. */
 import {createCloudSyncController} from './cloud-sync-client.mjs';
 import {sharedSourceSnapshot,sharedSourceStorageKey} from './shared-knowledge-source.mjs';
+import {localTacticalChoices,localTacticalRecord,tacticalRecordForProfile,editSharedTacticalRecord,applyTacticalCloudRecord} from './cloud-tactical-source.mjs';
 export const CLOUD_CONFIG_KEY='mtCloudIdentityConfigV231';
 export const CLOUD_SESSION_KEY='mtCloudIdentitySessionV231';
 export const CLOUD_BINDINGS_KEY='mtCloudProfileBindingsV233';
@@ -37,6 +38,28 @@ export function createCloudIdentityService({storage,permissions,fetchImpl=fetch,
     try{payload=await response.json();}catch{throw Error('Сервер вернул некорректный ответ');}
     if(!response.ok){const err=new Error(typeof payload?.error==='string'?payload.error.slice(0,180):`Cloud Identity: HTTP ${response.status}`);err.status=response.status;throw err;}
     return payload;
+  }
+  /** Binary map transfers run in the background: no bearer token or 25 MiB blob reaches the UI. */
+  async function tacticalBinary(path,{method='GET',blob=null,mime=null}={}){
+    let session=await refreshActive();if(!session)throw Error('Войдите в облачный аккаунт');
+    const perform=async token=>{
+      await checked(session.origin);
+      const res=await fetchImpl(session.origin+path,{method,body:blob??undefined,headers:{Authorization:'Bearer '+token,...(mime?{'Content-Type':mime}:{})},cache:'no-store',credentials:'omit',redirect:'error',signal:AbortSignal.timeout(120000)});
+      if(!res.ok){let error;try{error=(await res.json()).error;}catch{}const e=new Error(error||'Ошибка передачи карты: '+res.status);e.status=res.status;throw e;}
+      if(method!=='GET')return res.json();
+      const maxBytes=25*1024*1024,expected=Number(res.headers.get('content-length'));
+      if(expected>maxBytes)throw Error('Ответ карты превышает лимит 25 МиБ');
+      if(!res.body?.getReader)throw Error('Не удалось получить поток изображения карты');
+      const pieces=[];let size=0,reader=res.body.getReader();
+      try{for(;;){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>maxBytes){await reader.cancel();throw Error('Ответ карты превышает лимит 25 МиБ');}pieces.push(value);}}finally{reader.releaseLock();}
+      const bytes=new Uint8Array(size);let offset=0;
+      for(const part of pieces){bytes.set(part,offset);offset+=part.byteLength;}
+      return bytes;
+    };
+    try{return await perform(session.token);}catch(error){
+      if(error.status!==401)throw error;
+      access=null;session=await refreshActive();return perform(session.token);
+    }
   }
   async function accept(origin,credentials){
     if(!credentials?.account?.id||!credentials?.account?.username||!credentials?.sessionId||!credentials?.accessToken||!credentials?.refreshToken||!Number.isFinite(Date.parse(credentials.accessExpiresAt)))throw Error('Сервер вернул неполную сессию');
@@ -207,6 +230,67 @@ export function createCloudIdentityService({storage,permissions,fetchImpl=fetch,
         return authed(itemPath()+'/'+operation,{method:'POST',body:{baseRevision:input.baseRevision,decision:input.decision,note:input.note,targetRevision:input.targetRevision}});
       }
       throw Error('Неизвестная операция с общим материалом');
+    }
+    if(action.startsWith('tactical')){
+      const root=cloudProfilePath()+'/tactical';
+      const kinds=['map','plan','airdrop_point','airdrop_event','territory','territory_event'];
+      const checkEntry=()=>{
+        if(!kinds.includes(input.kind)||typeof input.id!=='string'||!/^[\w-]{8,120}$/.test(input.id))throw Error('Некорректная тактическая запись');
+        if(input.kind==='map'&&input.id!=='map-'+input.cloudProfileId)throw Error('Неверный идентификатор карты');
+      };
+      const recordPath=()=>{checkEntry();return root+'/'+input.kind+'/'+input.id;};
+      const bound=async()=>{
+        if(typeof input.localProfileId!=='string'||!/^[\w-]{8,120}$/.test(input.localProfileId))throw Error('Некорректный локальный профиль');
+        const bindings=await execute('cloudBindings',{teamId});
+        const cloud=bindings.profiles.find(p=>p.id===input.cloudProfileId);
+        const local=(await read('rpNexusStateV1'))?.profiles?.find(p=>p.id===input.localProfileId);
+        if(!local||!cloud||bindings.bindings[local.id]!==cloud.id||local.project!==cloud.project||local.server!==cloud.server)throw Error('Локальный и облачный RP-профили не совпадают');
+      };
+      if(action==='tacticalList'){
+        if(input.after&&!/^(?:map|plan|airdrop_point|airdrop_event|territory|territory_event):[\w-]{8,120}$/.test(input.after))throw Error('Неверный курсор');
+        return authed(root+'?'+new URLSearchParams({after:input.after||''}));
+      }
+      if(action==='tacticalChanges'){
+        const after=input.after??0;
+        if(!Number.isSafeInteger(after)||after<0)throw Error('Неверный курсор истории');
+        return authed(root+'/changes?after='+after+'&limit=100');
+      }
+      if(action==='tacticalLocalChoices'){await bound();return {choices:await localTacticalChoices(input.localProfileId)};}
+      if(action==='tacticalGet')return authed(recordPath());
+      if(action==='tacticalPublishLocal'){
+        checkEntry();await bound();
+        if(!Number.isSafeInteger(input.baseVersion)||input.baseVersion<0)throw Error('Неверная версия');
+        const local=await localTacticalRecord(input.localProfileId,input.kind,input.kind==='map'?'map-'+input.localProfileId:input.id);
+        if(!local)throw Error('Локальная запись отсутствует');
+        const normalized=tacticalRecordForProfile(input.kind,local,input.cloudProfileId);
+        if(input.kind==='map'){
+          const {getTacticalMap}=await import('./tactical-map-store.mjs');
+          const image=await getTacticalMap(input.localProfileId);
+          await tacticalBinary(root+'/image/'+image.meta.sha256,{method:'PUT',blob:image.blob,mime:image.meta.mime});
+        }
+        return authed(recordPath(),{method:'PUT',body:{operationId:crypto.randomUUID(),baseVersion:input.baseVersion,record:normalized}});
+      }
+      if(action==='tacticalEdit'){
+        checkEntry();
+        if(!Number.isSafeInteger(input.baseVersion)||input.baseVersion<1||typeof input.operation!=='string'||!input.fields||typeof input.fields!=='object'||Array.isArray(input.fields))throw Error('Неверная редакция или действие');
+        const current=(await authed(recordPath())).entry;
+        if(current.version!==input.baseVersion)throw Error('Конфликт редакций: обновите данные, прежде чем сохранять изменения');
+        const next=editSharedTacticalRecord(input.kind,current.record,input.operation,input.fields);
+        return authed(recordPath(),{method:'PUT',body:{operationId:crypto.randomUUID(),baseVersion:input.baseVersion,record:next}});
+      }
+      if(action==='tacticalDelete'){
+        checkEntry();
+        if(!Number.isSafeInteger(input.baseVersion)||input.baseVersion<1)throw Error('Неверная редакция');
+        return authed(recordPath(),{method:'DELETE',body:{operationId:crypto.randomUUID(),baseVersion:input.baseVersion}});
+      }
+      if(action==='tacticalImportRemote'){
+        checkEntry();await bound();
+        const remote=(await authed(recordPath())).entry;
+        let bytes=null;
+        if(input.kind==='map')bytes=await tacticalBinary(root+'/image/'+remote.record.sha256);
+        return applyTacticalCloudRecord(input.localProfileId,input.kind,remote.record,bytes,{overwriteMap:input.overwriteMap===true});
+      }
+      throw Error('Неизвестная тактическая операция');
     }
     if(action==='cloudDirectory'){
       const allowed=['family','organization','participant','asset','product'];

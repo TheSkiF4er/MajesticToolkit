@@ -494,3 +494,10 @@ body[data-mode=sidebar] .ws-layout .side{height:auto;position:static;overflow:vi
 .cloud-knowledge .ws-item strong{overflow-wrap:anywhere}
 .cloud-knowledge .ws-item button{flex-shrink:0}
 @media(max-width:740px){.cloud-knowledge .ws-item{flex-wrap:wrap}.cloud-knowledge form.row{flex-wrap:wrap}.cloud-knowledge form.row label{min-width:200px;flex:1}}
+
+/* 2.3.7 team tactical console */
+.cloud-tactical{gap:16px;min-width:0;border-top:1px solid var(--stroke);margin-top:24px}
+.cloud-tactical .ws-item{flex-wrap:wrap;overflow-wrap:anywhere}
+.cloud-tactical textarea{min-height:90px;max-width:100%;resize:vertical}
+.cloud-tactical form label{min-width:0;flex:1 1 220px}
+.cloud-tactical input,.cloud-tactical select{max-width:100%}

@@ -1,4 +1,4 @@
-/** MajesticToolkit 2.3.6: stateful cloud identity, teams, storage and shared knowledge.
+/** MajesticToolkit 2.3.7: stateful cloud identity, teams, storage and shared knowledge.
  * Production: direct TLS (CLOUD_TLS_CERT_FILE/CLOUD_TLS_KEY_FILE); no reverse-proxy trust.
  */
 import {createServer as createHttpServer} from 'node:http';
@@ -15,6 +15,7 @@ import {installCloudSync,handleCloudSync} from './sync.mjs';
 import {installCloudDirectories,handleCloudDirectories} from './directories.mjs';
 import {installSharedKnowledge,handleSharedKnowledge} from './knowledge.mjs';
 import {installKnowledgeCollections,handleKnowledgeCollections} from './knowledge-collections.mjs';
+import {installTactical,handleTactical} from './tactical.mjs';
 const scrypt=promisify(scryptCallback);
 const TOKEN_BYTES=32, ACCESS_MS=15*60_000, REFRESH_MS=30*24*60*60_000;
 const encoder = value => createHash('sha256').update(value).digest();
@@ -58,6 +59,7 @@ function database(dbPath){
   installCloudDirectories(db);
   installSharedKnowledge(db);
   installKnowledgeCollections(db);
+  installTactical(db);
   return db;
 }
 async function credentialHash(password,salt){return Buffer.from(await scrypt(password,salt,64,{N:32768,r:8,p:1,maxmem:64*1024*1024}));}
@@ -154,6 +156,9 @@ export function createIdentityServer({dbPath=resolve('cloud-identity/data/identi
       }
       if(!path.startsWith('/v1/auth/')&&!path.startsWith('/v1/teams'))bad(404,'Не найдено');
       const identity=getAuthorized(db,req.headers.authorization,now);
+      if(/^\/v1\/teams\/[0-9a-f-]{36}\/cloud\/profiles\/[0-9a-f-]{36}\/tactical(?:\/|$)/.test(path)){
+        await handleTactical({db,req,res,path,identity,now,cors,readJson,returnJson,bad,clock});return;
+      }
       if(/^\/v1\/teams\/[0-9a-f-]{36}\/cloud\/profiles\/[0-9a-f-]{36}\/knowledge\/collections(?:\/|$)/.test(path)){
         await handleKnowledgeCollections({db,req,res,path,identity,now,cors,readJson,returnJson,bad,clock});return;
       }
@@ -203,7 +208,7 @@ export function createIdentityServer({dbPath=resolve('cloud-identity/data/identi
     }
   };
   const server=certFile?createHttpsServer({cert:readFileSync(certFile),key:readFileSync(keyFile)},handler):createHttpServer(handler);
-  server.headersTimeout=10_000;server.requestTimeout=15_000;server.keepAliveTimeout=5_000;server.maxRequestsPerSocket=100;server.maxConnections=200;
+  server.headersTimeout=10_000;server.requestTimeout=120_000;server.keepAliveTimeout=5_000;server.maxRequestsPerSocket=100;server.maxConnections=200;
   return {server,db,async listen(){await new Promise((ok,fail)=>{server.once('error',fail);server.listen(port,host,()=>{server.off('error',fail);ok();});});return server.address();},async close(){await new Promise((ok,fail)=>server.close(err=>err?fail(err):ok()));db.close();}};
 }
 if(process.argv[1] && import.meta.url===pathToFileURL(resolve(process.argv[1])).href){

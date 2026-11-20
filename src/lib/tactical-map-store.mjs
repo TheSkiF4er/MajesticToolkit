@@ -129,3 +129,16 @@ export async function replaceTacticalMaps(maps,files){
  }
  return transact('readwrite',(store)=>{store.clear();for(const value of rows)store.put(value);});
 }
+
+/** Explicit cloud import of one verified map; never clears maps from other RP profiles. */
+export function installSharedTacticalMap(profileId,rawMeta,bytes,{overwrite=false}={}){return withTacticalWriteLock(async()=>{
+ requireProfile(profileId);
+ const meta=cleanMapMeta({...rawMeta,profileId});
+ if(!(bytes instanceof Uint8Array)||bytes.length!==meta.size||!imageSignature(bytes.subarray(0,16),meta.mime)||await digest(bytes)!==meta.sha256)throw Error('Повреждена облачная подложка карты');
+ const blob=new Blob([bytes],{type:meta.mime}),dimensions=await decodeImage(blob);
+ if(dimensions.width!==meta.width||dimensions.height!==meta.height)throw Error('Размеры облачной карты не совпадают с метаданными');
+ const existing=await getTacticalMap(profileId,{verify:false});
+ if(existing&&JSON.stringify(existing.meta)!==JSON.stringify(meta)&&!overwrite)throw Error('Локальная карта отличается от облачной. Выберите явную замену локальной карты, чтобы разрешить конфликт');
+ if(existing&&existing.meta.sha256!==meta.sha256)await assertNoMapDependents(profileId,meta.sha256);
+ await transact('readwrite',store=>store.put({...meta,blob}));return meta;
+});}
