@@ -1,0 +1,98 @@
+name: Publish MajesticToolkit v2.4.0
+
+on:
+  workflow_run:
+    workflows: ["Verify MajesticToolkit"]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: publish-majestictoolkit-v2.4.0
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exactly the verified commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+
+      - name: Check release version and notes
+        run: |
+          test "$(node -p 'require("./package.json").version')" = "2.4.0"
+          test -s docs/RELEASE_NOTES_2.4.0.md
+
+      - name: Download artifacts from the successful CI run
+        uses: actions/download-artifact@v4
+        with:
+          name: MajesticToolkit-2.4.0-verified-${{ github.event.workflow_run.id }}
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: release
+
+      - name: Independently verify packaged artifacts
+        working-directory: release
+        run: |
+          sha256sum --check --strict SHA256SUMS
+          python3 - <<'PY'
+          import hashlib
+          import json
+          from pathlib import Path
+          import zipfile
+
+          root = Path('.')
+          manifest = json.loads((root / 'release-manifest.json').read_text())
+          expected = {f'MajesticToolkit-2.4.0-{name}.zip' for name in ('chromium', 'firefox', 'firefox-android', 'safari')}
+          assert manifest['product'] == 'MajesticToolkit'
+          assert manifest['version'] == '2.4.0'
+          assert {a['file'] for a in manifest['artifacts']} == expected
+          assert {p.name for p in root.iterdir() if p.is_file()} == expected | {'SHA256SUMS', 'release-manifest.json'}
+          for artifact in manifest['artifacts']:
+              file = root / artifact['file']
+              data = file.read_bytes()
+              assert len(data) == artifact['size']
+              assert hashlib.sha256(data).hexdigest() == artifact['sha256']
+              with zipfile.ZipFile(file) as archive:
+                  paths = archive.namelist()
+                  assert len(paths) == artifact['files']
+                  assert len(paths) == len(set(paths))
+                  assert all(not p.startswith('/') and '..' not in Path(p).parts for p in paths)
+                  ext_manifest = json.loads(archive.read('manifest.json'))
+                  assert ext_manifest['version'] == '2.4.0'
+          print('All four archives and their metadata verified')
+          PY
+
+      - name: Publish GitHub Release v2.4.0
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERIFIED_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          if gh release view v2.4.0 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::notice::v2.4.0 is already published; refusing to replace release assets"
+            exit 0
+          fi
+          gh release create v2.4.0 \
+            release/MajesticToolkit-2.4.0-chromium.zip \
+            release/MajesticToolkit-2.4.0-firefox.zip \
+            release/MajesticToolkit-2.4.0-firefox-android.zip \
+            release/MajesticToolkit-2.4.0-safari.zip \
+            release/SHA256SUMS \
+            release/release-manifest.json \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "MajesticToolkit v2.4.0 — Team & Cloud GA" \
+            --notes-file docs/RELEASE_NOTES_2.4.0.md \
+            --target "$VERIFIED_SHA" \
+            --latest
