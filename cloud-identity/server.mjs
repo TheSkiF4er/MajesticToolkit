@@ -1,9 +1,9 @@
-/** MajesticToolkit 2.3.8: stateful cloud identity, teams, shared knowledge and cloud files.
+/** MajesticToolkit 2.3.9: stateful identity, collaboration and operations.
  * Production: direct TLS (CLOUD_TLS_CERT_FILE/CLOUD_TLS_KEY_FILE); no reverse-proxy trust.
  */
 import {createServer as createHttpServer} from 'node:http';
 import {createServer as createHttpsServer} from 'node:https';
-import {readFileSync, mkdirSync, chmodSync} from 'node:fs';
+import {readFileSync, mkdirSync, chmodSync, openSync, writeSync, closeSync, unlinkSync} from 'node:fs';
 import {dirname, resolve} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {randomBytes, randomUUID, createHash, scrypt as scryptCallback, timingSafeEqual} from 'node:crypto';
@@ -17,6 +17,7 @@ import {installSharedKnowledge,handleSharedKnowledge} from './knowledge.mjs';
 import {installKnowledgeCollections,handleKnowledgeCollections} from './knowledge-collections.mjs';
 import {installTactical,handleTactical} from './tactical.mjs';
 import {installCloudFiles,handleCloudFiles} from './files.mjs';
+import {installCloudOperations,handleCloudOperations,createOpsMetrics,operatorAuthorized} from './operations.mjs';
 const scrypt=promisify(scryptCallback);
 const TOKEN_BYTES=32, ACCESS_MS=15*60_000, REFRESH_MS=30*24*60*60_000;
 const encoder = value => createHash('sha256').update(value).digest();
@@ -62,6 +63,7 @@ function database(dbPath){
   installKnowledgeCollections(db);
   installTactical(db);
   installCloudFiles(db);
+  installCloudOperations(db);
   return db;
 }
 async function credentialHash(password,salt){return Buffer.from(await scrypt(password,salt,64,{N:32768,r:8,p:1,maxmem:64*1024*1024}));}
@@ -79,7 +81,7 @@ function getAuthorized(db,header,now){
   if(!row)bad(401,'Сессия недействительна или завершена');
   return row;
 }
-const JSON_HEADERS={'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff'};
+const JSON_HEADERS={'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','X-Frame-Options':'DENY','Cross-Origin-Resource-Policy':'same-origin'};
 function returnJson(res,status,payload,extra={}){res.writeHead(status,{...JSON_HEADERS,...extra});res.end(JSON.stringify(payload));}
 function readJson(req,maxBytes=8192){return new Promise((resolve,reject)=>{
   if(!/^application\/json(?:\s*;|$)/i.test(req.headers['content-type']||'')){reject(new HttpError(415,'Требуется application/json'));return;}
@@ -97,24 +99,57 @@ function throttle(db,key,now,{limit=8,windowMs=15*60_000,blockMs=15*60_000}={}){
   db.prepare('UPDATE auth_attempts SET attempts=?,blocked_until=? WHERE key=?').run(attempts,blocked,hash);
   if(blocked)bad(429,'Слишком много попыток. Попробуйте позже');
 }
-export function createIdentityServer({dbPath=resolve('cloud-identity/data/identity.sqlite'),host='127.0.0.1',port=8787,certFile=null,keyFile=null,allowedOrigins=[],clock=Date.now}={}){
+export function createIdentityServer({dbPath=resolve('cloud-identity/data/identity.sqlite'),host='127.0.0.1',port=8787,certFile=null,keyFile=null,allowedOrigins=[],operatorToken=process.env.CLOUD_OPERATIONS_TOKEN||null,clock=Date.now}={}){
   const loopback=['127.0.0.1','::1','localhost'].includes(host);
   if(!loopback && (!certFile||!keyFile))throw Error('Public cloud identity server requires direct TLS certificate and private key');
   if(Boolean(certFile)!==Boolean(keyFile))throw Error('TLS certificate and key are required together');
   const allow=new Set(allowedOrigins);
   if(!Array.isArray(allowedOrigins)||[...allow].some(x=>!/^((chrome|moz|safari-web)-extension):\/\/[^/]+$/.test(x)&&!/^https:\/\/[^/]+$/.test(x)))throw Error('Invalid allowed origin');
-  const db=database(resolve(dbPath));
+  if(operatorToken!==null&&(typeof operatorToken!=='string'||operatorToken.length<32))throw Error('CLOUD_OPERATIONS_TOKEN must have at least 32 characters');
+  const dbFile=resolve(dbPath),lockFile=dbFile+'.run.lock',instanceId=randomUUID();
+  mkdirSync(dirname(dbFile),{recursive:true,mode:0o700});
+  let fd;
+  try{fd=openSync(lockFile,'wx',0o600);}
+  catch(error){
+    if(error.code!=='EEXIST')throw error;
+    let active=true;
+    try{
+      const pid=JSON.parse(readFileSync(lockFile,'utf8')).pid;
+      if(!Number.isSafeInteger(pid)||pid<=0)throw Error('invalid lock');
+      try{process.kill(pid,0);}catch(e){if(e.code==='ESRCH')active=false;else throw e;}
+    }catch{active=true;}
+    if(active)throw Error('Cloud database already locked by a running or unverified server; stop it before launching another instance');
+    unlinkSync(lockFile);fd=openSync(lockFile,'wx',0o600);
+  }
+  try{writeSync(fd,JSON.stringify({pid:process.pid,instanceId}));}finally{closeSync(fd);}
+  let db;
+  try{db=database(dbFile);}catch(error){unlinkSync(lockFile);throw error;}
+  const metrics=createOpsMetrics();
+  let readiness={checkedAt:0,ok:true};
   const defaultCors=(origin)=>origin&&(allow.has(origin)||(loopback&&/^((chrome|moz|safari-web)-extension):\/\/[^/]+$/.test(origin)))?{'Access-Control-Allow-Origin':origin,'Vary':'Origin'}:{};
   const handler=async(req,res)=>{
-    const origin=req.headers.origin,now=clock(),cors=defaultCors(origin);
+    const origin=req.headers.origin,now=clock(),cors=defaultCors(origin),began=performance.now();
+    res.once('finish',()=>metrics.observe(res.statusCode,performance.now()-began));
     try{
       if(origin&&!Object.keys(cors).length)bad(403,'Источник запроса не разрешён');
       if(req.method==='OPTIONS'){
         if(!origin)bad(400,'Отсутствует Origin');
         res.writeHead(204,{...cors,'Access-Control-Allow-Methods':'GET,POST,PATCH,DELETE,OPTIONS','Access-Control-Allow-Headers':'Authorization,Content-Type,X-MT-File-Meta,X-MT-Sha256,X-MT-Base-Version','Access-Control-Max-Age':'600','Cache-Control':'no-store'});res.end();return;
       }
+      if(typeof req.url!=='string'||req.url.length>4096)bad(414,'Слишком длинный адрес запроса');
       const path=new URL(req.url,'https://identity.internal').pathname;
       if(path==='/v1/health'&&req.method==='GET'){returnJson(res,200,{ok:true,service:'MajesticToolkit Cloud Identity'},cors);return;}
+      if(path==='/v1/ready'&&req.method==='GET'){
+        if(!readiness.checkedAt||Date.now()-readiness.checkedAt>30_000){
+          try{readiness={checkedAt:Date.now(),ok:db.prepare('PRAGMA quick_check(1)').get()?.quick_check==='ok'};}
+          catch{readiness={checkedAt:Date.now(),ok:false};}
+        }
+        returnJson(res,readiness.ok?200:503,{ok:readiness.ok},cors);return;
+      }
+      if(path==='/v1/operations/metrics'&&req.method==='GET'){
+        if(!operatorAuthorized(req.headers.authorization,operatorToken))bad(401,'Требуется операторский токен');
+        returnJson(res,200,metrics.snapshot(db),{});return;
+      }
       if(path==='/v1/auth/register'||path==='/v1/auth/login'){
         if(req.method!=='POST')bad(405,'Метод не поддерживается');
         const input=await readJson(req);const username=String(input.username??'').trim().toLowerCase(),password=input.password,deviceName=String(input.deviceName??'').trim();
@@ -158,6 +193,9 @@ export function createIdentityServer({dbPath=resolve('cloud-identity/data/identi
       }
       if(!path.startsWith('/v1/auth/')&&!path.startsWith('/v1/teams'))bad(404,'Не найдено');
       const identity=getAuthorized(db,req.headers.authorization,now);
+      if(/^\/v1\/teams\/[0-9a-f-]{36}\/(?:audit|notifications)(?:\/|$)/.test(path)){
+        await handleCloudOperations({db,req,res,path,identity,now,cors,returnJson,bad,clock});return;
+      }
       if(/^\/v1\/teams\/[0-9a-f-]{36}\/cloud\/profiles\/[0-9a-f-]{36}\/files(?:\/|$)/.test(path)){
         await handleCloudFiles({db,req,res,path,identity,now,cors,readJson,returnJson,bad,clock});return;
       }
@@ -214,7 +252,7 @@ export function createIdentityServer({dbPath=resolve('cloud-identity/data/identi
   };
   const server=certFile?createHttpsServer({cert:readFileSync(certFile),key:readFileSync(keyFile)},handler):createHttpServer(handler);
   server.headersTimeout=10_000;server.requestTimeout=120_000;server.keepAliveTimeout=5_000;server.maxRequestsPerSocket=100;server.maxConnections=200;
-  return {server,db,async listen(){await new Promise((ok,fail)=>{server.once('error',fail);server.listen(port,host,()=>{server.off('error',fail);ok();});});return server.address();},async close(){await new Promise((ok,fail)=>server.close(err=>err?fail(err):ok()));db.close();}};
+  return {server,db,async listen(){await new Promise((ok,fail)=>{server.once('error',fail);server.listen(port,host,()=>{server.off('error',fail);ok();});});return server.address();},async close(){await new Promise((ok,fail)=>server.close(err=>err?fail(err):ok()));db.close();try{if(JSON.parse(readFileSync(lockFile,'utf8')).instanceId===instanceId)unlinkSync(lockFile);}catch{}}};
 }
 if(process.argv[1] && import.meta.url===pathToFileURL(resolve(process.argv[1])).href){
   const host=process.env.CLOUD_HOST||'127.0.0.1',port=Number(process.env.CLOUD_PORT||8787);

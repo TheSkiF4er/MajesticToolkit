@@ -403,6 +403,12 @@ export function createCloudIdentityService({storage,permissions,fetchImpl=fetch,
     if(action==='teamMembers')return authed(teamPath()+'/members');
     if(action==='teamInvitations')return authed(teamPath()+'/invitations');
     if(action==='teamActivity')return authed(teamPath()+'/activity');
+    if(action==='teamAudit')return authed(teamPath()+'/audit');
+    if(action==='teamNotifications')return authed(teamPath()+'/notifications');
+    if(action==='teamNotificationRead'){
+      if(!Number.isSafeInteger(input.seq)||input.seq<1)throw Error('Неверное уведомление');
+      return authed(teamPath()+'/notifications/'+input.seq+'/read',{method:'POST'});
+    }
     if(action==='teamInvite')return authed(teamPath()+'/invitations',{method:'POST',body:{role:input.role,targetUsername:input.targetUsername}});
     if(action==='teamAccept')return authed('/v1/teams/invitations/accept',{method:'POST',body:{token:input.token}});
     if(action==='teamInviteRevoke'){

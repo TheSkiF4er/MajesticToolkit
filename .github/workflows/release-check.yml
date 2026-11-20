@@ -16,16 +16,18 @@ jobs:
           node-version: '22'
       - name: Regression suite and deterministic packages
         run: npm run verify
+      - name: Cloud concurrency and reliability smoke
+        run: npm run cloud:load
       - name: Verify SHA-256 manifest
         run: cd release && sha256sum -c SHA256SUMS
       - name: Mozilla AMO lint
         run: |
-          npm exec --yes --package=addons-linter@10.14.0 -- addons-linter release/MajesticToolkit-2.3.5-firefox.zip
-          npm exec --yes --package=addons-linter@10.14.0 -- addons-linter release/MajesticToolkit-2.3.5-firefox-android.zip
+          npm exec --yes --package=addons-linter@10.14.0 -- addons-linter release/MajesticToolkit-2.3.9-firefox.zip
+          npm exec --yes --package=addons-linter@10.14.0 -- addons-linter release/MajesticToolkit-2.3.9-firefox-android.zip
       - name: Publish downloadable CI artifacts (not marketplace publication)
         uses: actions/upload-artifact@v4
         with:
-          name: MajesticToolkit-2.3.5-release-${{ github.run_id }}
+          name: MajesticToolkit-2.3.9-release-${{ github.run_id }}
           path: release/
           if-no-files-found: error
   browser-e2e:
@@ -71,3 +73,7 @@ jobs:
           python tests/browser-cloud-storage-233.py
           python tests/browser-cloud-sync-234.py
           python tests/browser-cloud-directories-235.py
+          python tests/browser-cloud-knowledge-236.py
+          python tests/browser-cloud-tactical-237.py
+          python tests/browser-cloud-files-238.py
+          python tests/browser-cloud-operations-239.py

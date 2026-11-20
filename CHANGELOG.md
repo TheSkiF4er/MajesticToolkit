@@ -1,3 +1,11 @@
+# 2.3.9 — Cloud Operations & Reliability (2026-11-20)
+
+- Durable team audit and recipient-scoped notification inbox backed by SQLite triggers; server-side permission checks and pagination.
+- Restricted operator metrics, readiness checks, request latency/error counters and safer response headers.
+- WAL-consistent SQLite backup, SHA-256 verification and guarded offline restore with pre-restore safety copy.
+- Explicit running-server lock, persistent read state and local concurrency/load smoke in CI.
+- Updated extension UI, cross-browser packages and end-to-end tests; version 2.3.9.
+
 # 2.3.8 — Cloud Files & Evidence (2026-11-20)
 
 - Added SQLite-backed team file storage with SHA-256-verified binary upload/download, content-addressed blobs and bounded quota.
