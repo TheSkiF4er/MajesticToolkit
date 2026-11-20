@@ -11,7 +11,7 @@ export async function cloudRpc(action,input={}){
   if(!result?.ok)throw Error(result?.error||'Ошибка Cloud Identity');
   return result.value;
 }
-export function cloudSection(){return `<section class="stack cloud-identity"><div class="card stack"><h3>Облачный аккаунт</h3><p class="subtle">Необязательный облачный вход. Данные Tactical Toolkit и других рабочих разделов продолжают храниться локально: их автоматическая синхронизация пока не включена. В версии 2.3.3 доступен ручной перенос выбранных RP-записей в командное хранилище.</p><div id="cloud-identity-root" aria-live="polite"><p class="subtle">Проверка статуса аккаунта…</p></div></div></section>`;}
+export function cloudSection(){return `<section class="stack cloud-identity"><div class="card stack"><h3>Облачный аккаунт</h3><p class="subtle">Необязательный облачный вход. Tactical Toolkit и другие рабочие разделы остаются локальными. В 2.3.4 можно отдельно включить синхронизацию семей и организаций привязанного RP-профиля.</p><div id="cloud-identity-root" aria-live="polite"><p class="subtle">Проверка статуса аккаунта…</p></div></div></section>`;}
 function sessionRow(row){return `<div class="ws-item cloud-session"><div><strong>${e(row.deviceName)}</strong>${row.current?' <span class="tag">Это устройство</span>':''}<p class="subtle">${e(date(row.lastSeenAt))} · до ${e(date(row.expiresAt))}</p></div>${btn('revoke','Отозвать',`data-id="${e(row.id)}" data-current="${row.current?'1':'0'}"`)}</div>`;}
 let selectedTeamId=null;
 let lastCreatedInvite=null;
@@ -96,7 +96,7 @@ export async function handleCloudSubmit(form,feedback){
 }
 export async function handleCloudAction(button,feedback){
   const action=button.dataset.cloudAction;
-  if(['cloudUnbind','cloudRefresh'].includes(action)){await handleCloudStorageAction(button,feedback,cloudRpc);await mountCloudIdentity(document.getElementById('cloud-identity-root'),feedback);return;}
+  if(['cloudUnbind','cloudRefresh','syncEnable','syncDisable','syncNow','syncResolveCloud','syncResolveLocal'].includes(action)){await handleCloudStorageAction(button,feedback,cloudRpc);await mountCloudIdentity(document.getElementById('cloud-identity-root'),feedback);return;}
   if(action==='refresh'){await mountCloudIdentity(document.getElementById('cloud-identity-root'),feedback);return;}
   if(action==='teamSelect'){
     selectedTeamId=button.dataset.teamId;lastCreatedInvite=null;

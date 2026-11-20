@@ -2,6 +2,7 @@
  * Initial migration is deliberately explicit and never overwrites source records.
  */
 import {randomUUID,createHash} from 'node:crypto';
+import {logCloudImport} from './sync.mjs';
 import {cleanFamily,validateFamilies} from '../src/lib/family-core.mjs';
 import {cleanOrganization,validateOrganizations} from '../src/lib/organization-core.mjs';
 
@@ -62,7 +63,7 @@ export async function handleCloudStorage({db,req,res,path,identity,now,cors,read
   member();
   if(!profileId){
     if(req.method==='GET'){
-      const rows=db.prepare(`SELECT p.*,(SELECT count(*) FROM cloud_records r WHERE r.cloud_profile_id=p.id) AS record_count FROM cloud_profiles p WHERE p.team_id=? ORDER BY p.name LIMIT 100`).all(teamId);
+      const rows=db.prepare(`SELECT p.*,(SELECT count(*) FROM cloud_records r WHERE r.cloud_profile_id=p.id AND r.deleted_at IS NULL) AS record_count FROM cloud_profiles p WHERE p.team_id=? ORDER BY p.name LIMIT 100`).all(teamId);
       return send(200,{profiles:rows.map(row=>({...view(row),recordCount:row.record_count}))});
     }
     if(req.method!=='POST')bad(405,'Метод не поддерживается');
@@ -86,7 +87,7 @@ export async function handleCloudStorage({db,req,res,path,identity,now,cors,read
     const kind=url.searchParams.get('kind');if(kind!==null&&!Object.hasOwn(KINDS,kind))bad(400,'Неизвестный тип данных');
     const after=url.searchParams.get('after')||'';if(after&&!(kind?ENTRY_ID.test(after):/^(?:family|organization):[\w-]{8,120}$/.test(after)))bad(400,'Некорректный курсор');
     if([...url.searchParams.keys()].some(x=>!['kind','after'].includes(x)))bad(400,'Неизвестный параметр');
-    const rows=kind?db.prepare('SELECT kind,record_id,payload,checksum,version,created_at FROM cloud_records WHERE cloud_profile_id=? AND kind=? AND record_id>? ORDER BY record_id LIMIT 21').all(profileId,kind,after):db.prepare(`SELECT kind,record_id,payload,checksum,version,created_at FROM cloud_records WHERE cloud_profile_id=? AND (kind||':'||record_id)>? ORDER BY kind,record_id LIMIT 21`).all(profileId,after);
+    const rows=kind?db.prepare('SELECT kind,record_id,payload,checksum,version,created_at FROM cloud_records WHERE cloud_profile_id=? AND deleted_at IS NULL AND kind=? AND record_id>? ORDER BY record_id LIMIT 21').all(profileId,kind,after):db.prepare(`SELECT kind,record_id,payload,checksum,version,created_at FROM cloud_records WHERE cloud_profile_id=? AND deleted_at IS NULL AND (kind||':'||record_id)>? ORDER BY kind,record_id LIMIT 21`).all(profileId,after);
     const result=rows.slice(0,20);
     return send(200,{records:result.map(r=>({kind:r.kind,id:r.record_id,record:JSON.parse(r.payload),checksum:r.checksum,version:r.version,importedAt:iso(r.created_at)})),nextCursor:rows.length>20?(kind?result.at(-1).record_id:result.at(-1).kind+':'+result.at(-1).record_id):null});
   }
@@ -113,10 +114,11 @@ export async function handleCloudStorage({db,req,res,path,identity,now,cors,read
     const size=stmt(db,'SELECT count(*) AS n FROM cloud_records WHERE cloud_profile_id=?',profileId).n;
     let imported=0,unchanged=0;
     for(const item of parsed){
-      const old=stmt(db,'SELECT checksum FROM cloud_records WHERE cloud_profile_id=? AND kind=? AND record_id=?',profileId,item.kind,item.id);
-      if(old){if(old.checksum!==item.checksum)bad(409,`Конфликт существующей облачной записи: ${item.kind} / ${item.id}`);unchanged++;continue;}
+      const old=stmt(db,'SELECT checksum,deleted_at FROM cloud_records WHERE cloud_profile_id=? AND kind=? AND record_id=?',profileId,item.kind,item.id);
+      if(old){if(old.deleted_at!==null||old.checksum!==item.checksum)bad(409,`Конфликт существующей облачной записи: ${item.kind} / ${item.id}`);unchanged++;continue;}
       if(size+imported>=10_000)bad(409,'Достигнут лимит облачного RP-профиля');
-      db.prepare('INSERT INTO cloud_records(cloud_profile_id,kind,record_id,payload,checksum,created_at,imported_by) VALUES(?,?,?,?,?,?,?)').run(profileId,item.kind,item.id,item.payload,item.checksum,now,accountId);imported++;
+      db.prepare('INSERT INTO cloud_records(cloud_profile_id,kind,record_id,payload,checksum,created_at,imported_by) VALUES(?,?,?,?,?,?,?)').run(profileId,item.kind,item.id,item.payload,item.checksum,now,accountId);
+      logCloudImport(db,{profileId,kind:item.kind,id:item.id,payload:item.payload,checksum:item.checksum,accountId,now});imported++;
     }
     if(imported)db.prepare('INSERT INTO team_activity(id,team_id,actor_id,action,subject_id,occurred_at) VALUES(?,?,?,?,?,?)').run(randomUUID(),teamId,accountId,'cloud.records_imported',profileId,now);
     return {imported,unchanged,total:parsed.length};

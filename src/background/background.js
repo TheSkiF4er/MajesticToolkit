@@ -1,4 +1,6 @@
 import {createCloudIdentityService} from '../lib/cloud-identity-client.mjs';
+import {FAMILY_PREFIX} from '../lib/family-core.mjs';
+import {ORGANIZATION_PREFIX} from '../lib/organization-core.mjs';
 import {getVaultRecord,verifyVaultFile} from '../lib/evidence-vault.mjs';
 import {moderationOpsFor} from '../lib/moderation-ops-store.mjs';
 import {registryAction} from '../lib/punishment-registry-store.mjs';
@@ -162,12 +164,17 @@ function start() {
     catch(error){console.warn('MajesticToolkit: storage access level unsupported',error);}
     await scheduleSyncScripts();
   })();
+  void api.alarms.create('mt-cloud-sync-v234',{periodInMinutes:1}).catch(error=>console.warn('MajesticToolkit: cloud sync alarm',error));
+  void cloudIdentity.handle('syncTick',{}).catch(error=>console.warn('MajesticToolkit: cloud sync startup',error));
   void api.alarms.create('rp-nexus-open-tabs-v3',{periodInMinutes:5}).catch(err => console.warn('MajesticToolkit: alarms',err));
   void restoreTimerAlarms().catch(error=>console.warn('MajesticToolkit: восстановление таймеров',error));
 }
 api.runtime.onInstalled.addListener(start);
 api.runtime.onStartup?.addListener(start);
 api.storage.onChanged.addListener((changes,area) => {
+  if(area==='local'&&Object.keys(changes).some(k=>k.startsWith(FAMILY_PREFIX)||k.startsWith(ORGANIZATION_PREFIX))){
+    void cloudIdentity.handle('syncTick',{}).catch(error=>console.warn('MajesticToolkit: cloud sync changes',error));
+  }
   if(area==='local'){
     const draftProfiles=Object.keys(changes).filter(k=>k.startsWith(OVERLAY_PREFIX)).map(k=>k.slice(OVERLAY_PREFIX.length));
     if(draftProfiles.length)void api.tabs.query({}).then(tabs=>Promise.allSettled(tabs.filter(t=>t.id&&FORUMS.some(f=>t.url?.startsWith(f.origin.slice(0,-1)))).flatMap(t=>draftProfiles.map(profileId=>api.tabs.sendMessage(t.id,{type:'MT_PUNISHMENT_DRAFT_CHANGED',profileId}))))).catch(()=>{});
@@ -182,7 +189,8 @@ api.permissions.onRemoved.addListener(() => {
   // Revoked hosts may no longer expose tab URLs; notify existing content scripts by tab ID.
   void (async()=>{const hosts=[];for(const site of FORUMS)if(!await api.permissions.contains({origins:[site.origin]}))hosts.push(new URL(site.origin).hostname);if(!hosts.length)return;const tabs=await api.tabs.query({});await Promise.allSettled(tabs.filter(t=>Number.isInteger(t.id)).map(t=>api.tabs.sendMessage(t.id,{type:'RP_NEXUS_FORUM_PERMISSION_REVOKED',hosts})));})().catch(()=>{});
 });
-api.alarms.onAlarm.addListener(alarm => {if (alarm.name === 'rp-nexus-open-tabs-v3') void tick();
+api.alarms.onAlarm.addListener(alarm => {if(alarm.name==='mt-cloud-sync-v234')void cloudIdentity.handle('syncTick',{}).catch(error=>console.warn('MajesticToolkit: sync retry',error));
+  if (alarm.name === 'rp-nexus-open-tabs-v3') void tick();
   if(alarm.name.startsWith(ALARM_PREFIX))void handleTimerAlarm(alarm.name.slice(ALARM_PREFIX.length)).catch(error=>console.warn('MajesticToolkit: завершение таймера',error));
 });
 api.runtime.onMessage.addListener((message,sender,sendResponse) => {

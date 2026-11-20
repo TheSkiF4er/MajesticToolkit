@@ -31,6 +31,7 @@ async def main():
               window.__remote=[];window.__bindings={};window.__migrated=[];
               window.__rpc=async(action,input)=>{
                 if(action==='cloudBindings')return {bindings:__bindings,profiles:__remote};
+                if(action==='syncStatus')return {enabled:false,pending:0,conflicts:[],initialized:false};
                 if(action==='cloudProfileCreate'){const p={id:'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',name:input.name,project:input.project,server:input.server};__remote.push(p);return {profile:p};}
                 if(action==='cloudBind'){__bindings[input.localProfileId]=input.cloudProfileId;return {bindings:__bindings};}
                 if(action==='cloudUnbind'){delete __bindings[input.localProfileId];return {bindings:__bindings};}

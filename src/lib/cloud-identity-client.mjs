@@ -1,4 +1,5 @@
 /** Cloud Identity 2.3.3: privileged background-only credential store + authenticated requests. */
+import {createCloudSyncController} from './cloud-sync-client.mjs';
 export const CLOUD_CONFIG_KEY='mtCloudIdentityConfigV231';
 export const CLOUD_SESSION_KEY='mtCloudIdentitySessionV231';
 export const CLOUD_BINDINGS_KEY='mtCloudProfileBindingsV233';
@@ -21,6 +22,7 @@ export function createCloudIdentityService({storage,permissions,fetchImpl=fetch,
   const read=async key=>(await storage.get(key))[key];
   const write=async(key,value)=>storage.set({[key]:value});
   const clear=async()=>{access=null;await storage.remove(CLOUD_SESSION_KEY);};
+  const sync=createCloudSyncController({storage,authed:(path,options)=>authed(path,options),now});
   async function config(){return (await read(CLOUD_CONFIG_KEY))?.origin||'';}
   async function saved(){return await read(CLOUD_SESSION_KEY)||null;}
   async function checked(origin){if(!await permissions.contains({origins:[cloudHostPattern(origin)]}))throw Error('Не предоставлено разрешение на обращение к Cloud Identity Server');}
@@ -86,6 +88,13 @@ export function createCloudIdentityService({storage,permissions,fetchImpl=fetch,
     }
     // Team credentials are never sent to the page. Every team operation runs in background
     // with the current access token and is independently authorized by the server.
+    if(action==='syncTick'){
+      const session=await saved();
+      if(!session)return {profiles:[]};
+      // Capture and persist edits even when the server is offline; the controller
+      // obtains/refreshes credentials only when it reaches a network operation.
+      return sync.run({origin:session.origin,account:session.account},{teamId:input.teamId||null,localId:input.localProfileId||null});
+    }
     const teamId=input.teamId;
     const teamPath=()=>{
       if(typeof teamId!=='string'||!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(teamId))throw Error('Некорректный идентификатор команды');
@@ -118,12 +127,39 @@ export function createCloudIdentityService({storage,permissions,fetchImpl=fetch,
       const local=localState?.profiles?.find(p=>p.id===localId);
       if(!local)throw Error('Локальный RP-профиль отсутствует');
       if(action==='cloudBind'){
+        if(bindings[localId]&&bindings[localId]!==input.cloudProfileId&&(await sync.inspect({origin:session.origin,account:session.record.account},teamId,localId)).enabled)throw Error('Сначала отключите синхронизацию перед сменой облачного RP-профиля');
         const remote=live.profiles.find(p=>p.id===input.cloudProfileId);
         if(!remote)throw Error('Облачный RP-профиль не найден');
         if(local.project!==remote.project||local.server!==remote.server)throw Error('RP-проект и сервер локального и облачного профиля должны совпадать');
         bindings[localId]=remote.id;
-      }else delete bindings[localId];
+      }else {
+        if(bindings[localId])await sync.config({origin:session.origin,account:session.record.account},teamId,localId,bindings[localId],false);
+        delete bindings[localId];
+      }
       all[scope]=bindings;await write(CLOUD_BINDINGS_KEY,all);return {bindings};
+    }
+    if(['syncStatus','syncEnable','syncDisable','syncNow','syncResolve'].includes(action)){
+      const record=await saved();if(!record)throw Error('Сначала войдите в облачный аккаунт');
+      const session={origin:record.origin,account:record.account};
+      const localId=input.localProfileId;
+      if(typeof localId!=='string'||!/^[\w-]{8,128}$/.test(localId))throw Error('Некорректный локальный RP-профиль');
+      const scope=[record.origin,record.account.id,teamId].join('|');
+      const all=(await read(CLOUD_BINDINGS_KEY))||{};
+      const bound=all[scope]?.[localId];
+      if(!bound)throw Error('Локальный RP-профиль не привязан к этому облачному профилю');
+      if(action==='syncStatus')return sync.inspect(session,teamId,localId);
+      if(action==='syncEnable'||action==='syncDisable'){
+        // Re-check team membership and cloud profile consistency before enabling.
+        const profiles=(await authed(cloudPath())).profiles;
+        const local=(await read('rpNexusStateV1'))?.profiles?.find(x=>x.id===localId);
+        const remote=profiles.find(x=>x.id===bound);
+        if(!local||!remote||local.project!==remote.project||local.server!==remote.server)throw Error('Привязка RP-профиля устарела');
+        const state=await sync.config(session,teamId,localId,bound,action==='syncEnable');
+        if(action==='syncEnable')return (await sync.run(session,{teamId,localId})).profiles[0]||state;
+        return state;
+      }
+      if(action==='syncNow')return (await sync.run(session,{teamId,localId})).profiles[0]||sync.inspect(session,teamId,localId);
+      if(action==='syncResolve')return sync.resolveConflict(session,{teamId,localId,kind:input.kind,id:input.id,choice:input.choice});
     }
     if(action==='cloudProfiles')return authed(cloudPath());
     if(action==='cloudProfileCreate')return authed(cloudPath(),{method:'POST',body:{name:input.name,project:input.project,server:input.server}});

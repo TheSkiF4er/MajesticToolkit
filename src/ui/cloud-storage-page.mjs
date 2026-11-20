@@ -17,12 +17,13 @@ export async function loadCloudWorkspace(team,rpc){
   const [families,organizations,records]=await Promise.all([
     listFamilies(chosen.id),listOrganizations(chosen.id),remote?rpc('cloudRecords',{teamId:team.id,cloudProfileId:remote.id}):Promise.resolve(null)
   ]);
-  return {team,local,chosen,remote,profiles,bindings,families,organizations,records};
+  const sync=remote?await rpc('syncStatus',{teamId:team.id,localProfileId:chosen.id}):null;
+  return {team,local,chosen,remote,profiles,bindings,families,organizations,records,sync};
 }
 
 export function cloudStoragePanel(data){
   if(!data)return '';
-  const {team,local,chosen,remote,profiles,bindings,families,organizations,records,error}=data;
+  const {team,local,chosen,remote,profiles,bindings,families,organizations,records,sync,error}=data;
   if(error)return `<div class="card stack"><h3>Cloud Storage & Migration</h3><p role="alert">${e(error)}</p></div>`;
   const manager=['owner','admin'].includes(team.role),editor=manager||team.role==='editor';
   const localOptions=local.profiles.map(p=>option(p.id,`${p.name} · ${p.project} / ${p.server}`,p.id===chosen.id)).join('');
@@ -32,12 +33,19 @@ export function cloudStoragePanel(data){
   const entries=[...families.map(f=>choice('family',f)),...organizations.map(o=>choice('organization',o))];
   const profileList=profiles.map(p=>`<div class="ws-item"><div><strong>${e(p.name)}</strong><p class="subtle">${e(p.project)} / ${e(p.server)} · ${Number(p.recordCount)||0} записей</p></div></div>`).join('');
   const recent=(records?.records||[]).map(r=>`<div class="ws-item"><div><strong>${e(r.record?.name||r.id)}</strong><p class="subtle">${r.kind==='family'?'Семья':'Организация'} · v${Number(r.version)} · ${e(date(r.importedAt))}</p></div></div>`).join('');
-  return `<div class="card stack cloud-storage" id="cloud-storage-panel"><h3>Cloud Storage & Migration · 2.3.3</h3><p class="subtle">Ручной перенос выбранных семей и организаций. Локальные записи сохраняются, автоматическая синхронизация пока выключена. Данные становятся доступны участникам выбранной команды.</p>
+  const syncAttrs=`data-team-id="${e(team.id)}" data-local-id="${e(chosen.id)}"`;
+  const conflicts=(sync?.conflicts||[]).map(c=>`<div class="ws-item"><div><strong>${e(c.kind==='family'?'Семья':'Организация')} · ${e(c.id)}</strong><p class="subtle">${e(c.reason)} · версия ${Number(c.version)||0}</p></div><div class="row">${btn('syncResolveCloud','Взять облачную',`${syncAttrs} data-kind="${e(c.kind)}" data-id="${e(c.id)}"`)}${editor?btn('syncResolveLocal','Оставить локальную',`${syncAttrs} data-kind="${e(c.kind)}" data-id="${e(c.id)}"`):''}</div></div>`).join('');
+  const syncHtml=remote?`<div class="stack cloud-sync"><h4>Multi-Device Sync & Offline · 2.3.4</h4>
+     <p class="subtle">Синхронизация семей и организаций между устройствами с офлайн-очередью. Подключается отдельно для каждого локального RP-профиля. Другие данные расширения не публикуются.</p>
+     <div class="row"><span class="tag">${sync?.enabled?(sync.error?'Ошибка / офлайн':sync.conflicts.length?'Требуется разрешить конфликты':'Автоматическая синхронизация'):'Выключена'}</span>${sync?.enabled?btn('syncDisable','Отключить',syncAttrs):editor?btn('syncEnable','Включить синхронизацию',syncAttrs):''}${sync?.enabled?btn('syncNow','Синхронизировать сейчас',syncAttrs):''}</div>
+     ${sync?.enabled?`<p class="subtle">Ожидают отправки: ${Number(sync.pending)||0}; конфликтов: ${sync.conflicts.length}; последняя успешная проверка: ${e(date(sync.lastSync))}.</p>${sync.error?`<p role="alert">${e(sync.error)}</p>`:''}${conflicts?`<h4>Разрешение конфликтов</h4><div class="stack">${conflicts}</div>`:''}`:''}</div>`:'';
+  return `<div class="card stack cloud-storage" id="cloud-storage-panel"><h3>Cloud Storage & Migration · 2.3.4</h3><p class="subtle">Перенос выбранных семей и организаций по-прежнему доступен отдельно от автоматической синхронизации. Локальные записи не удаляются при включении облака.</p>
     <div class="stack"><h4>Облачные RP-профили команды</h4>${profileList||'<p class="subtle">Профили ещё не созданы.</p>'}
     ${manager?`<form id="cloud-profile-create-form" class="row cloud-profile-form" data-team-id="${e(team.id)}"><label>Название облачного профиля<input name="name" required minlength="2" maxlength="64" value="${e(chosen.name)}"></label><input type="hidden" name="project" value="${e(chosen.project)}"><input type="hidden" name="server" value="${e(chosen.server)}"><button class="button secondary">Создать из выбранного локального</button></form>`:''}</div>
     <div class="stack"><h4>Подключение локального RP-профиля</h4><label>Локальный профиль<select id="cloud-local-profile" data-team-id="${e(team.id)}">${localOptions}</select></label><p class="subtle">Проект: ${e(chosen.project)} · сервер: ${e(chosen.server)}</p>
     ${available.length?`<form id="cloud-profile-bind-form" class="row" data-team-id="${e(team.id)}" data-local-id="${e(chosen.id)}"><label>Облачный профиль<select name="cloudProfileId" required>${cloudOptions}</select></label><button class="button secondary">${remote?'Изменить привязку':'Привязать профиль'}</button></form>`:'<p class="subtle">Нет подходящих облачных профилей. Создайте профиль с таким же проектом и сервером.</p>'}
     ${remote?`<div class="row"><span class="tag">Привязан: ${e(remote.name)}</span>${btn('cloudUnbind','Отвязать',`data-team-id="${e(team.id)}" data-local-id="${e(chosen.id)}"`)}</div>`:''}</div>
+    ${syncHtml}
     ${remote?`<div class="stack"><h4>Выборочный перенос в «${e(remote.name)}»</h4>${editor?`<form id="cloud-profile-import-form" class="stack" data-team-id="${e(team.id)}" data-cloud-id="${e(remote.id)}" data-local-id="${e(chosen.id)}"><p class="subtle">Отметьте нужные записи. При наличии совпадающего ID с другими данными сервер вернёт конфликт и не выполнит перезапись.</p><div class="cloud-records">${entries.slice(0,250).join('')||'<p class="subtle">В этом локальном профиле пока нет семей и организаций.</p>'}</div>${entries.length>250?'<p class="subtle">Показаны первые 250 записей; для переноса остальных сократите локальную выборку.</p>':''}<button class="button primary" ${!entries.length?'disabled':''}>Перенести выбранные записи</button></form>`:'<p class="subtle">Для импорта необходима роль Editor, Admin или Owner.</p>'}
     <div class="stack"><h4>Данные на сервере</h4>${recent||'<p class="subtle">Сервер пока не содержит импортированных записей.</p>'}${records?.nextCursor?'<p class="subtle">Показаны первые 20 записей. Для полного просмотра используйте постраничный API.</p>':''}<div class="row">${btn('cloudRefresh','Обновить хранилище')}</div></div></div>`:''}
   </div>`;
@@ -89,6 +97,18 @@ export async function handleCloudStorageAction(button,feedback,rpc){
     if(!confirm('Отвязать локальный профиль? Его данные останутся локально, облачные записи останутся на сервере.'))return;
     await rpc('cloudUnbind',{teamId:button.dataset.teamId,localProfileId:button.dataset.localId});
     feedback('Локальная привязка удалена; облачные записи сохранены');return;
+  }
+  if(['syncEnable','syncDisable','syncNow','syncResolveCloud','syncResolveLocal'].includes(action)){
+    const input={teamId:button.dataset.teamId,localProfileId:button.dataset.localId};
+    if(action==='syncEnable'&&!confirm('Включить автоматическую синхронизацию? ВСЕ локальные семьи и организации этого RP-профиля будут опубликованы для участников команды, включая записи, не выбранные при ручном переносе.'))return;
+    if(action==='syncDisable'&&!confirm('Выключить автоматическую синхронизацию? Неотправленные изменения останутся локально в очереди.'))return;
+    if(action.startsWith('syncResolve')){
+      if(!confirm(action==='syncResolveCloud'?'Принять облачную версию? Локальные изменения этой записи будут заменены (удаление может быть ограничено связями).':'Отправить локальную версию поверх текущей облачной редакции?'))return;
+      await rpc('syncResolve',{...input,kind:button.dataset.kind,id:button.dataset.id,choice:action==='syncResolveCloud'?'cloud':'local'});
+      feedback('Выбор разрешения конфликта сохранён');return;
+    }
+    const result=await rpc(({syncEnable:'syncEnable',syncDisable:'syncDisable',syncNow:'syncNow'})[action],input);
+    feedback(action==='syncDisable'?'Синхронизация отключена':result.error?'Изменения сохранены локально: '+result.error:'Синхронизация выполнена');return;
   }
   if(action==='cloudRefresh')return;
   throw Error('Неизвестная операция Cloud Storage');
