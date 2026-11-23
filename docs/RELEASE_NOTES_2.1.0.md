@@ -1,4 +1,6 @@
-# MajesticToolkit 2.1.0 — Government & Justice GA
+# MajesticToolkit 2.1.0 — Государство и правосудие — общедоступный выпуск
+> **Архив релиза.** Здесь сохранены возможности, проверки и ограничения, актуальные на момент выпуска 2.1.0. Полная последовательность изменений — в [истории версий](../CHANGELOG.md).
+
 
 ## Рабочие сценарии
 
@@ -22,3 +24,7 @@
 ## Release checks
 
 `npm run verify`; дополнительно `npm run test:browser:decisions`, `npm run test:browser:evidence`, `npm run test:browser:procedural`, `npm run test:browser`. Сквозные сценарии используют локальную тестовую фикстуру, не подключение к игровому серверу.
+
+---
+
+[Все руководства](README.md) · [История версий](../CHANGELOG.md) · [Текущий выпуск 2.4.0](RELEASE_NOTES_2.4.0.md)

@@ -1,4 +1,6 @@
-# MajesticToolkit v1.5.0 — Production Readiness
+# MajesticToolkit 1.5.0 — Готовность к выпуску
+> **Архив релиза.** Здесь сохранены возможности, проверки и ограничения, актуальные на момент выпуска 1.5.0. Полная последовательность изменений — в [истории версий](../CHANGELOG.md).
+
 
 Обновление **MajesticToolkit** — локального браузерного расширения для Majestic RP, Russia Online и RP-форумов на XenForo. Это первый публичный выпуск после 1.0.0, поэтому ниже перечислены изменения 1.1.0–1.5.0.
 
@@ -44,3 +46,7 @@
 **Лицензия:** Mozilla Public License 2.0 (MPL-2.0).
 
 [Документация](https://github.com/TheSkiF4er/MajesticToolkit/blob/main/README.md) · [Сообщить об ошибке](https://github.com/TheSkiF4er/MajesticToolkit/issues)
+
+---
+
+[Все руководства](README.md) · [История версий](../CHANGELOG.md) · [Текущий выпуск 2.4.0](RELEASE_NOTES_2.4.0.md)

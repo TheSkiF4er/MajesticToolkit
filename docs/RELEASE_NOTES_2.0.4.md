@@ -1,4 +1,6 @@
-# MajesticToolkit 2.0.4 — Judicial System
+# MajesticToolkit 2.0.4 — Судебная система
+> **Архив релиза.** Здесь сохранены возможности, проверки и ограничения, актуальные на момент выпуска 2.0.4. Полная последовательность изменений — в [истории версий](../CHANGELOG.md).
+
 
 ## Реализованные операции
 
@@ -23,3 +25,7 @@
 ## Проверка
 
 `npm test` — модульные тесты. `npm run test:browser:judicial` — Chromium E2E создания судов, правил и маршрутизации. `npm run test:browser:agencies` — регрессия ведомств. `MAJESTIC_E2E_BROWSERS=chromium python3 tests/browser-e2e.py` — E2E общих модулей. `npm run verify` — все четыре пакета расширения.
+
+---
+
+[Все руководства](README.md) · [История версий](../CHANGELOG.md) · [Текущий выпуск 2.4.0](RELEASE_NOTES_2.4.0.md)

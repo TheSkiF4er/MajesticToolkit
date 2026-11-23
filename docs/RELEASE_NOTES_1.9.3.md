@@ -1,28 +1,32 @@
-# MajesticToolkit 1.9.3 — AI Complaint Analysis
+# MajesticToolkit 1.9.3 — Анализ жалоб с помощью ИИ
 
-Production changes, based on the 1.9.2 local OpenAI gateway and existing complaint/evidence stores.
+> **Архив релиза.** Функция построена на необязательном локальном шлюзе OpenAI версии 1.9.2 и существующем хранилище жалоб и доказательств.
 
-## What works
+## Возможности
 
-- In Workspace → AI / Правила → **AI Complaint Analysis**, select a real complaint from the active profile. The **Анализ с AI** button in a complaint opens the same workspace with that case selected.
-- Individually select up to **6 evidence records**, **12 timeline events**, and **5 active rules**. The preview contains **metadata and user-authored descriptions**, not video frames, image bytes, or contents of local attachments. It does not fetch or inspect external URLs.
-- Names, evidence URLs, case notes, and existing drafts are **excluded by default** and can only be included using separate unchecked opt-in controls. Review all remaining titles and descriptions for sensitive information before transmission.
-- View the exact JSON request, separately consent, and initiate a real Responses API stream through the existing optional, loopback-only gateway. The gateway rejects unexpected keys and invalid/oversized references, applies its rate limits and sends the OpenAI request with `store:false`.
-- Receive a bounded structured preliminary report: summary, referenced facts, possible rules, contradictions, missing materials, follow-up questions and an editable proposed draft. All referenced evidence/event/rule IDs are checked against the selected records; invented IDs cause the report to be rejected.
-- Explicitly confirm and save the **edited draft** into the specific case. The backend enforces active profile, exact forum project, unchanged case revision, non-completed status, and serialized writes. Previous drafts are not silently overwritten. No auto-send or game sanctions.
-- Existing rules AI, offline assistant, Complaint Manager, Moderation Workspace, Evidence Timeline, Backup v17 and the four platform builds stay compatible. AI text and gateway token are not added to backups.
+- В рабочем пространстве **«ИИ / Правила → Анализ жалоб»** выберите обращение из активного профиля. Кнопка **«Анализ с ИИ»** в жалобе открывает то же рабочее пространство с выбранным делом.
+- Отберите до **6 записей доказательств**, **12 событий временной шкалы** и **5 действующих правил**. Предпросмотр содержит метаданные и описания пользователя, но не видеокадры, двоичные изображения или содержимое локальных вложений. Внешние ссылки не открываются автоматически.
+- Имена, адреса доказательств, заметки дела и существующие черновики **исключены по умолчанию**. Их можно добавить только через отдельные, первоначально выключенные переключатели. Перед отправкой проверяйте названия и описания на чувствительные сведения.
+- Просмотрите точный JSON, дайте отдельное согласие и отправьте запрос через локальный шлюз. Он отклоняет неожиданные поля, некорректные идентификаторы и слишком крупные данные, применяет ограничения частоты и отправляет запрос OpenAI с `store:false`.
+- Получите структурированный **предварительный** отчёт: сводку, привязанные факты, возможные правила, противоречия, недостающие материалы, вопросы и редактируемый проект решения. Идентификаторы доказательств, событий и правил сверяются с выбранными записями; выдуманные ссылки приводят к отклонению результата.
+- После проверки можно отдельно подтвердить сохранение **отредактированного черновика** в конкретную жалобу. Серверная логика проверяет профиль, проект форума, неизменность редакции, незавершённость дела и последовательность записей. Существующий черновик не перезаписывается без подтверждения. Автоматической публикации или назначения санкций нет.
+- Сохраняется совместимость с ИИ для правил, локальным помощником, «Менеджером жалоб», модерацией, временной шкалой доказательств, Backup v17 и четырьмя браузерными сборками. Текст ИИ и токен шлюза не добавляются в резервные копии.
 
-## Usage
+## Порядок работы
 
-1. Start the existing gateway (`OPENAI_API_KEY`, `MT_AI_GATEWAY_TOKEN`, `npm run ai:gateway`). AI must be enabled for the profile.
-2. Open a complaint and click **Анализ с AI**, or open **AI / Правила → AI Complaint Analysis**.
-3. Check the desired evidence, events and rules; optionally include notes, names or URLs, then select **Подготовить предпросмотр**.
-4. Check the JSON and separately consent before **Анализировать с AI**.
-5. Review the result against the original material. Edit the draft, click **Сохранить черновик в жалобу**, and independently publish it later through the existing reviewed workflow.
+1. Запустите локальный шлюз с `OPENAI_API_KEY` и `MT_AI_GATEWAY_TOKEN` командой `npm run ai:gateway`; включите ИИ для текущего профиля.
+2. В жалобе нажмите **«Анализ с ИИ»** либо откройте соответствующий раздел рабочего пространства.
+3. Отметьте необходимые доказательства, события и правила; при необходимости отдельно разрешите включение заметок, имён или URL. Нажмите **«Подготовить предпросмотр»**.
+4. Проверьте JSON запроса и подтвердите отправку через **«Анализировать с ИИ»**.
+5. Сверьте отчёт с первоисточниками, исправьте проект и нажмите **«Сохранить черновик в жалобу»**. Публикация в дальнейшем выполняется отдельно в штатном процессе.
 
-## Limits & safety
+## Ограничения и безопасность
 
-- Max question: 2,000 chars; request metadata: 16,000 chars, enforced both client and gateway; file uploads disabled.
-- A URL and a timecode do **not** mean the model has watched a video or read the target website. No determination of guilt, official rule interpretation, or automatic sanction.
-- Source texts and evidence descriptions are untrusted prompt-injection surfaces. The server applies no tools and asks for JSON with only locally permitted IDs. Output must be manually verified.
-- The official OpenAI service and logged-in forums were not exercised without credentials; HTTP transport uses mocked OpenAI SSE, and browser E2E runs in isolated Chromium fixtures. Firefox/Android/Safari receive validated builds, not live device acceptance.
+- Максимум **2 000 символов** в вопросе и **16 000 символов** в метаданных запроса: лимиты действуют и в интерфейсе, и в шлюзе. Передача файлов отключена.
+- URL и таймкод **не означают**, что модель посмотрела видео или прочла сайт. ИИ не устанавливает вину, не даёт официальную трактовку правил и не назначает наказания.
+- Тексты правил и описания доказательств могут содержать вредоносные инструкции. Шлюз не предоставляет модели инструменты, ожидает JSON с разрешёнными локальными идентификаторами; итог требует проверки человеком.
+- Настоящий аккаунт OpenAI и авторизованные форумы не использовались в автоматических проверках без учётных данных. HTTP-поток моделировался, E2E выполнялся на изолированных DOM-фикстурах Chromium; упаковка для других браузеров не подтверждает реальную приёмку устройств.
+
+---
+
+[Документация](README.md) · [Шлюз ИИ](../ai-gateway/README.md) · [История изменений](../CHANGELOG.md)

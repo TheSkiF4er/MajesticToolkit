@@ -1,3 +1,18 @@
-# MajesticToolkit 1.6.2 — Rules & Binds Import
+# MajesticToolkit 1.6.2 — Импорт правил и биндов
 
-Import `binds_and_links.json` via Forum → Binder → Import. Select Majestic RP. Default merge preserves user edits, attaches structured rule links, stores folders and calculator settings. Replace explicitly updates content; skip leaves existing templates untouched; add creates copies linked to the same rule. Imported excerpts are unverified and units must be reviewed. Backup v15 preserves profile settings, templates and rules.
+> **Архив релиза.** Функция первоначально появилась в 1.6.2; за актуальной последовательностью обновлений обратитесь к [истории изменений](../CHANGELOG.md).
+
+## Что изменилось
+
+В разделе **«Форум → Биндер → Импорт»** можно загрузить файл `binds_and_links.json` для выбранного профиля Majestic RP.
+
+- **Объединение по умолчанию** сохраняет правки пользователя, добавляет структурированные ссылки на правила, папки и настройки калькулятора.
+- **Замена** явно обновляет содержимое существующих шаблонов.
+- **Пропуск** оставляет текущие шаблоны неизменными.
+- **Добавление копии** создаёт новые шаблоны со связью с тем же правилом.
+
+Импортированные фрагменты не проходят независимую проверку. Перед использованием сверяйте редакции правил и единицы санкций с источником. Резервная копия **v15** сохраняет настройки профиля, шаблоны и правила.
+
+---
+
+[Документация](README.md) · [История изменений](../CHANGELOG.md)

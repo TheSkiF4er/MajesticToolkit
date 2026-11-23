@@ -1,25 +1,31 @@
-# MajesticToolkit 1.9.1 — AI Connection & Privacy Core
+# MajesticToolkit 1.9.1 — Подключение ИИ и управление конфиденциальностью
 
-## Delivered
+> **Архив релиза.** Первое необязательное подключение к ИИ через собственный локальный шлюз. Более поздние функции описаны в соответствующих выпусках.
 
-- **Workspace → AI Connection**: a new, working opt-in AI chat page with a typed-message preview, per-request consent, streaming output, cancel control, authenticated health check and session-only transcript.
-- **Local self-hosted Node 22 gateway** (`ai-gateway/server.mjs`) binds to `127.0.0.1:32187`, proxies actual OpenAI `POST /v1/responses` with `stream:true`, `store:false`, enforced token and extension-origin access, input limits, rate limits and real SSE processing.
-- API credentials remain on the **server side**. Users enter only their separate gateway bearer token in the extension; it is held in memory, not saved to `storage.local`, exported backups, diagnostic logs or committed files. The settings store persists only a per-profile `enabled` flag (default `false`).
-- Optional loopback host permission is requested via a user gesture. No connection occurs when AI is disabled or before sending the explicitly displayed text. No automatic record, file, complaint, rules or profile transmission. All existing local search/assistant capabilities remain unchanged.
-- Supports OpenAI API failures, 401/429, streaming interruptions, timeouts and cancellation. Token and answers are cleared on profile switch or by explicit user action.
-- Complete node integration tests against an HTTP gateway and mocked upstream plus Chromium DOM test for enabling, preview, consent, response streaming and isolation. Four platform package builds remain supported.
+## Что реализовано
 
-## Installation
+- **«Рабочее пространство → Подключение ИИ»:** страница с предварительным просмотром вопроса, отдельным согласием на каждый запрос, потоковым ответом, отменой, проверкой подключения и историей только в текущем сеансе.
+- **Локальный сервер на Node.js 22** (`ai-gateway/server.mjs`): слушает `127.0.0.1:32187`, передаёт запрос в OpenAI `POST /v1/responses` с параметрами `stream:true` и `store:false`, проверяет токен и источник расширения, ограничения входных данных, частоту запросов и поток SSE.
+- **Разделение секретов:** ключ поставщика остаётся в окружении сервера. В расширение пользователь вводит отдельный токен шлюза, который хранится в памяти открытой страницы, а не в `storage.local`, резервной копии, журнале диагностики или исходном коде. В настройках профиля сохраняется только флаг `enabled` (по умолчанию `false`).
+- **Согласие на подключение:** доступ к `http://127.0.0.1/*` запрашивается по действию пользователя. При выключенном ИИ обращения не выполняются. Записи, файлы, жалобы, правила и данные профиля не передаются автоматически. Локальный поиск продолжает работать отдельно.
+- **Отказы и прерывания:** обработка ошибок OpenAI, состояний 401/429, тайм-аутов, обрывов потока и отмены. Токен и ответы очищаются при смене профиля или по команде пользователя.
+- **Проверки:** интеграционные тесты HTTP с имитацией внешнего API и браузерный сценарий Chromium на подтверждение, предпросмотр, потоковую выдачу и изоляцию профилей; четыре варианта сборки сохранены.
 
-1. Apply the 1.9.1 **changed-files patch** to the **full 1.9.0** source tree.
-2. `npm run verify`, then `npm run test:browser`.
-3. Set up **your own** provider key and gateway token, start the optional server with `npm run ai:gateway` (details in `ai-gateway/README.md`).
-4. Install the rebuilt extension; opt-in at **Workspace → AI Connection**. Your gateway token is **not** your OpenAI API key.
+## Установка
 
-## Limitations
+1. Примените пакет изменённых файлов версии 1.9.1 поверх **полного проекта 1.9.0**.
+2. Выполните `npm run verify`, затем `npm run test:browser`.
+3. Задайте **собственный** ключ API и независимый токен шлюза; запустите `npm run ai:gateway`. Подробности: [инструкция шлюза](../ai-gateway/README.md).
+4. Установите обновлённое расширение, включите ИИ в рабочем пространстве и введите токен шлюза. **Это не ключ OpenAI.**
 
-- The 1.9.1 release delivers basic text questions, not yet source-grounded rule answers or automated complaint analysis (scheduled for 1.9.2–1.9.3).
-- The optional gateway is **localhost-only** and **single-operator**. There is no shared hosted service, user account or built-in OpenAI key; live API calls require separate credentials and internet access.
-- Actual OpenAI billing and provider-side processing are subject to OpenAI API policies. `store:false` is requested, but it is not an absolute no-retention guarantee.
-- The gateway's in-memory rate limit is not persistent and not a monetary cost cap. No cloud request or historical conversation is initiated automatically.
-- Browser E2E exercises a deterministic network fixture, not a live paid OpenAI response. Real authorized forum pages, Firefox Android and Safari on devices require separate acceptance testing.
+## Ограничения выпуска
+
+- В 1.9.1 доступны базовые текстовые вопросы; ответы по конкретным источникам правил и анализ жалоб добавлялись позже.
+- Шлюз рассчитан на одного пользователя и только на локальный адрес. Встроенного ключа, общедоступного сервиса или командного хостинга нет: нужны собственные учётные данные и доступ к интернету.
+- Обработка данных и оплата API регулируются условиями OpenAI. Запрошенный `store:false` не является абсолютной гарантией отсутствия хранения на стороне поставщика.
+- Ограничитель запросов находится в оперативной памяти, сбрасывается при перезапуске и **не ограничивает денежные расходы**.
+- Браузерный E2E использует воспроизводимый сетевой стенд, а не реальный оплачиваемый вызов OpenAI. Для действующих форумов и устройств Firefox Android/Safari необходима отдельная приёмка.
+
+---
+
+[Документация](README.md) · [Шлюз ИИ](../ai-gateway/README.md) · [История изменений](../CHANGELOG.md)

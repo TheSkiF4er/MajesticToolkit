@@ -1,17 +1,31 @@
-# MajesticToolkit 2.4.0 — Team & Cloud GA
+# MajesticToolkit 2.4.0 — Командная работа и облако
 
-## Changes implemented in 2.4.0
+> **Актуальный общедоступный выпуск · 20 ноября 2026 года**  
+> Основной акцент: конфиденциальность материалов, проверяемое восстановление и сквозная приёмка командных сценариев.
 
-This is an executable release of the pre-existing Team & Cloud application, not a contract or generated endpoint skeleton. All previous 2.3.9 identity, team, sync, directory, Knowledge, Tactical, Cloud File and Operations services remain in use. In 2.4.0 the following reliability defects and acceptance gaps were addressed:
+## Главное в выпуске
 
-1. **Evidence privacy:** only the owning account can read historical file revisions marked `private`, including their metadata and binary contents. Publishing a newer team-visible revision never changes the visibility of prior private revisions. Team Owner/Admin cannot override this boundary. Existing callers requesting old private revisions now correctly receive HTTP 404. Current team-visible versions remain available.
-2. **Verified recovery:** `cloud:backup`, `cloud:verify-backup` and `cloud:restore` now validate the bytes, lengths and SHA-256 of every stored Cloud File blob, verify that all Cloud File revisions and current file metadata have matching blobs, and verify every stored Tactical map image's hash and length. SQLite `integrity_check`, `foreign_key_check` and snapshot SHA-256 remain mandatory. Valid 2.3.9 backup manifests remain compatible.
-3. **Cross-service acceptance:** `npm run test:cloud:ga` runs a real HTTP/SQLite test spanning account creation, team invitations and roles, remote sync, Knowledge review/publication, private/shared evidence and attachment links, audit and notifications, revocation, persistence, backup and verified offline restore. Additional regression tests cover disclosure of private historical binary versions and detection of content-level database corruption.
-4. **Reproducible artifacts:** version 2.4.0 in all four browser manifests, package metadata and CI artifact names; `npm run verify` builds and validates all four browser packages and SHA-256 sums. The Cloud GA integration suite is run separately in CI as well as through `npm test`.
+Это обновление уже работающей системы «Команда и облако», а не набор интерфейсных заготовок. Сервисы аккаунтов, команд, синхронизации, справочников, знаний, тактических материалов, облачных файлов и эксплуатации из версии 2.3.9 сохранены.
 
-## Install / upgrade
+### Приватность прежних версий доказательств
 
-Apply *only changed files* over a **complete 2.3.9** checkout. Before any migration, take and verify an external backup of the server database (do not put this database or tokens in the browser extension ZIP).
+Исторические редакции облачного файла со статусом `private` может просматривать и скачивать **только аккаунт-владелец**. Публикация следующей версии для команды не раскрывает предшествующие личные редакции. Даже владелец или администратор команды не может обойти это правило. При обращении к недоступной исторической версии сервер отвечает `HTTP 404`; текущие версии, открытые команде, остаются доступными.
+
+### Проверяемые резервные копии
+
+Команды `cloud:backup`, `cloud:verify-backup` и `cloud:restore` проверяют байты, размеры и SHA-256 всех файлов облачного хранилища, наличие содержимого для каждой редакции и текущих метаданных, а также размеры и контрольные суммы сохранённых изображений карт. Сохраняются проверки SQLite `integrity_check`, `foreign_key_check` и SHA-256 снимка. Корректные манифесты резервных копий версии 2.3.9 совместимы.
+
+### Сквозная приёмка командной работы
+
+`npm run test:cloud:ga` проверяет настоящий сценарий HTTP/SQLite: создание аккаунта, приглашение и роли команды, удалённую синхронизацию, согласование и публикацию материалов Центра знаний, личные и общие доказательства, ссылки на вложения, аудит, уведомления, отзыв доступа, сохранность после перезапуска и проверенное автономное восстановление. Отдельные регрессионные проверки обнаруживают попытки получить личную историческую редакцию и повреждение файлового содержимого в базе.
+
+### Воспроизводимые пакеты
+
+Версия `2.4.0` согласована в четырёх браузерных манифестах, метаданных пакета и именах сборок. `npm run verify` собирает и проверяет все четыре варианта и SHA-256. Облачная приёмка выполняется через `npm test` и отдельный шаг в CI.
+
+## Обновление с версии 2.3.9
+
+Накладывайте файлы обновления только на **полный исходный проект 2.3.9**. Перед любыми серверными операциями создайте и проверьте внешнюю резервную копию базы. Не включайте базу данных и токены в браузерный архив.
 
 ```bash
 npm run cloud:backup -- ./cloud-identity/data/identity.sqlite ./backup-before-240.sqlite
@@ -22,21 +36,29 @@ npm run cloud:load
 npm run cloud:identity
 ```
 
-The server continues using the 2.3.9 SQLite schema. No data-destructive schema migration is required. The extension keeps its existing local data and remains functional without cloud login. Team operations and sync continue to require explicit account/team authentication and per-profile opt-in.
+Сервер сохраняет схему SQLite версии 2.3.9: разрушающая миграция не требуется. Локальные данные расширения остаются на месте, а основные функции работают без облачной авторизации. Командные действия требуют входа и соответствующей роли; синхронизация выбранного RP-профиля включается отдельно.
 
-For restore, stop the server first, ensure no WAL or SHM files remain, and run:
+### Восстановление
+
+Остановите сервер, убедитесь в отсутствии активных файлов WAL и SHM, затем выполните:
 
 ```bash
 npm run cloud:restore -- ./backup-before-240.sqlite ./cloud-identity/data/identity.sqlite --yes
 ```
 
-A failed consistency check **must block recovery**, not silently restore corrupt evidence. Prior destination files are preserved for recovery. A `.sha256.json` sidecar is integrity metadata, **not an authenticated digital signature**: store backups in access-controlled locations with separate protection.
+При неуспешной проверке содержимого восстановление **должно быть заблокировано**, а не продолжено с повреждёнными доказательствами. При восстановлении сохраняется защитная копия прежнего назначения. Соседний файл `.sha256.json` подтверждает целостность, но **не является криптографически подписанным доказательством подлинности**: резервные копии необходимо хранить с отдельной защитой доступа.
 
-## Production deployment gates not covered by local automated checks
+## Что необходимо проверить перед публичным развёртыванием
 
-- Provision and operate a trusted **HTTPS** endpoint with an appropriate certificate/key pair; configure `CLOUD_HOST`, `CLOUD_PORT`, `CLOUD_TLS_CERT_FILE`, `CLOUD_TLS_KEY_FILE`, `CLOUD_ALLOWED_ORIGINS`, `CLOUD_DB_PATH`, and the protected `CLOUD_OPERATIONS_TOKEN` as described in the 2.3.9 operations notes. Public plain HTTP is not supported.
-- Verify real installed Chromium, Firefox, Firefox Android and Safari extensions, including browser-specific permissions, identity, storage durability and network recovery. CI DOM fixtures do not replace device acceptance, and Safari packaging/signing requires Apple tooling.
-- Conduct an independent security review, prolonged representative load testing, external backup scheduling, off-host disaster-recovery drills and measure operational RPO/RTO. Current `cloud:load` is a **local concurrency smoke test**, not a production throughput SLA.
-- Audit server host security (database permissions, filesystem backups, certificate rotation, secret access), support/incident runbooks and customer data policy before exposing the service to untrusted users.
+- **Безопасный сервер:** действующий HTTPS-сертификат и параметры `CLOUD_HOST`, `CLOUD_PORT`, `CLOUD_TLS_CERT_FILE`, `CLOUD_TLS_KEY_FILE`, `CLOUD_ALLOWED_ORIGINS`, `CLOUD_DB_PATH` и защищённый `CLOUD_OPERATIONS_TOKEN`. Публичный обычный HTTP не поддерживается.
+- **Реальные браузеры:** установленные Chromium, Firefox, Firefox Android и Safari, их разрешения, вход, сохранность данных и восстановление сети. Тестовые DOM-страницы CI не заменяют проверку устройств; упаковка и подпись Safari требуют инструменты Apple.
+- **Независимая безопасность и нагрузка:** внешний аудит, длительное профильное нагрузочное тестирование, расписание внешних копий, учения по аварийному восстановлению и замеры целевых RPO/RTO. `cloud:load` — локальный проверочный сценарий, не обещание пропускной способности.
+- **Процессы эксплуатации:** защита файлов БД, управление сертификатами и секретами, документация реагирования на инциденты, политика обработки пользовательских материалов и регулярная проверка восстановления.
 
-**Scope:** Server-side cloud storage is self-hosted and requires deployment. Cloud sync covers families, organizations and product catalog; Tactical Workspace remains explicitly published/pulled, not a real-time multiuser editor. Files remain SQLite-backed with existing 32 MiB per-file and 256 MiB per-profile limits. No external hosted SaaS deployment, 24x7 monitoring or app-store signing is claimed by this release.
+## Границы возможностей
+
+Облачное хранилище размещается самостоятельно; готовый внешний SaaS не предоставляется. Синхронизация охватывает семьи, организации и каталог товаров. Тактические материалы публикуются и загружаются вручную: это не совместный редактор в реальном времени. Файлы хранятся в SQLite с действующими ограничениями **32 МиБ на файл** и **256 МиБ на профиль**. В выпуск не входят круглосуточный мониторинг инфраструктуры, готовый облачный хостинг или подпись магазина приложений.
+
+---
+
+[Главная страница](../README.md) · [Все версии](../CHANGELOG.md) · [Эксплуатация сервера](RELEASE_NOTES_2.3.9.md) · [Каталог документации](README.md)

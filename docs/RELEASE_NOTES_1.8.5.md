@@ -1,6 +1,8 @@
-# MajesticToolkit 1.8.5 — Case Dossier & Export
+# MajesticToolkit 1.8.5 — Досье дела и экспорт
+> **Архив релиза.** Здесь сохранены возможности, проверки и ограничения, актуальные на момент выпуска 1.8.5. Полная последовательность изменений — в [истории версий](../CHANGELOG.md).
 
-Production implementation extending MajesticToolkit 1.8.4 without replacing existing complaint, evidence, knowledge or moderation modules.
+
+Рабочее обновление версии 1.8.4: сохранены существующие модули жалоб, доказательств, знаний и модерации.
 
 ## Рабочий интерфейс
 
@@ -29,3 +31,7 @@ Production implementation extending MajesticToolkit 1.8.4 without replacing exis
 ## Проверки
 
 `npm run verify` — модульные и регрессионные тесты, синтаксис/манифесты 4 платформ, ZIP и SHA-256. `npm run test:browser` — Chromium E2E с созданием ZIP-досье, настоящим скачиванием, сравнением контрольных сумм и восстановлением бинарного файла с исходным ID из переносимого архива.
+
+---
+
+[Все руководства](README.md) · [История версий](../CHANGELOG.md) · [Текущий выпуск 2.4.0](RELEASE_NOTES_2.4.0.md)

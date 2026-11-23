@@ -1,4 +1,6 @@
-# MajesticToolkit v1.5.3 — Chromium & Safari Installation
+# MajesticToolkit 1.5.3 — Установка Chromium и Safari
+> **Архив релиза.** Здесь сохранены возможности, проверки и ограничения, актуальные на момент выпуска 1.5.3. Полная последовательность изменений — в [истории версий](../CHANGELOG.md).
+
 
 Релиз 1.5.3 браузерного расширения **MajesticToolkit** для Majestic RP, Russia Online и других RP-сценариев.
 
@@ -40,3 +42,7 @@
 **Лицензия:** MPL-2.0. **Исходники:** [TheSkiF4er/MajesticToolkit](https://github.com/TheSkiF4er/MajesticToolkit). **Ошибки:** [Issues](https://github.com/TheSkiF4er/MajesticToolkit/issues).
 
 Этот GitHub Release не является публикацией в Mozilla Add-ons, Chrome Web Store или App Store.
+
+---
+
+[Все руководства](README.md) · [История версий](../CHANGELOG.md) · [Текущий выпуск 2.4.0](RELEASE_NOTES_2.4.0.md)

@@ -1,46 +1,69 @@
-# MajesticToolkit 2.3.9 — Cloud Operations & Reliability
+# MajesticToolkit 2.3.9 — Эксплуатация и надёжность облака
 
-Scope: cloud-identity server (Node.js 22, SQLite WAL) + Team & Cloud interface. This is executable functionality, not a schema-only foundation.
+> **Архив релиза · 20 ноября 2026 года**  
+> Область обновления: сервер `cloud-identity` на Node.js 22 и SQLite WAL, а также раздел «Команда и облако». Описана работающая реализация.
 
-## Audit and team notifications
+## Аудит и уведомления команды
 
-All new team activity, synced records, Knowledge editorial events, shared-file revisions, tactical changes and Knowledge collection operations are recorded in the same SQLite transaction as their source change. On first upgrade, existing 2.3.8 team activity and collaboration logs are backfilled **once** into `cloud_audit`. Only Owner/Admin can read `GET /v1/teams/:id/audit` (50 events per page; `before`, `limit`); responses include actor IDs and resource IDs, never binary evidence, draft content, invite tokens, passwords or session secrets. Private file revisions are excluded from the team audit.
+Изменения состава команды, синхронизированных записей, публикаций знаний, общих редакций файлов, тактических материалов и коллекций знаний фиксируются в `cloud_audit` **в той же транзакции SQLite**, что и основная операция. При первом обновлении из 2.3.8 старые события команды и совместной работы однократно переносятся в аудит.
 
-Recipient-specific notifications are saved for significant team activity, tactical changes, selected Knowledge workflow events and **shared** file revisions. Recipients only see their own notifications via `GET /v1/teams/:id/notifications`; `POST /v1/teams/:id/notifications/:seq/read` marks an item read. The browser Team & Cloud page displays the inbox and, for admins, the audit. UI refresh is manual; no push/SMS/email provider is claimed.
+Только роли владельца и администратора вправе читать `GET /v1/teams/:id/audit` (постранично до 50 записей; параметры `before` и `limit`). Ответ содержит идентификаторы участников и ресурсов, но не двоичные файлы, содержимое черновиков, приглашения, пароли или секреты сессий. Личные редакции файлов в командный аудит не попадают.
 
-## Operational monitoring
+Адресные уведомления сохраняются для значимых действий в команде, тактических изменений, отдельных этапов работы со знаниями и **общих** редакций файлов. Пользователь получает только свои уведомления через `GET /v1/teams/:id/notifications`; отметка прочтения выполняется через `POST /v1/teams/:id/notifications/:seq/read`. В интерфейсе можно просмотреть входящие, а администратору — журнал аудита. Обновление выполняется вручную: push, SMS и рассылка писем не реализованы.
 
-- `GET /v1/health`: minimal liveness (no authentication), no secrets.
-- `GET /v1/ready`: readiness using a cached SQLite `quick_check` (maximum one check per 30 seconds).
-- `GET /v1/operations/metrics`: requires `Authorization: Bearer <CLOUD_OPERATIONS_TOKEN>`; the secret must contain at least 32 characters and is provided only to the server environment. Exposes bounded request counts (2xx/4xx/5xx), sampled latency p50/p95/p99, uptime, RSS, SQLite page/freelist counts, audit count and unread notification count. This endpoint is not a public Prometheus endpoint. Configure TLS when hosting outside loopback; grant no browser access to the operator token.
+## Мониторинг сервера
 
-Set `CLOUD_ALLOWED_ORIGINS` to your **exact** installed extension origin(s); remote deployments require `CLOUD_TLS_CERT_FILE` and `CLOUD_TLS_KEY_FILE`. The server does not trust forwarded proxy identity headers. Changes never send cloud bearer credentials to extension UI.
+| Маршрут | Назначение и доступ |
+| :--- | :--- |
+| `GET /v1/health` | Минимальная проверка работоспособности без авторизации; без секретных данных. |
+| `GET /v1/ready` | Готовность сервера, с кешированной проверкой SQLite `quick_check` не чаще раза в 30 секунд. |
+| `GET /v1/operations/metrics` | Операторские показатели с заголовком `Authorization: Bearer <CLOUD_OPERATIONS_TOKEN>`. |
 
-## Online backup and offline disaster recovery
+Для операторского доступа нужен секрет длиной не менее 32 символов, передаваемый **только** через окружение сервера. Доступны ограниченные счётчики HTTP-ответов 2xx/4xx/5xx, выборочные задержки p50/p95/p99, время работы, RSS, показатели страниц SQLite, количество событий аудита и непрочитанных уведомлений. Это **не** публичный маршрут Prometheus: не передавайте операторский токен в браузер.
 
-Run from the project root with Node.js 22. The backup file path must be unique and end in `.sqlite`. It is created with 0600 permissions beside a `.sha256.json` manifest.
+Для удалённого размещения задайте точные адреса расширений в `CLOUD_ALLOWED_ORIGINS`, сертификат `CLOUD_TLS_CERT_FILE` и ключ `CLOUD_TLS_KEY_FILE`. Сервер не доверяет заголовкам прокси о подменённом источнике запроса. Облачные токены доступа не передаются в интерфейс расширения.
 
-```sh
+## Резервное копирование и автономное восстановление
+
+Запускайте команды из корня проекта под Node.js 22. Путь к копии должен быть уникальным и заканчиваться на `.sqlite`; права создаваемого файла — `0600`. Рядом создаётся манифест `.sha256.json`.
+
+```bash
 CLOUD_DB_PATH=./cloud-identity/data/identity.sqlite npm run cloud:identity
-# In another terminal while the server runs:
+# Во втором терминале, пока сервер работает:
 node cloud-identity/ops-cli.mjs backup ./cloud-identity/data/identity.sqlite ./backups/cloud-20261120-090000.sqlite
 node cloud-identity/ops-cli.mjs verify ./backups/cloud-20261120-090000.sqlite
-# Stop the server cleanly, then:
+# После штатной остановки сервера:
 node cloud-identity/ops-cli.mjs restore ./backups/cloud-20261120-090000.sqlite ./cloud-identity/data/identity.sqlite --yes
 npm run cloud:identity
 ```
 
-The backup uses SQLite's online backup API (consistent across WAL and all records, private files, version history and sessions). Verification checks SHA-256, file length, `PRAGMA integrity_check`, foreign keys and expected schema. The restore refuses a running server's `.run.lock`, extant WAL/SHM and modified snapshots. If the target exists, a `*.pre-restore-*.sqlite` safety copy is retained. Keep snapshots, manifests and safety copies **outside the webroot** with restricted access; they contain private evidence and hashed but still sensitive account/session data. Encrypt them using your infrastructure's secrets/KMS and test restores regularly. Restoring the entire database rolls back all changes after that snapshot, including account changes and revoked sessions: notify users and consider revoking/reissuing sessions after an incident. No continuous WAL replay, automatic cloud backups or operator RPO/RTO SLA is claimed.
+Онлайн-копия создаётся через механизм SQLite и согласована с WAL, в том числе для личных файлов, истории версий и сессий. Проверка охватывает SHA-256, длину файла, `PRAGMA integrity_check`, внешние ключи и ожидаемую схему. Восстановление отклоняется при запущенном сервере (`.run.lock`), оставшихся WAL/SHM-файлах или изменённом снимке. Если целевая база существует, сохраняется страховочная копия `*.pre-restore-*.sqlite`.
 
-**Scheduling**: use your operating-system scheduler / Kubernetes CronJob to run the backup and verify commands at your desired cadence, ship the verified snapshot and manifest to encrypted off-site storage and apply your retention policy. Do not include `.sqlite` or backup files in release packages.
+**Храните копии вне корня веб-сервера** с ограниченными правами доступа и инфраструктурным шифрованием. Снимки содержат личные материалы и чувствительные данные аккаунтов и сессий, даже если некоторые значения хешированы. Полное восстановление возвращает состояние всей базы на дату снимка, включая старые статусы сессий и отменённые после него действия. После инцидента уведомите участников и оцените необходимость отзыва и перевыпуска сессий. Автоматические постоянные копии, непрерывное воспроизведение WAL и гарантии RPO/RTO в выпуск не входят.
 
-## Monitoring and load smoke
+### Регулярное создание копий
 
-`npm run cloud:load` starts an isolated ephemeral server with SQLite and runs a mixed authenticated test of 240 HTTP requests at concurrency 12 (reads + profile writes), validates absence of failed requests and persisted audit entries, and reports p95 latency. Override with `CLOUD_LOAD_REQUESTS=500 CLOUD_LOAD_CONCURRENCY=16 npm run cloud:load`. This is a reproducible local smoke, **not** a production benchmark or guarantee of capacity, latency or RPO/RTO. For production, measure under representative data volume, certificate/TLS setup, file uploads and expected traffic, and alert externally on readiness, 5xx, memory, disk and backup freshness.
+Настройте планировщик ОС или `CronJob` Kubernetes для создания и проверки снимка, перемещения его вместе с манифестом в зашифрованное удалённое хранилище и очистки по принятой политике хранения. Не включайте `.sqlite` или файлы резервных копий в релизные ZIP.
 
-## Deployment / compatibility
+## Проверка нагрузки и наблюдаемости
 
-- Overwrite only changed files on top of a complete 2.3.8 checkout, run `npm run verify` and deploy/restart the Cloud Identity server.
-- All new tables and triggers are created on startup; existing 2.3.8 records are preserved. Take a verified backup **before** migration.
-- Local-only use, Backup v21, sync queues and existing client APIs remain unchanged.
-- Run `npm run cloud:load`; browser CI includes the operations DOM test. Public HTTPS production and long-duration multi-tenant soak/disaster-recovery drill still require acceptance on your infrastructure.
+```bash
+npm run cloud:load
+# Для другого объёма проверочного сценария:
+CLOUD_LOAD_REQUESTS=500 CLOUD_LOAD_CONCURRENCY=16 npm run cloud:load
+```
+
+Команда запускает изолированный сервер с SQLite и выполняет смешанный авторизованный сценарий из **240 HTTP-запросов при конкурентности 12**: чтение и запись профилей, проверка отсутствия ошибок и сохранённого аудита, расчёт p95. Это **короткий локальный тест**, а не производственный эталон или гарантия задержки, пропускной способности и восстановления. Для реальной инфраструктуры отдельно проверяйте объём данных, TLS, крупные файлы, фактический трафик и оповещения по готовности, ошибкам 5xx, памяти, диску и давности резервных копий.
+
+## Развёртывание и совместимость
+
+1. Наложите изменённые файлы на полный проект версии 2.3.8, прежде создав и проверив резервную копию.
+2. Выполните `npm run verify` и перезапустите Cloud Identity Server. Новые таблицы и триггеры создаются при старте, существующие записи сохраняются.
+3. Запустите `npm run cloud:load` и проверьте операторские маршруты.
+4. Выполните собственные испытания публичного HTTPS, длительной конкурентной работы и восстановления с потерей узла.
+
+Локальный режим, формат Backup v21, очереди синхронизации и существующие клиентские API не меняются.
+
+---
+
+[Документация](README.md) · [Следующий выпуск — 2.4.0](RELEASE_NOTES_2.4.0.md) · [История изменений](../CHANGELOG.md)

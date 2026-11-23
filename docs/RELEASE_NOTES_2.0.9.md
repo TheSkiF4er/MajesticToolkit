@@ -1,4 +1,6 @@
-# MajesticToolkit 2.0.9 — Decisions, Appeals & AI
+# MajesticToolkit 2.0.9 — Решения, обжалования и ИИ
+> **Архив релиза.** Здесь сохранены возможности, проверки и ограничения, актуальные на момент выпуска 2.0.9. Полная последовательность изменений — в [истории версий](../CHANGELOG.md).
+
 
 ## Пользовательский процесс
 
@@ -21,3 +23,7 @@
 `npm run verify` — Node.js-тесты, сборка и проверка пакетов Chromium, Firefox, Firefox Android и Safari.
 
 `node --test tests/judicial-decisions-209.test.mjs` — решения, апелляции, связи, хеширование, откат, изоляция AI.
+
+---
+
+[Все руководства](README.md) · [История версий](../CHANGELOG.md) · [Текущий выпуск 2.4.0](RELEASE_NOTES_2.4.0.md)

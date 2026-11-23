@@ -1,4 +1,6 @@
-# MajesticToolkit 2.3.5 — Shared Directories
+# MajesticToolkit 2.3.5 — Общие справочники
+> **Архив релиза.** Здесь сохранены возможности, проверки и ограничения, актуальные на момент выпуска 2.3.5. Полная последовательность изменений — в [истории версий](../CHANGELOG.md).
+
 
 ## Развёртывание и обновление
 
@@ -38,3 +40,7 @@ node --test tests/cloud-directories-235.test.mjs
 python3 tests/browser-cloud-directories-235.py
 npm run verify
 ```
+
+---
+
+[Все руководства](README.md) · [История версий](../CHANGELOG.md) · [Текущий выпуск 2.4.0](RELEASE_NOTES_2.4.0.md)

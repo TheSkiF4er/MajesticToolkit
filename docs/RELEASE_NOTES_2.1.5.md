@@ -1,4 +1,6 @@
-# MajesticToolkit 2.1.5 — Organizations & Assets
+# MajesticToolkit 2.1.5 — Организации и имущество
+> **Архив релиза.** Здесь сохранены возможности, проверки и ограничения, актуальные на момент выпуска 2.1.5. Полная последовательность изменений — в [истории версий](../CHANGELOG.md).
+
 
 ## Что работает
 
@@ -18,3 +20,7 @@
 ## Проверки
 
 Для обновления распакуйте патч поверх полного 2.1.4 и выполните `npm run verify`, `npm run test:browser:organizations`, `npm run test:browser:families`, `npm run test:browser:inventory`, `npm run test:browser:marketplace` и `npm run test:browser:economy`. Браузерные проверки используют локальные фикстуры, а не реальный аккаунт RP.
+
+---
+
+[Все руководства](README.md) · [История версий](../CHANGELOG.md) · [Текущий выпуск 2.4.0](RELEASE_NOTES_2.4.0.md)

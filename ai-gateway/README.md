@@ -1,66 +1,90 @@
-# MajesticToolkit 1.9.2 — OpenAI Gateway
+# Локальный шлюз ИИ MajesticToolkit
 
-A real **optional** local-only OpenAI Responses API proxy for the **Workspace → AI Connection** tab. Requires Node.js 22+. It has no external npm dependencies.
+**Необязательное подключение OpenAI для рабочего пространства** · Node.js 22 и выше · Без внешних npm-зависимостей.
 
-## Start locally
+Шлюз `ai-gateway/server.mjs` принимает разрешённые пользователем запросы расширения на локальном адресе и передаёт их в OpenAI Responses API. Само расширение не хранит ключ поставщика. Без запуска шлюза локальные функции MajesticToolkit остаются доступными.
 
-Set environment variables in the terminal **where the gateway runs**, not in the extension, browser storage, `.env` tracked by Git, or a bundled JavaScript file.
+## Быстрый запуск
 
-**PowerShell (Windows)**
+**Важно:** задавайте переменные окружения в терминале, где запускается шлюз, **не** в исходниках расширения, браузерном хранилище, отслеживаемом Git файле `.env` или готовом JS-пакете.
+
+### Windows · PowerShell
 
 ```powershell
-$env:OPENAI_API_KEY = "sk-...your-own-key..."
-$env:MT_AI_GATEWAY_TOKEN = "a-random-secret-with-at-least-32-characters"
-$env:OPENAI_MODEL = "gpt-6-luna" # or another Responses-compatible model available to your API project
+$env:OPENAI_API_KEY = "укажите-собственный-ключ-api"
+$env:MT_AI_GATEWAY_TOKEN = "укажите-секретный-случайный-токен-от-32-символов"
+$env:OPENAI_MODEL = "gpt-4.1-mini"
 npm run ai:gateway
 ```
 
-**Linux/macOS**
+### Linux и macOS
 
 ```bash
-export OPENAI_API_KEY='sk-...your-own-key...'
-export MT_AI_GATEWAY_TOKEN='a-random-secret-with-at-least-32-characters'
-export OPENAI_MODEL='gpt-6-luna'
+export OPENAI_API_KEY='укажите-собственный-ключ-api'
+export MT_AI_GATEWAY_TOKEN='укажите-секретный-случайный-токен-от-32-символов'
+export OPENAI_MODEL='gpt-4.1-mini'
 npm run ai:gateway
 ```
 
-Use an independently generated high-entropy gateway token. The example text is **not** secure; do not reuse it. Gateway listens only on `127.0.0.1:32187`. On startup it refuses to run without a provider key and sufficiently long gateway token. You can override `MT_AI_PORT` for standalone testing, but the **browser extension only connects to port 32187**.
+Значения выше — **примеры, а не готовые секреты**. Создайте независимый случайный токен высокой энтропии. Шлюз слушает только `127.0.0.1:32187` и отказывается запускаться без ключа поставщика и достаточно длинного токена. Переменная `MT_AI_PORT` меняет порт для отдельного тестирования, но расширение обращается **только к порту 32187**.
 
-In the browser, open **Workspace → AI Connection**. Turn on cloud AI; the browser asks for the **optional** `http://127.0.0.1/*` permission. Enter `MT_AI_GATEWAY_TOKEN` (never your OpenAI key), click **Проверить соединение**, type a question, inspect the preview and tick explicit consent. Click **Отправить запрос**. The answer streams into the workspace; **Отменить** aborts in-flight calls.
+### Подключение расширения
 
-## Security and behavior
+1. Откройте **«Рабочее пространство → Подключение ИИ»**.
+2. Включите облачный ИИ и разрешите необязательный доступ к `http://127.0.0.1/*` по запросу браузера.
+3. Введите **токен шлюза** `MT_AI_GATEWAY_TOKEN`, а не ключ `OPENAI_API_KEY`.
+4. Нажмите **«Проверить соединение»**.
+5. Введите вопрос, проверьте предпросмотр передачи и отдельно подтвердите согласие.
+6. Нажмите **«Отправить запрос»**. Ответ появится потоком; кнопка **«Отменить»** прерывает запрос.
 
-- The OpenAI key stays in the **Node process environment** and is never sent to browser clients or included in extension backups. The gateway token lives **only in the currently open extension page memory**. It must be re-entered after reload or profile switch.
-- The gateway accepts only extension-origin requests with the correct bearer token. It binds to loopback and cannot be exposed as a public multi-user service without adding TLS, user authentication, persistent accounting and deployment controls. **Do not reverse proxy or expose this server on the Internet.**
-- Generic chat forwards only the typed question. **Rules & Knowledge AI** additionally forwards only up to five user-selected snippets of locally stored rules or articles, including exact revision identifiers and source URLs, after showing the full request payload and requesting separate consent. No automatic complaints, documents, files, cookies, profile data, other rules, or diagnostic data. No tools, no network lookup of source URLs, no remote file uploads or automatic forum actions.
-- OpenAI `POST /v1/responses` uses `stream: true`, `store: false` and at most 700 output tokens; actual remote processing and billing still follow the provider's policies. Text responses are not saved by the gateway. Browser transcript is session-only.
-- Gateway limits: 5000 characters per question, 4 requests per minute, 30 per rolling 24-hour process lifetime by default (set `MT_AI_DAILY_LIMIT=1..1000`), up to 2 concurrent requests, 60-second upstream timeout, maximum 60,000 response characters. **Rate limits reset when the gateway restarts and are not a monetary spending cap.** Set hard API project spend limits in your OpenAI account.
-- Handles HTTP failures, interrupted SSE, model errors and user cancellation without storing conversation contents. Gateway health is authenticated and discloses only model, limits and remaining requests.
-- Requires internet connectivity from the host running the gateway. There is **no** provider key bundled with this repository, so a real paid API call cannot be completed without your own OpenAI API account.
+## Конфиденциальность и защита
 
-## Source-grounded questions (1.9.2)
+- Ключ OpenAI остаётся **только в окружении процесса Node.js** и не передаётся браузеру. Токен шлюза хранится **только в памяти открытой страницы**: после обновления страницы или смены профиля потребуется повторный ввод.
+- Шлюз принимает запросы только от источника расширения и с правильным токеном. Он привязан к loopback и **не предназначен для публикации в интернете** через прокси, перенаправление портов или общий хостинг: для этого потребовались бы отдельная авторизация, TLS и меры эксплуатации.
+- Обычный чат передаёт набранный вопрос. Режим правил и знаний отправляет не более пяти **выбранных пользователем** фрагментов с редакциями и адресами источников после отдельного просмотра и согласия. Жалобы, документы, файлы, cookie, данные профилей и диагностика не прикладываются автоматически.
+- Шлюз не открывает адреса источников, не загружает удалённые файлы, не выполняет действия на форуме и не предоставляет модели инструменты.
+- OpenAI получает `POST /v1/responses` с `stream:true`, `store:false` и ограничением до 700 выходных токенов. Обработка и тарификация на стороне поставщика подчиняются его условиям; `store:false` не гарантирует отсутствие любого хранения.
+- Ограничения: до **5 000 символов** в вопросе обычного чата, по умолчанию **4 запроса в минуту** и **30 за 24 часа жизни процесса** (переменная `MT_AI_DAILY_LIMIT=1..1000`), до **2 одновременных запросов**, тайм-аут 60 секунд и не более **60 000 символов** ответа.
+- Ограничители сбрасываются при перезапуске и **не являются денежным пределом**. Настройте ограничения бюджета отдельно в своём API-проекте OpenAI.
+- Обрабатываются HTTP-ошибки, прерванный поток SSE, отказы модели и отмена пользователя. Шлюз не хранит текст беседы; история на стороне браузера существует только в сеансе.
+- Для работы требуется интернет у компьютера, где запущен шлюз, и собственный действующий аккаунт OpenAI API. Готовый ключ в репозитории не предоставляется.
 
-Open **Workspace → AI Connection → Rules & Knowledge AI** or use **Спросить AI** in a rule/article card. Search locally, review the source snapshots and enable desired candidates (up to five), verify the full JSON shown under **Точный предпросмотр передачи**, check the per-request consent and submit. The gateway accepts `POST /v1/chat` with `mode: "rules"`, a question and a strictly bounded `sources` list, and sends them to the OpenAI Responses API. The gateway adds untrusted-source-aware instructions, requires numbered citations, disables model tools, and never fetches URLs itself. The UI renders original source hyperlinks from local records only; generated numeric citations are **not** independently proof of correctness. Review the exact primary documents and sanctions before using any result.
+## Ответы по правилам и знаниям · версия 1.9.2
 
-Source retrieval and previews do not trigger network requests. Historical revisions and unreviewed materials are opt-in; imported sources have a manual **reviewed** flag, which is not official authentication. The gateway is unaware of other local records. No AI chat transcript, raw provider secret, or selected source text is written to extension storage or backups.
+Откройте **«Подключение ИИ → Правила и знания»** или кнопку вопроса в карточке материала. Сначала выполните локальный поиск, отметьте до пяти подходящих источников, проверьте **точный предпросмотр передаваемого JSON** и подтвердите конкретный запрос.
 
-## Tests
+Шлюз принимает `POST /v1/chat` с режимом `rules`, вопросом и ограниченным списком `sources`. Он отдельно маркирует недоверенные сведения, запрашивает нумерованные ссылки, запрещает инструменты модели и не загружает исходные URL. Ссылки в интерфейсе относятся к локальным карточкам; сгенерованные номера ссылок **не подтверждают достоверность ответа**. Сверяйте вывод с действующими первоисточниками.
 
-Run `node --test tests/ai-connection-191.test.mjs`. The tests exercise real HTTP request/response handling against a deterministic mocked OpenAI upstream, not a billable external API call. Run `npm run verify` and `npm run test:browser` for the complete extension regression suite.
+Поиск и предпросмотр выполняются локально. Исторические редакции и материалы без проверки включаются только по выбору пользователя. Флаг «Проверено» у импортированной страницы не означает официального заверения. Тексты источников, токен и история ИИ не записываются в резервные копии расширения автоматически.
 
+## Анализ жалоб · версия 1.9.3
 
-## AI Complaint Analysis (1.9.3)
+Режим `complaint` принимает подтверждённый пользователем JSON `{mode:"complaint",question,case}`. Шлюз проверяет размер и структуру сведений, а также допустимые идентификаторы выбранных доказательств, событий и правил. **Бинарные файлы не отправляются**, внешние ссылки не открываются, переписка не сохраняется. Модель возвращает предварительный структурированный отчёт. Его ссылки проверяются расширением, а отредактированный проект решения сохраняется **только после отдельного подтверждения**.
 
-Mode `complaint` accepts a user-approved JSON body `{mode:"complaint",question,case}`. The gateway validates bounded case metadata and cross-references against the selected evidence/event/rule ID lists. It sends **no file bytes**, does not fetch forum URLs and does not store conversation content. The model is instructed to return structured JSON only; the extension validates all references, requires manual review, and only writes an edited draft after explicit confirmation. Keep the gateway bound to `127.0.0.1` and never expose the bearer token or OpenAI key in extension source or backups.
+[Подробнее об анализе жалоб](../docs/RELEASE_NOTES_1.9.3.md)
 
-## AI Technical Support (1.9.4)
+## Техническая поддержка · версия 1.9.4
 
-В Workspace **AI / Поддержка → AI Technical Support** доступны отдельные локальные проверки (в том числе при выключенном AI), встроенные инструкции и скачивание диагностического JSON с безопасными кодами статусов. Для необязательного AI объяснения предусмотрен `POST /v1/chat` c `mode:"support"` и строго проверенной структурой `diagnostics:{category,version,checks:[{id,status}]}`. Пользователь проверяет весь запрос и отдельно разрешает отправку. Файлы, дампы хранилища, приватные заметки, URL, API-ключи и токен шлюза в payload не включаются. Ответ модели — предварительная структурированная рекомендация, **не** команда к выполнению. Для ответов `store:false`, инструменты не доступны, автоматического исправления ошибок нет.
+В разделе **«ИИ / Поддержка → Техническая поддержка»** доступны локальные проверки, подсказки и выгрузка диагностического JSON даже при выключенном облачном ИИ. Для необязательного объяснения проблемы режим `support` принимает только проверенную структуру `diagnostics:{category,version,checks:[{id,status}]}` после предпросмотра и согласия.
 
-Диагностический отчёт по кнопке скачивается локально и не передаётся на GitHub автоматически. При включённом AI действует существующая обработка тарифов OpenAI и лимиты локального шлюза. Приведённые ответы не подтверждают, что модель видела реальные файлы или браузер.
+Файлы, дампы хранилища, личные заметки, URL, ключ API и токен шлюза не включаются в запрос. Ответ — предварительная рекомендация, а не команда; автоматического исправления ошибок нет. Диагностический отчёт скачивается локально и **не** отправляется на GitHub автоматически.
 
-Модель по умолчанию для шлюза в 1.9.4 — `gpt-4.1-mini` (вместо неподтверждённого имени в 1.9.3). При необходимости установите `OPENAI_MODEL` в окружении Node.js.
+Начиная с 1.9.4 модель шлюза по умолчанию — `gpt-4.1-mini`. При необходимости задайте другую поддерживаемую модель через `OPENAI_MODEL`.
 
-### MajesticToolkit 2.0.0
+## Совместимость с версией 2.0.0
 
-При восстановлении Backup v18 облачный AI повторно выключается; пользователю нужно снова разрешить доступ к шлюзу и ввести его токен. API-ключ всегда остаётся в переменных окружения шлюза и не включается в экспорт. Прерванные ответы не сохраняются как завершённые чаты. Сведения о правилах, жалобах и технической поддержке передаются только по выбору с подтверждением. Для переноса локальных AI-диалогов требуется отдельное согласие на экспорт в Backup v18. Прямое размещение локального шлюза в публичном интернете не поддерживается.
+После восстановления Backup v18 подключение ИИ снова выключено до явного разрешения; токен шлюза вводится повторно. Прерванные ответы не сохраняются как завершённые диалоги. Экспорт локальных ИИ-диалогов в Backup v18 требует отдельного согласия. Публичное размещение шлюза не поддерживается.
+
+## Проверки
+
+```bash
+node --test tests/ai-connection-191.test.mjs
+npm run verify
+npm run test:browser
+```
+
+Тесты используют настоящий HTTP-обмен с **имитацией внешнего API OpenAI**, а не платный вызов реальной модели. Для браузерных тестов требуется настроенный Playwright.
+
+---
+
+[Главная страница проекта](../README.md) · [Документация](../docs/README.md) · [Безопасность](../docs/SECURITY.md)
